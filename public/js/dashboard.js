@@ -67,7 +67,7 @@ async function loadCars() {
 
 // === 予約フォームのリアルタイムバリデーション ===
 function setupReservationValidation() {
-  const fields = ['resCarId', 'resStart', 'resEnd', 'resDeparture'];
+  const fields = ['resCarId', 'resStart', 'resEnd', 'resDeparture', 'resReturn'];
   fields.forEach(id => {
     document.getElementById(id).addEventListener('change', validateReservation);
   });
@@ -549,8 +549,15 @@ async function loadCarStatusCards() {
       const dateLabel = nextDate.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', weekday: 'short' });
       const timeLabel = next.start_datetime.slice(11, 16);
 
-      // 現在地と次回出発場所の不一致チェック
-      if (car.current_location !== next.departure_location) {
+      // 場所不一致チェック：使用中なら返却先 vs 次回出発、空車なら現在地 vs 次回出発
+      if (current && current.return_location !== next.departure_location) {
+        locationWarning = `
+          <div class="car-location-warning">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            現在使用中の返却先「${escapeHtml(current.return_location)}」と次回の出発場所「${escapeHtml(next.departure_location)}」が異なります
+          </div>
+        `;
+      } else if (!current && car.current_location !== next.departure_location) {
         locationWarning = `
           <div class="car-location-warning">
             <i class="bi bi-exclamation-triangle-fill"></i>
