@@ -1,0 +1,16 @@
+{
+  "name": "gr-car-management",
+  "version": "1.0.0",
+  "description": "グローバルリゾート社用車管理システム",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "sql.js": "^1.11.0",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.0",
+    "express-session": "^1.18.0"
+  }
+}

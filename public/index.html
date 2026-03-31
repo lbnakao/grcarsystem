@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GR社用車管理システム</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- サイドバー -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <h2><i class="bi bi-car-front-fill"></i> GR社用車管理</h2>
+        <small>グローバルリゾート</small>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="/" class="active"><i class="bi bi-calendar3"></i> 予約カレンダー</a></li>
+        <li><a href="#" onclick="showCarStatus()"><i class="bi bi-geo-alt"></i> 車両ステータス</a></li>
+        <li id="adminLink" class="d-none"><a href="/admin"><i class="bi bi-gear"></i> 管理ページ</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div>
+            <div class="user-name" id="userName"></div>
+            <div class="user-role" id="userRole"></div>
+          </div>
+        </div>
+        <button class="btn btn-outline-light btn-sm w-100" onclick="logout()">
+          <i class="bi bi-box-arrow-left"></i> ログアウト
+        </button>
+      </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()">
+        <i class="bi bi-gear-fill"></i>
+      </button>
+
+      <!-- カレンダービュー -->
+      <div id="calendarView">
+        <div class="page-header">
+          <h1><i class="bi bi-calendar3"></i> 予約カレンダー</h1>
+          <div class="filter-bar">
+            <select class="form-select form-select-sm" id="carFilter">
+              <option value="">すべての車両</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
+              <i class="bi bi-plus-lg"></i> 新規予約
+            </button>
+          </div>
+        </div>
+
+        <!-- 車両ステータスカード（簡易表示） -->
+        <div class="car-status-grid" id="carStatusGrid"></div>
+
+        <!-- カレンダー -->
+        <div id="calendar"></div>
+      </div>
+
+      <!-- 車両ステータスビュー -->
+      <div id="carStatusView" class="d-none">
+        <div class="page-header">
+          <h1><i class="bi bi-geo-alt"></i> 車両ステータス</h1>
+          <button class="btn btn-outline-secondary btn-sm" onclick="showCalendar()">
+            <i class="bi bi-arrow-left"></i> カレンダーに戻る
+          </button>
+        </div>
+        <div class="car-status-grid" id="carStatusDetail"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 新規予約モーダル -->
+  <div class="modal fade" id="reservationModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="reservationModalTitle">
+            <i class="bi bi-plus-circle"></i> 新規予約
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- 警告表示エリア -->
+          <div id="resWarnings"></div>
+
+          <form id="reservationForm">
+            <input type="hidden" id="reservationId">
+            <div class="mb-3">
+              <label class="form-label">車両 <span class="text-danger">*</span></label>
+              <select class="form-select" id="resCarId" required>
+                <option value="">選択してください</option>
+              </select>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6">
+                <label class="form-label">開始日時 <span class="text-danger">*</span></label>
+                <input type="datetime-local" class="form-control" id="resStart" required>
+              </div>
+              <div class="col-6">
+                <label class="form-label">終了日時 <span class="text-danger">*</span></label>
+                <input type="datetime-local" class="form-control" id="resEnd" required>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">出発場所 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="resDeparture" placeholder="例: 本社駐車場" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">返却場所 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="resReturn" placeholder="例: 本社駐車場" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">備考</label>
+              <textarea class="form-control" id="resNotes" rows="2" placeholder="任意"></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="saveResBtn" onclick="saveReservation()">
+            <i class="bi bi-check-lg"></i> 保存
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 予約詳細モーダル -->
+  <div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-info-circle"></i> 予約詳細</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="detailBody"></div>
+        <div class="modal-footer" id="detailFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

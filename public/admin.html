@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理ページ - GR社用車管理システム</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- サイドバー -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <h2><i class="bi bi-car-front-fill"></i> GR社用車管理</h2>
+        <small>グローバルリゾート</small>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="/"><i class="bi bi-calendar3"></i> 予約カレンダー</a></li>
+        <li><a href="#" onclick="showCarStatus()"><i class="bi bi-geo-alt"></i> 車両ステータス</a></li>
+        <li><a href="/admin" class="active"><i class="bi bi-gear"></i> 管理ページ</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div>
+            <div class="user-name" id="userName"></div>
+            <div class="user-role" id="userRole"></div>
+          </div>
+        </div>
+        <button class="btn btn-outline-light btn-sm w-100" onclick="logout()">
+          <i class="bi bi-box-arrow-left"></i> ログアウト
+        </button>
+      </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()">
+        <i class="bi bi-gear-fill"></i>
+      </button>
+
+      <div class="page-header">
+        <h1><i class="bi bi-gear"></i> 管理ページ</h1>
+      </div>
+
+      <!-- タブナビゲーション -->
+      <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item">
+          <a class="nav-link active" data-bs-toggle="tab" href="#carsTab">
+            <i class="bi bi-car-front"></i> 車両管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" data-bs-toggle="tab" href="#usersTab">
+            <i class="bi bi-people"></i> ユーザー管理
+          </a>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <!-- 車両管理タブ -->
+        <div class="tab-pane fade show active" id="carsTab">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="bi bi-car-front"></i> 登録車両一覧</span>
+              <button class="btn btn-primary btn-sm" onclick="openCarModal()">
+                <i class="bi bi-plus-lg"></i> 新規車両登録
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                  <thead>
+                    <tr>
+                      <th>車両名</th>
+                      <th>車種</th>
+                      <th>積載人数</th>
+                      <th>現在地</th>
+                      <th>ステータス</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="carsTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ユーザー管理タブ -->
+        <div class="tab-pane fade" id="usersTab">
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <span><i class="bi bi-people"></i> 登録ユーザー一覧</span>
+              <button class="btn btn-primary btn-sm" onclick="openUserModal()">
+                <i class="bi bi-plus-lg"></i> 新規ユーザー登録
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                  <thead>
+                    <tr>
+                      <th>社員番号</th>
+                      <th>名前</th>
+                      <th>権限</th>
+                      <th>登録日</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usersTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 車両登録/編集モーダル -->
+  <div class="modal fade" id="carModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="carModalTitle">
+            <i class="bi bi-plus-circle"></i> 新規車両登録
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="carForm">
+            <input type="hidden" id="carId">
+            <div class="mb-3">
+              <label class="form-label">車両名（管理番号） <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="carName" placeholder="例: GR-004" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">車種 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="carModel" placeholder="例: トヨタ アルファード" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">積載可能人数 <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="carCapacity" min="1" max="50" placeholder="例: 7" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">現在地</label>
+              <input type="text" class="form-control" id="carLocation" placeholder="例: 本社駐車場" value="本社駐車場">
+            </div>
+            <div class="mb-3" id="carActiveGroup" style="display:none">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="carActive" checked>
+                <label class="form-check-label" for="carActive">有効</label>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" onclick="saveCar()">
+            <i class="bi bi-check-lg"></i> 保存
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ユーザー登録モーダル -->
+  <div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-person-plus"></i> 新規ユーザー登録
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="userForm">
+            <div class="mb-3">
+              <label class="form-label">社員番号 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="newEmployeeId" placeholder="例: 1002" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">名前 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="newUserName" placeholder="例: 鈴木 花子" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">パスワード <span class="text-danger">*</span></label>
+              <input type="password" class="form-control" id="newPassword" placeholder="パスワードを入力" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">権限</label>
+              <select class="form-select" id="newUserRole">
+                <option value="user">一般ユーザー</option>
+                <option value="admin">管理者</option>
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" onclick="saveUser()">
+            <i class="bi bi-check-lg"></i> 登録
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let currentUser = null;
+
+    // 初期化
+    document.addEventListener('DOMContentLoaded', async () => {
+      await checkAuth();
+      loadCars();
+      loadUsers();
+    });
+
+    // 認証チェック
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) { window.location.href = '/login'; return; }
+        const data = await res.json();
+        currentUser = data.user;
+
+        if (currentUser.role !== 'admin') {
+          window.location.href = '/';
+          return;
+        }
+
+        document.getElementById('userName').textContent = currentUser.name;
+        document.getElementById('userRole').textContent = '管理者';
+        document.getElementById('userAvatar').textContent = currentUser.name.charAt(0);
+      } catch (e) {
+        window.location.href = '/login';
+      }
+    }
+
+    // === 車両管理 ===
+    async function loadCars() {
+      try {
+        const res = await fetch('/api/cars');
+        const cars = await res.json();
+
+        const tbody = document.getElementById('carsTableBody');
+        tbody.innerHTML = cars.map(car => `
+          <tr class="${car.is_active ? '' : 'table-secondary'}">
+            <td><strong>${escapeHtml(car.name)}</strong></td>
+            <td>${escapeHtml(car.model)}</td>
+            <td>${car.capacity}人</td>
+            <td><i class="bi bi-geo-alt"></i> ${escapeHtml(car.current_location)}</td>
+            <td>
+              ${car.is_active
+                ? '<span class="status-badge available">有効</span>'
+                : '<span class="status-badge in-use">無効</span>'}
+            </td>
+            <td>
+              <button class="btn btn-outline-primary btn-sm" onclick='editCar(${JSON.stringify(car)})'>
+                <i class="bi bi-pencil"></i>
+              </button>
+              ${car.is_active ? `
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteCar(${car.id})">
+                  <i class="bi bi-trash"></i>
+                </button>
+              ` : ''}
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error('車両データ取得エラー:', e);
+      }
+    }
+
+    function openCarModal() {
+      document.getElementById('carModalTitle').innerHTML =
+        '<i class="bi bi-plus-circle"></i> 新規車両登録';
+      document.getElementById('carId').value = '';
+      document.getElementById('carName').value = '';
+      document.getElementById('carModel').value = '';
+      document.getElementById('carCapacity').value = '';
+      document.getElementById('carLocation').value = '本社駐車場';
+      document.getElementById('carActiveGroup').style.display = 'none';
+
+      new bootstrap.Modal(document.getElementById('carModal')).show();
+    }
+
+    function editCar(car) {
+      document.getElementById('carModalTitle').innerHTML =
+        '<i class="bi bi-pencil"></i> 車両編集';
+      document.getElementById('carId').value = car.id;
+      document.getElementById('carName').value = car.name;
+      document.getElementById('carModel').value = car.model;
+      document.getElementById('carCapacity').value = car.capacity;
+      document.getElementById('carLocation').value = car.current_location;
+      document.getElementById('carActive').checked = car.is_active;
+      document.getElementById('carActiveGroup').style.display = 'block';
+
+      new bootstrap.Modal(document.getElementById('carModal')).show();
+    }
+
+    async function saveCar() {
+      const id = document.getElementById('carId').value;
+      const data = {
+        name: document.getElementById('carName').value,
+        model: document.getElementById('carModel').value,
+        capacity: document.getElementById('carCapacity').value,
+        current_location: document.getElementById('carLocation').value,
+        is_active: document.getElementById('carActive').checked
+      };
+
+      if (!data.name || !data.model || !data.capacity) {
+        alert('必須項目を入力してください');
+        return;
+      }
+
+      try {
+        const url = id ? `/api/cars/${id}` : '/api/cars';
+        const method = id ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          bootstrap.Modal.getInstance(document.getElementById('carModal'))?.hide();
+          loadCars();
+        } else {
+          alert(result.error);
+        }
+      } catch (e) {
+        alert('保存に失敗しました');
+      }
+    }
+
+    async function deleteCar(id) {
+      if (!confirm('この車両を無効化しますか？')) return;
+
+      try {
+        const res = await fetch(`/api/cars/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          loadCars();
+        } else {
+          const data = await res.json();
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('削除に失敗しました');
+      }
+    }
+
+    // === ユーザー管理 ===
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/auth/users');
+        const users = await res.json();
+
+        const tbody = document.getElementById('usersTableBody');
+        tbody.innerHTML = users.map(user => `
+          <tr>
+            <td><strong>${escapeHtml(user.employee_id)}</strong></td>
+            <td>${escapeHtml(user.name)}</td>
+            <td>
+              ${user.role === 'admin'
+                ? '<span class="badge bg-primary">管理者</span>'
+                : '<span class="badge bg-secondary">一般</span>'}
+            </td>
+            <td>${user.created_at || '-'}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error('ユーザーデータ取得エラー:', e);
+      }
+    }
+
+    function openUserModal() {
+      document.getElementById('newEmployeeId').value = '';
+      document.getElementById('newUserName').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('newUserRole').value = 'user';
+
+      new bootstrap.Modal(document.getElementById('userModal')).show();
+    }
+
+    async function saveUser() {
+      const data = {
+        employee_id: document.getElementById('newEmployeeId').value,
+        name: document.getElementById('newUserName').value,
+        password: document.getElementById('newPassword').value,
+        role: document.getElementById('newUserRole').value
+      };
+
+      if (!data.employee_id || !data.name || !data.password) {
+        alert('必須項目を入力してください');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          bootstrap.Modal.getInstance(document.getElementById('userModal'))?.hide();
+          loadUsers();
+        } else {
+          alert(result.error);
+        }
+      } catch (e) {
+        alert('登録に失敗しました');
+      }
+    }
+
+    // === 共通 ===
+    function showCarStatus() {
+      window.location.href = '/';
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('show');
+      if (sidebar.classList.contains('show')) {
+        setTimeout(() => {
+          document.addEventListener('click', closeSidebarOnOutsideClick);
+        }, 0);
+      }
+    }
+
+    function closeSidebarOnOutsideClick(e) {
+      const sidebar = document.getElementById('sidebar');
+      const menuBtn = document.querySelector('.mobile-menu-btn');
+      if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+        sidebar.classList.remove('show');
+        document.removeEventListener('click', closeSidebarOnOutsideClick);
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
