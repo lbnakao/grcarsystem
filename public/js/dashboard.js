@@ -228,17 +228,27 @@ async function fetchEvents(fetchInfo, successCallback, failureCallback) {
     const res = await fetch(url);
     reservations = await res.json();
 
+    const now = new Date();
     const events = reservations.map(r => {
       const carIndex = cars.findIndex(c => c.id === r.car_id);
       const color = CAR_COLORS[carIndex % CAR_COLORS.length] || '#6b7280';
 
+      // 使用中判定（10分前から）
+      const startTime = new Date(r.start_datetime);
+      const endTime = new Date(r.end_datetime);
+      const startMinus10 = new Date(startTime.getTime() - 10 * 60 * 1000);
+      const isInUse = r.status === 'active' && now >= startMinus10 && now < endTime;
+
       return {
         id: r.id,
-        title: `${r.car_model} - ${r.user_name}`,
+        title: isInUse
+          ? `🚗 ${r.car_model} - ${r.user_name}`
+          : `${r.car_model} - ${r.user_name}`,
         start: r.start_datetime,
         end: r.end_datetime,
-        backgroundColor: color,
-        borderColor: color,
+        backgroundColor: isInUse ? '#dc2626' : color,
+        borderColor: isInUse ? '#dc2626' : color,
+        classNames: isInUse ? ['event-in-use'] : [],
         extendedProps: {
           car_id: r.car_id,
           car_name: r.car_name,
@@ -249,7 +259,8 @@ async function fetchEvents(fetchInfo, successCallback, failureCallback) {
           departure_location: r.departure_location,
           return_location: r.return_location,
           status: r.status,
-          notes: r.notes
+          notes: r.notes,
+          isInUse: isInUse
         }
       };
     });
@@ -275,10 +286,22 @@ function showEventDetail(info) {
     return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
+  // 使用中判定（10分前から）
+  const nowDetail = new Date();
+  const startMinus10 = new Date(start.getTime() - 10 * 60 * 1000);
+  const isInUse = props.status === 'active' && nowDetail >= startMinus10 && nowDetail < end;
+
+  let activeLabel;
+  if (isInUse) {
+    activeLabel = '<span class="status-badge in-use"><i class="bi bi-exclamation-circle"></i> 使用中</span>';
+  } else {
+    activeLabel = '<span class="status-badge reserved">予約中</span>';
+  }
+
   const statusText = {
-    active: '<span class="status-badge reserved">予約中</span>',
+    active: activeLabel,
     completed: '<span class="status-badge available">完了</span>',
-    cancelled: '<span class="status-badge in-use">キャンセル済</span>'
+    cancelled: '<span class="status-badge" style="background:#e2e8f0;color:#475569;">キャンセル済</span>'
   };
 
   document.getElementById('detailBody').innerHTML = `

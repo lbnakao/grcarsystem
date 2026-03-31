@@ -244,6 +244,16 @@ body {
   margin-bottom: 2px;
 }
 
+.fc .event-in-use {
+  animation: pulse-in-use 2s ease-in-out infinite;
+  font-weight: 700;
+}
+
+@keyframes pulse-in-use {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 /* 車両カラー */
 .car-color-0 { background-color: #3b82f6 !important; }
 .car-color-1 { background-color: #10b981 !important; }
