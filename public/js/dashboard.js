@@ -166,14 +166,14 @@ async function validateReservation() {
 // === カレンダー ===
 function initCalendar() {
   const calendarEl = document.getElementById('calendar');
+  const isMobile = window.innerWidth <= 768;
+
   calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
+    initialView: isMobile ? 'listWeek' : 'dayGridMonth',
     locale: 'ja',
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-    },
+    headerToolbar: isMobile
+      ? { left: 'prev,next', center: 'title', right: 'dayGridMonth,listWeek' }
+      : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
     buttonText: {
       today: '今日',
       month: '月',
@@ -185,6 +185,7 @@ function initCalendar() {
     slotMinTime: '06:00:00',
     slotMaxTime: '22:00:00',
     height: 'auto',
+    dayMaxEvents: isMobile ? 2 : false,
     navLinks: true,
     editable: false,
     selectable: true,
