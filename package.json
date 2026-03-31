@@ -8,9 +8,10 @@
     "dev": "node server.js"
   },
   "dependencies": {
-    "sql.js": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "express": "^4.21.0",
-    "express-session": "^1.18.0"
+    "express-session": "^1.18.0",
+    "pg": "^8.20.0",
+    "sql.js": "^1.11.0"
   }
 }
