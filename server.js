@@ -9,15 +9,26 @@ const reservationsRoutes = require('./routes/reservations');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER;
+
+// Render等のリバースプロキシ対応
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
 
 // ミドルウェア
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-  secret: 'gr-car-management-secret-key-2024',
+  secret: process.env.SESSION_SECRET || 'gr-car-management-secret-key-2024',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 8 * 60 * 60 * 1000 } // 8時間
+  cookie: {
+    maxAge: 8 * 60 * 60 * 1000,
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: 'lax'
+  }
 }));
 
 // 静的ファイル
@@ -59,14 +70,22 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+// ヘルスチェック
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // サーバー起動
 async function start() {
   await initDatabase();
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`社用車管理システム起動: http://localhost:${PORT}`);
     console.log(`管理者ログイン: 社員番号 admin / パスワード admin123`);
     console.log(`サンプルユーザー: 社員番号 1001 / パスワード pass1001`);
   });
 }
 
-start().catch(console.error);
+start().catch(err => {
+  console.error('起動エラー:', err);
+  process.exit(1);
+});

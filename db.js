@@ -8,7 +8,9 @@ const DB_PATH = path.join(__dirname, 'data', 'database.sqlite');
 let db = null;
 
 async function initDatabase() {
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({
+    locateFile: file => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file)
+  });
 
   // dataディレクトリがなければ作成
   const dataDir = path.join(__dirname, 'data');
