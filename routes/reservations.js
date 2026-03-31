@@ -2,6 +2,15 @@ const express = require('express');
 const { query, run } = require('../db');
 const router = express.Router();
 
+// JST現在時刻を取得（Renderサーバーがutcのため）
+function nowJST() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 16);
+}
+
+function nowJSTPlus10() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString().slice(0, 16);
+}
+
 // 予約一覧（カレンダー用）
 router.get('/', async (req, res) => {
   try {
@@ -155,8 +164,8 @@ router.delete('/:id', async (req, res) => {
 // 車両ステータス一括取得（現在の使用者＋次回予約）
 router.get('/status/all', async (req, res) => {
   try {
-    const now = new Date().toISOString().slice(0, 16);
-    const nowPlus10 = new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16);
+    const now = nowJST();
+    const nowPlus10 = nowJSTPlus10();
 
     // 現在使用中（10分前から使用中扱い）
     const currentRows = await query(`
