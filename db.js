@@ -191,12 +191,27 @@ async function seedData() {
       ['admin', hash, '管理者', 'admin']);
   }
 
-  // サンプルユーザー
-  const users = await query("SELECT id FROM users WHERE employee_id = ?", ['1001']);
-  if (users.length === 0) {
-    const hash = bcrypt.hashSync('pass1001', 10);
-    await run("INSERT INTO users (employee_id, password, name, role) VALUES (?, ?, ?, ?)",
-      ['1001', hash, '山田 太郎', 'user']);
+  // 社員登録（あいうえお順）
+  const employees = [
+    { employee_id: '001', name: '青山',       password: 'agr2026' },
+    { employee_id: '002', name: '加川',       password: 'kgr2026' },
+    { employee_id: '003', name: '川岡',       password: 'kgr2026' },
+    { employee_id: '004', name: '北林',       password: 'kgr2026' },
+    { employee_id: '005', name: 'ギルバート', password: 'ggr2026' },
+    { employee_id: '006', name: '国島',       password: 'kgr2026' },
+    { employee_id: '007', name: '中道',       password: 'ngr2026' },
+    { employee_id: '008', name: '西',         password: 'ngr2026' },
+    { employee_id: '009', name: 'ビエン',     password: 'bgr2026' },
+    { employee_id: '010', name: '屋比久',     password: 'ygr2026' },
+  ];
+
+  for (const emp of employees) {
+    const existing = await query("SELECT id FROM users WHERE employee_id = ?", [emp.employee_id]);
+    if (existing.length === 0) {
+      const hash = bcrypt.hashSync(emp.password, 10);
+      await run("INSERT INTO users (employee_id, password, name, role) VALUES (?, ?, ?, ?)",
+        [emp.employee_id, hash, emp.name, 'user']);
+    }
   }
 
   // サンプル車両
