@@ -68,17 +68,52 @@
 
     /* ===== コンテナ ===== */
     .container {
-      max-width: 900px;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 60px 30px;
+      padding: 40px 40px;
+    }
+
+    /* ===== 横向きレイアウト（モック+説明を横並び） ===== */
+    .landscape-row {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      margin: 12px 0 20px;
+    }
+
+    .landscape-row .mockup-container {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .landscape-row .landscape-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .landscape-row .landscape-text .steps {
+      margin-top: 0;
+    }
+
+    /* 2カラムグリッド */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin: 16px 0 24px;
+    }
+
+    .two-col .info-table {
+      margin: 0;
     }
 
     /* ===== 目次 ===== */
     .toc {
       background: #f8fafc;
       border-radius: 12px;
-      padding: 32px 40px;
-      margin-bottom: 60px;
+      padding: 24px 32px;
+      margin-bottom: 40px;
       border: 1px solid var(--border);
     }
 
@@ -119,7 +154,7 @@
 
     /* ===== セクション ===== */
     .section {
-      margin-bottom: 80px;
+      margin-bottom: 48px;
       page-break-inside: avoid;
     }
 
@@ -136,7 +171,7 @@
       font-size: 20px;
       font-weight: 700;
       color: var(--text-main);
-      margin: 32px 0 16px;
+      margin: 24px 0 12px;
       padding-left: 12px;
       border-left: 4px solid var(--primary);
     }
@@ -145,7 +180,7 @@
       font-size: 16px;
       font-weight: 700;
       color: var(--text-sub);
-      margin: 20px 0 10px;
+      margin: 16px 0 8px;
     }
 
     .section p {
@@ -170,14 +205,14 @@
       background: #eff6ff;
       border: 1px solid #bfdbfe;
       border-radius: 10px;
-      padding: 20px 24px;
-      margin: 16px 0 24px;
+      padding: 14px 18px;
+      margin: 10px 0 16px;
     }
 
     .steps .step {
       display: flex;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 10px;
+      margin-bottom: 8px;
       align-items: flex-start;
     }
 
@@ -210,10 +245,10 @@
     .note {
       background: #fef3c7;
       border: 1px solid #f59e0b;
-      border-radius: 10px;
-      padding: 14px 18px;
-      margin: 16px 0;
-      font-size: 14px;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 13px;
       color: #92400e;
     }
 
@@ -225,10 +260,10 @@
     .tip {
       background: #dcfce7;
       border: 1px solid #22c55e;
-      border-radius: 10px;
-      padding: 14px 18px;
-      margin: 16px 0;
-      font-size: 14px;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 13px;
       color: #166534;
     }
 
@@ -241,12 +276,12 @@
     .info-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 16px 0 24px;
-      font-size: 14px;
+      margin: 8px 0 16px;
+      font-size: 13px;
     }
 
     .info-table th, .info-table td {
-      padding: 10px 14px;
+      padding: 8px 12px;
       border: 1px solid var(--border);
       text-align: left;
     }
@@ -264,7 +299,7 @@
 
     /* ===== 画面モックアップ共通 ===== */
     .mockup-container {
-      margin: 20px 0 28px;
+      margin: 12px 0 16px;
       border: 2px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
@@ -305,21 +340,20 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 40px 20px;
-      min-height: 400px;
+      padding: 24px 16px;
     }
 
     .mock-login-card {
       background: #fff;
       border-radius: 16px;
-      padding: 32px;
-      width: 360px;
+      padding: 24px;
+      width: 320px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     }
 
     .mock-login-header {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
     }
 
     .mock-login-header .icon {
@@ -380,7 +414,7 @@
     /* ===== ダッシュボードモック ===== */
     .mock-dashboard {
       display: flex;
-      min-height: 500px;
+      min-height: 420px;
     }
 
     .mock-sidebar {
@@ -486,7 +520,7 @@
 
     .mock-main {
       flex: 1;
-      padding: 20px;
+      padding: 14px;
       background: var(--bg-main);
       overflow: hidden;
     }
@@ -673,8 +707,8 @@
 
     /* ===== モーダルモック ===== */
     .mock-modal-overlay {
-      background: rgba(0,0,0,0.3);
-      padding: 30px 20px;
+      background: transparent;
+      padding: 0;
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -683,15 +717,15 @@
     .mock-modal {
       background: #fff;
       border-radius: 12px;
-      width: 440px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      width: 100%;
+      box-shadow: none;
       overflow: hidden;
     }
 
     .mock-modal-header {
       background: var(--primary);
       color: #fff;
-      padding: 14px 20px;
+      padding: 10px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -713,11 +747,11 @@
     }
 
     .mock-modal-body {
-      padding: 20px;
+      padding: 14px 16px;
     }
 
     .mock-modal-footer {
-      padding: 12px 20px;
+      padding: 10px 16px;
       display: flex;
       justify-content: flex-end;
       gap: 8px;
@@ -745,7 +779,7 @@
     }
 
     .mock-form-group {
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .mock-form-row {
@@ -791,8 +825,8 @@
     .mock-detail-row {
       display: flex;
       align-items: flex-start;
-      gap: 12px;
-      padding: 8px 0;
+      gap: 10px;
+      padding: 5px 0;
       border-bottom: 1px solid #f1f5f9;
     }
 
@@ -965,58 +999,144 @@
       line-height: 1.6;
     }
 
-    /* ===== 番号付きアノテーション ===== */
-    .annotation {
-      position: absolute;
-      width: 24px;
-      height: 24px;
+
+    /* ===== PDF出力ボタン ===== */
+    .pdf-btn-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+    }
+
+    .pdf-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
       background: #ef4444;
       color: #fff;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
       font-weight: 700;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      z-index: 10;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(239,68,68,0.4);
+      transition: all 0.2s;
+      font-family: inherit;
     }
 
-    .annotation-list {
-      margin: 12px 0 24px;
-      padding: 0;
-      list-style: none;
+    .pdf-btn:hover {
+      background: #dc2626;
+      box-shadow: 0 6px 20px rgba(239,68,68,0.5);
+      transform: translateY(-1px);
     }
 
-    .annotation-list li {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-
-    .annotation-list .num {
-      width: 22px;
-      height: 22px;
-      background: #ef4444;
-      color: #fff;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 700;
-      flex-shrink: 0;
-      margin-top: 2px;
+    .pdf-btn svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
     }
 
     /* ===== 印刷用 ===== */
+    @page {
+      size: landscape;
+      margin: 12mm 16mm;
+    }
+
     @media print {
-      .cover { min-height: auto; padding: 80px 20px; }
-      .mockup-container { break-inside: avoid; }
-      .section { break-before: page; }
-      body { font-size: 12px; }
+      /* PDF出力ボタン非表示 */
+      .pdf-btn-container { display: none !important; }
+
+      /* 基本設定 */
+      body { font-size: 11px; line-height: 1.5; }
+      .container { padding: 0; max-width: 100%; }
+
+      /* 表紙 */
+      .cover {
+        min-height: auto;
+        padding: 60px 20px;
+        page-break-after: always;
+      }
+
+      .cover h1 { font-size: 32px; }
+      .cover h2 { font-size: 20px; margin-bottom: 20px; }
+
+      /* 目次 */
+      .toc {
+        page-break-after: always;
+      }
+
+      .toc ol {
+        columns: 2;
+        column-gap: 40px;
+      }
+
+      /* セクション */
+      .section {
+        page-break-before: always;
+        margin-bottom: 30px;
+      }
+
+      .section:first-of-type {
+        page-break-before: avoid;
+      }
+
+      .section h2 { font-size: 20px; margin-bottom: 14px; }
+      .section h3 { font-size: 16px; margin: 18px 0 10px; }
+      .section h4 { font-size: 13px; margin: 14px 0 6px; }
+      .section p { font-size: 12px; margin-bottom: 8px; }
+      .section li { font-size: 12px; margin-bottom: 4px; }
+
+      /* 横並びレイアウト */
+      .landscape-row {
+        gap: 24px;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      /* モックアップ */
+      .mockup-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+      }
+
+      /* 手順ボックス */
+      .steps {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        padding: 12px 16px;
+        font-size: 12px;
+      }
+
+      .steps .step { margin-bottom: 6px; }
+      .step-num { width: 22px; height: 22px; font-size: 11px; }
+      .step-text { font-size: 12px; line-height: 1.5; }
+
+      /* テーブル */
+      .info-table {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        font-size: 11px;
+      }
+
+      .info-table th, .info-table td { padding: 6px 10px; }
+
+      /* 注意・ヒント */
+      .note, .tip { font-size: 11px; padding: 8px 12px; margin: 8px 0; }
+
+      /* 2カラム */
+      .two-col { gap: 16px; }
+
+      /* リンク下線除去 */
+      a { text-decoration: none; color: inherit; }
+
+      /* 背景色を確実に印刷 */
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
 
     /* ===== ページ区切り ===== */
@@ -1028,10 +1148,23 @@
 </head>
 <body>
 
+<!-- PDF出力ボタン -->
+<div class="pdf-btn-container">
+  <button class="pdf-btn" onclick="exportPDF()">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6zm2-6h8v2H8v-2zm0-3h8v2H8v-2z"/></svg>
+    PDF出力
+  </button>
+</div>
+
+<script>
+function exportPDF() {
+  window.print();
+}
+</script>
+
 <!-- ===== 表紙 ===== -->
 <div class="cover">
   <div class="cover-inner">
-    <span class="cover-icon">&#x1F697;</span>
     <h1>GR社用車管理システム</h1>
     <h2>操作説明書</h2>
     <p style="font-size: 16px; opacity: 0.85;">グローバルリゾート</p>
@@ -1080,65 +1213,69 @@
     <h2>1. システム概要</h2>
     <p>GR社用車管理システムは、グローバルリゾートの社用車の予約・管理を一元的に行うWebアプリケーションです。PCやスマートフォンのブラウザからアクセスし、社用車の予約状況の確認、新規予約の作成、車両の現在地確認などを行えます。</p>
 
-    <h3>主な機能</h3>
-    <table class="info-table">
-      <tr>
-        <th>機能</th>
-        <th>一般ユーザー</th>
-        <th>管理者</th>
-      </tr>
-      <tr>
-        <td>予約カレンダー閲覧</td>
-        <td>&#x2705;</td>
-        <td>&#x2705;</td>
-      </tr>
-      <tr>
-        <td>車両ステータス確認</td>
-        <td>&#x2705;</td>
-        <td>&#x2705;</td>
-      </tr>
-      <tr>
-        <td>予約の作成・編集・キャンセル</td>
-        <td>&#x2705; 自分の予約のみ</td>
-        <td>&#x2705; 全ユーザーの予約</td>
-      </tr>
-      <tr>
-        <td>返却完了処理</td>
-        <td>&#x2705; 自分の予約のみ</td>
-        <td>&#x2705; 全ユーザーの予約</td>
-      </tr>
-      <tr>
-        <td>車両の登録・編集・無効化</td>
-        <td>&#x274C;</td>
-        <td>&#x2705;</td>
-      </tr>
-      <tr>
-        <td>ユーザーの登録</td>
-        <td>&#x274C;</td>
-        <td>&#x2705;</td>
-      </tr>
-    </table>
-
-    <h3>初期アカウント情報</h3>
-    <table class="info-table">
-      <tr>
-        <th>種別</th>
-        <th>社員番号</th>
-        <th>パスワード</th>
-      </tr>
-      <tr>
-        <td>管理者アカウント</td>
-        <td><strong>admin</strong></td>
-        <td><strong>admin123</strong></td>
-      </tr>
-      <tr>
-        <td>サンプルユーザー</td>
-        <td><strong>1001</strong></td>
-        <td><strong>pass1001</strong></td>
-      </tr>
-    </table>
-
-    <div class="note">初回ログイン後、管理者はパスワードの変更をお勧めします。</div>
+    <div class="two-col">
+      <div>
+        <h3>主な機能</h3>
+        <table class="info-table">
+          <tr>
+            <th>機能</th>
+            <th>一般ユーザー</th>
+            <th>管理者</th>
+          </tr>
+          <tr>
+            <td>予約カレンダー閲覧</td>
+            <td>&#x2705;</td>
+            <td>&#x2705;</td>
+          </tr>
+          <tr>
+            <td>車両ステータス確認</td>
+            <td>&#x2705;</td>
+            <td>&#x2705;</td>
+          </tr>
+          <tr>
+            <td>予約の作成・編集・キャンセル</td>
+            <td>&#x2705; 自分の予約のみ</td>
+            <td>&#x2705; 全ユーザーの予約</td>
+          </tr>
+          <tr>
+            <td>返却完了処理</td>
+            <td>&#x2705; 自分の予約のみ</td>
+            <td>&#x2705; 全ユーザーの予約</td>
+          </tr>
+          <tr>
+            <td>車両の登録・編集・無効化</td>
+            <td>&#x274C;</td>
+            <td>&#x2705;</td>
+          </tr>
+          <tr>
+            <td>ユーザーの登録</td>
+            <td>&#x274C;</td>
+            <td>&#x2705;</td>
+          </tr>
+        </table>
+      </div>
+      <div>
+        <h3>初期アカウント情報</h3>
+        <table class="info-table">
+          <tr>
+            <th>種別</th>
+            <th>社員番号</th>
+            <th>パスワード</th>
+          </tr>
+          <tr>
+            <td>管理者アカウント</td>
+            <td><strong>admin</strong></td>
+            <td><strong>admin123</strong></td>
+          </tr>
+          <tr>
+            <td>サンプルユーザー</td>
+            <td><strong>1001</strong></td>
+            <td><strong>pass1001</strong></td>
+          </tr>
+        </table>
+        <div class="note">初回ログイン後、管理者はパスワードの変更をお勧めします。</div>
+      </div>
+    </div>
   </div>
 
   <!-- ========== 2. ログイン・ログアウト ========== -->
@@ -1148,65 +1285,57 @@
     <h3>ログイン</h3>
     <p>ブラウザでシステムのURLにアクセスすると、ログイン画面が表示されます。</p>
 
-    <!-- ログイン画面モック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        ログイン画面
-      </div>
-      <div class="mockup-body">
-        <div class="mock-login" style="position: relative;">
-          <div class="annotation" style="top: 70px; left: calc(50% - 150px);">1</div>
-          <div class="annotation" style="top: 200px; left: calc(50% - 150px);">2</div>
-          <div class="annotation" style="top: 248px; left: calc(50% - 150px);">3</div>
-          <div class="annotation" style="top: 310px; left: calc(50% - 150px);">4</div>
-
-          <div class="mock-login-card">
-            <div class="mock-login-header">
-              <div class="icon">&#x1F698;</div>
-              <h3>GR社用車管理システム</h3>
-              <small>グローバルリゾート</small>
-            </div>
-            <div>
-              <span class="mock-label">&#x1F464; 社員番号</span>
-              <div class="mock-input">社員番号を入力</div>
-              <span class="mock-label">&#x1F512; パスワード</span>
-              <div class="mock-input">パスワードを入力</div>
-              <div class="mock-btn">&#x27A1; ログイン</div>
+    <div class="landscape-row">
+      <!-- ログイン画面モック -->
+      <div class="mockup-container">
+        <div class="mockup-label">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          ログイン画面
+        </div>
+        <div class="mockup-body">
+          <div class="mock-login">
+            <div class="mock-login-card">
+              <div class="mock-login-header">
+                <div class="icon">&#x1F698;</div>
+                <h3>GR社用車管理システム</h3>
+                <small>グローバルリゾート</small>
+              </div>
+              <div>
+                <span class="mock-label">&#x1F464; 社員番号</span>
+                <div class="mock-input">社員番号を入力</div>
+                <span class="mock-label">&#x1F512; パスワード</span>
+                <div class="mock-input">パスワードを入力</div>
+                <div class="mock-btn">&#x27A1; ログイン</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <div class="landscape-text">
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span class="step-text">「社員番号」欄に自分の社員番号を入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span class="step-text">「パスワード」欄にパスワードを入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span class="step-text">「ログイン」ボタンをクリックします。認証が成功するとダッシュボードに移動します。</span>
+          </div>
+        </div>
+
+        <div class="note">社員番号またはパスワードが間違っている場合、画面上部にエラーメッセージが赤く表示されます。</div>
+
+        <h3 style="margin-top:24px;">ログアウト</h3>
+        <p>画面左側のサイドバー下部にある「ログアウト」ボタンをクリックすると、ログイン画面に戻ります。セッションは8時間で自動的に切れます。</p>
+      </div>
     </div>
-
-    <ul class="annotation-list">
-      <li><span class="num">1</span>システムロゴとタイトル</li>
-      <li><span class="num">2</span>社員番号入力欄 - 管理者から通知された社員番号を入力</li>
-      <li><span class="num">3</span>パスワード入力欄 - 割り当てられたパスワードを入力</li>
-      <li><span class="num">4</span>ログインボタン - クリックしてシステムにログイン</li>
-    </ul>
-
-    <div class="steps">
-      <div class="step">
-        <span class="step-num">1</span>
-        <span class="step-text">「社員番号」欄に自分の社員番号を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <span class="step-text">「パスワード」欄にパスワードを入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <span class="step-text">「ログイン」ボタンをクリックします。認証が成功するとダッシュボードに移動します。</span>
-      </div>
-    </div>
-
-    <div class="note">社員番号またはパスワードが間違っている場合、画面上部にエラーメッセージが赤く表示されます。</div>
-
-    <h3>ログアウト</h3>
-    <p>画面左側のサイドバー下部にある「ログアウト」ボタンをクリックすると、ログイン画面に戻ります。セッションは8時間で自動的に切れます。</p>
   </div>
 
   <!-- ========== 3. ダッシュボード画面 ========== -->
@@ -1225,14 +1354,7 @@
         ダッシュボード画面（デスクトップ表示）
       </div>
       <div class="mockup-body">
-        <div class="mock-dashboard" style="position: relative;">
-          <div class="annotation" style="top: 8px; left: 90px; z-index:20;">1</div>
-          <div class="annotation" style="top: 70px; left: 90px; z-index:20;">2</div>
-          <div class="annotation" style="top: 360px; left: 90px; z-index:20;">3</div>
-          <div class="annotation" style="top: 8px; right: 20px; z-index:20;">4</div>
-          <div class="annotation" style="top: 52px; left: 340px; z-index:20;">5</div>
-          <div class="annotation" style="top: 120px; left: 340px; z-index:20;">6</div>
-
+        <div class="mock-dashboard">
           <div class="mock-sidebar">
             <div class="mock-sidebar-brand">
               <h4>&#x1F698; GR社用車管理</h4>
@@ -1350,15 +1472,6 @@
       </div>
     </div>
 
-    <ul class="annotation-list">
-      <li><span class="num">1</span><strong>サイドバー</strong> - ナビゲーションメニュー。ページの切り替えに使います</li>
-      <li><span class="num">2</span><strong>ナビゲーション</strong> - 「予約カレンダー」「車両ステータス」「管理ページ（管理者のみ）」を切り替え</li>
-      <li><span class="num">3</span><strong>ユーザー情報・ログアウト</strong> - ログイン中のユーザー名と権限、ログアウトボタン</li>
-      <li><span class="num">4</span><strong>新規予約ボタン</strong> - クリックして新しい予約を作成</li>
-      <li><span class="num">5</span><strong>車両ステータスカード</strong> - 各車両の現在の状態（空車/使用中）を一目で確認</li>
-      <li><span class="num">6</span><strong>予約カレンダー</strong> - 月/週/日/一覧の4つの表示形式で予約を確認</li>
-    </ul>
-
     <div class="tip">スマートフォンでは、サイドバーは画面左上の&#x2699;ボタンをタップすると表示されます。</div>
 
     <h3 id="sec3-2">3.2 車両ステータスカード</h3>
@@ -1415,64 +1528,69 @@
       </div>
     </div>
 
-    <h4>ステータスの種類</h4>
-    <table class="info-table">
-      <tr>
-        <th>バッジ</th>
-        <th>意味</th>
-      </tr>
-      <tr>
-        <td><span style="background:#dcfce7; color:#166534; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">&#x1F7E2; 空車</span></td>
-        <td>現在誰も使用していません。予約可能です。</td>
-      </tr>
-      <tr>
-        <td><span style="background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">&#x1F534; 使用中</span></td>
-        <td>現在使用中です（予約開始10分前から使用中扱い）。</td>
-      </tr>
-    </table>
-
-    <div class="note">返却場所と次回予約の出発場所が異なる場合、黄色い警告が表示されます。車両の移動が必要な場合の注意喚起です。</div>
-
-    <h3 id="sec3-3">3.3 予約カレンダー</h3>
-    <p>カレンダーには全車両の予約が色分けして表示されます。各車両には固有の色が割り当てられています。</p>
-
-    <h4>カレンダーの表示切替</h4>
-    <table class="info-table">
-      <tr>
-        <th>表示モード</th>
-        <th>説明</th>
-      </tr>
-      <tr>
-        <td><strong>月</strong></td>
-        <td>月間カレンダー形式。全体の予約状況を俯瞰できます。</td>
-      </tr>
-      <tr>
-        <td><strong>週</strong></td>
-        <td>週間タイムライン形式。時間帯ごとの予約を確認できます。</td>
-      </tr>
-      <tr>
-        <td><strong>日</strong></td>
-        <td>1日のタイムライン形式。その日の詳細なスケジュールを確認できます。</td>
-      </tr>
-      <tr>
-        <td><strong>一覧</strong></td>
-        <td>リスト形式。予約を一覧で確認できます。</td>
-      </tr>
-    </table>
-
-    <h4>車両ごとの色分け</h4>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 20px;">
-      <span style="background:#3b82f6; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">1台目</span>
-      <span style="background:#10b981; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">2台目</span>
-      <span style="background:#f59e0b; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">3台目</span>
-      <span style="background:#ef4444; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">4台目</span>
-      <span style="background:#8b5cf6; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">5台目</span>
-      <span style="background:#ec4899; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">6台目</span>
-      <span style="background:#06b6d4; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">7台目</span>
-      <span style="background:#84cc16; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">8台目</span>
+    <div class="two-col">
+      <div>
+        <h4>ステータスの種類</h4>
+        <table class="info-table">
+          <tr>
+            <th>バッジ</th>
+            <th>意味</th>
+          </tr>
+          <tr>
+            <td><span style="background:#dcfce7; color:#166534; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">&#x1F7E2; 空車</span></td>
+            <td>現在誰も使用していません。予約可能です。</td>
+          </tr>
+          <tr>
+            <td><span style="background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">&#x1F534; 使用中</span></td>
+            <td>現在使用中です（予約開始10分前から使用中扱い）。</td>
+          </tr>
+        </table>
+        <div class="note">返却場所と次回予約の出発場所が異なる場合、黄色い警告が表示されます。車両の移動が必要な場合の注意喚起です。</div>
+      </div>
+      <div>
+        <h4>車両ごとの色分け</h4>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 16px;">
+          <span style="background:#3b82f6; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">1台目</span>
+          <span style="background:#10b981; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">2台目</span>
+          <span style="background:#f59e0b; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">3台目</span>
+          <span style="background:#ef4444; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">4台目</span>
+          <span style="background:#8b5cf6; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">5台目</span>
+          <span style="background:#ec4899; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">6台目</span>
+          <span style="background:#06b6d4; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">7台目</span>
+          <span style="background:#84cc16; color:#fff; padding:4px 14px; border-radius:4px; font-size:13px;">8台目</span>
+        </div>
+        <div class="tip">現在使用中の予約はカレンダー上で点滅（パルス）アニメーションで強調表示されます。</div>
+      </div>
     </div>
 
-    <div class="tip">現在使用中の予約はカレンダー上で点滅（パルス）アニメーションで強調表示されます。</div>
+    <h3 id="sec3-3">3.3 予約カレンダー</h3>
+    <p>カレンダーには全車両の予約が色分けして表示されます。右上のボタンで表示モードを切り替えられます。</p>
+
+    <div class="two-col">
+      <table class="info-table">
+        <tr>
+          <th>表示モード</th>
+          <th>説明</th>
+        </tr>
+        <tr>
+          <td><strong>月</strong></td>
+          <td>月間カレンダー形式。全体の予約状況を俯瞰</td>
+        </tr>
+        <tr>
+          <td><strong>週</strong></td>
+          <td>週間タイムライン形式。時間帯ごとの確認</td>
+        </tr>
+        <tr>
+          <td><strong>日</strong></td>
+          <td>1日のタイムライン形式。詳細スケジュール</td>
+        </tr>
+        <tr>
+          <td><strong>一覧</strong></td>
+          <td>リスト形式。予約を一覧で確認</td>
+        </tr>
+      </table>
+      <div></div>
+    </div>
   </div>
 
   <!-- ========== 4. 予約操作 ========== -->
@@ -1486,104 +1604,92 @@
       <li>カレンダー上で使用したい日時をドラッグして選択</li>
     </ul>
 
-    <!-- 予約モーダルモック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        新規予約 入力画面
-      </div>
-      <div class="mockup-body">
-        <div class="mock-modal-overlay" style="position:relative;">
-          <div class="annotation" style="top: 50px; left: calc(50% - 210px);">1</div>
-          <div class="annotation" style="top: 106px; left: calc(50% - 210px);">2</div>
-          <div class="annotation" style="top: 155px; left: calc(50% - 210px);">3</div>
-          <div class="annotation" style="top: 205px; left: calc(50% - 210px);">4</div>
-          <div class="annotation" style="top: 245px; left: calc(50% - 210px);">5</div>
-          <div class="annotation" style="top: 280px; left: calc(50% - 210px);">6</div>
-          <div class="annotation" style="top: 328px; left: calc(50% - 210px);">7</div>
-
-          <div class="mock-modal">
-            <div class="mock-modal-header">
-              <h4>&#x2795; 新規予約</h4>
-              <span class="mock-modal-close">&#x2715;</span>
-            </div>
-            <div class="mock-modal-body">
-              <div class="mock-form-group">
-                <span class="mock-label-sm">車両 <span class="req">*</span></span>
-                <div class="mock-select">選択してください</div>
+    <div class="landscape-row">
+      <!-- 予約モーダルモック -->
+      <div class="mockup-container">
+        <div class="mockup-label">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          新規予約 入力画面
+        </div>
+        <div class="mockup-body">
+          <div class="mock-modal-overlay">
+            <div class="mock-modal">
+              <div class="mock-modal-header">
+                <h4>&#x2795; 新規予約</h4>
+                <span class="mock-modal-close">&#x2715;</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">開始 <span class="req">*</span></span>
-                <div class="mock-form-row">
-                  <div class="mock-input-sm" style="flex:1.4;">2026/04/01</div>
-                  <div class="mock-input-sm" style="flex:1;">09:00</div>
+              <div class="mock-modal-body">
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">車両 <span class="req">*</span></span>
+                  <div class="mock-select">選択してください</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">開始 <span class="req">*</span></span>
+                  <div class="mock-form-row">
+                    <div class="mock-input-sm" style="flex:1.4;">2026/04/01</div>
+                    <div class="mock-input-sm" style="flex:1;">09:00</div>
+                  </div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">終了 <span class="req">*</span></span>
+                  <div class="mock-form-row">
+                    <div class="mock-input-sm" style="flex:1.4;">2026/04/01</div>
+                    <div class="mock-input-sm" style="flex:1;">17:00</div>
+                  </div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">出発場所 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: 弥山</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">返却場所 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: 弥山</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">備考</span>
+                  <div class="mock-input-sm" style="min-height:50px;">任意</div>
                 </div>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">終了 <span class="req">*</span></span>
-                <div class="mock-form-row">
-                  <div class="mock-input-sm" style="flex:1.4;">2026/04/01</div>
-                  <div class="mock-input-sm" style="flex:1;">17:00</div>
-                </div>
+              <div class="mock-modal-footer">
+                <span class="mock-btn-cancel">キャンセル</span>
+                <span class="mock-btn-save">&#x2714; 保存</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">出発場所 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: 弥山</div>
-              </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">返却場所 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: 弥山</div>
-              </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">備考</span>
-                <div class="mock-input-sm" style="min-height:50px;">任意</div>
-              </div>
-            </div>
-            <div class="mock-modal-footer">
-              <span class="mock-btn-cancel">キャンセル</span>
-              <span class="mock-btn-save">&#x2714; 保存</span>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <ul class="annotation-list">
-      <li><span class="num">1</span><strong>車両選択</strong> - 予約したい車両をドロップダウンから選択（必須）</li>
-      <li><span class="num">2</span><strong>開始日時</strong> - 使用開始の日付と時間を入力（必須）</li>
-      <li><span class="num">3</span><strong>終了日時</strong> - 使用終了の日付と時間を入力（必須）</li>
-      <li><span class="num">4</span><strong>出発場所</strong> - 車両を使い始める場所を入力（必須）</li>
-      <li><span class="num">5</span><strong>返却場所</strong> - 車両を返却する場所を入力（必須）</li>
-      <li><span class="num">6</span><strong>備考</strong> - 使用目的や連絡事項など自由に記入（任意）</li>
-      <li><span class="num">7</span><strong>保存ボタン</strong> - 入力内容を確認して保存</li>
-    </ul>
+      <div class="landscape-text">
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span class="step-text">「+ 新規予約」ボタンをクリックし、予約入力画面を開きます。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span class="step-text">使用する車両をドロップダウンから選択します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span class="step-text">使用開始日時と終了日時を入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">4</span>
+            <span class="step-text">出発場所と返却場所を入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">5</span>
+            <span class="step-text">必要に応じて備考欄に補足情報を記入します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">6</span>
+            <span class="step-text">「保存」ボタンをクリックして予約を確定します。</span>
+          </div>
+        </div>
 
-    <div class="steps">
-      <div class="step">
-        <span class="step-num">1</span>
-        <span class="step-text">「+ 新規予約」ボタンをクリックし、予約入力画面を開きます。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <span class="step-text">使用する車両をドロップダウンから選択します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <span class="step-text">使用開始日時と終了日時を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">4</span>
-        <span class="step-text">出発場所と返却場所を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">5</span>
-        <span class="step-text">必要に応じて備考欄に補足情報を記入します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">6</span>
-        <span class="step-text">「保存」ボタンをクリックして予約を確定します。</span>
+        <div class="note" style="margin-top:12px;">警告はあくまで注意喚起です。状況を確認のうえ、そのまま保存することも可能です。</div>
       </div>
     </div>
 
@@ -1616,131 +1722,129 @@
       </tr>
     </table>
 
-    <div class="note">警告はあくまで注意喚起です。状況を確認のうえ、そのまま保存することも可能です。</div>
-
     <h3 id="sec4-2">4.2 予約の確認・編集・キャンセル</h3>
     <p>カレンダー上の予約をクリックすると、予約の詳細が表示されます。</p>
 
-    <!-- 予約詳細モーダルモック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        予約詳細画面
-      </div>
-      <div class="mockup-body">
-        <div class="mock-modal-overlay">
-          <div class="mock-modal">
-            <div class="mock-modal-header">
-              <h4>&#x2139; 予約詳細</h4>
-              <span class="mock-modal-close">&#x2715;</span>
-            </div>
-            <div class="mock-modal-body">
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F698;</div>
-                <div>
-                  <div class="mock-detail-label">車両</div>
-                  <div class="mock-detail-value">GR-001 / トヨタ アルファード</div>
+    <div class="landscape-row">
+      <!-- 予約詳細モーダルモック -->
+      <div class="mockup-container">
+        <div class="mockup-label">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          予約詳細画面
+        </div>
+        <div class="mockup-body">
+          <div class="mock-modal-overlay">
+            <div class="mock-modal">
+              <div class="mock-modal-header">
+                <h4>&#x2139; 予約詳細</h4>
+                <span class="mock-modal-close">&#x2715;</span>
+              </div>
+              <div class="mock-modal-body">
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F698;</div>
+                  <div>
+                    <div class="mock-detail-label">車両</div>
+                    <div class="mock-detail-value">GR-001 / トヨタ アルファード</div>
+                  </div>
+                </div>
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F4C5;</div>
+                  <div>
+                    <div class="mock-detail-label">日時</div>
+                    <div class="mock-detail-value">2026/04/01 09:00 〜 17:00</div>
+                  </div>
+                </div>
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F4CD;</div>
+                  <div>
+                    <div class="mock-detail-label">場所</div>
+                    <div class="mock-detail-value">本社駐車場 → 大阪支店</div>
+                  </div>
+                </div>
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F464;</div>
+                  <div>
+                    <div class="mock-detail-label">予約者</div>
+                    <div class="mock-detail-value">田中 太郎（社員番号: 1001）</div>
+                  </div>
+                </div>
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F4CB;</div>
+                  <div>
+                    <div class="mock-detail-label">ステータス</div>
+                    <div class="mock-detail-value"><span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:10px; font-size:11px;">使用中</span></div>
+                  </div>
+                </div>
+                <div class="mock-detail-row">
+                  <div class="mock-detail-icon">&#x1F4DD;</div>
+                  <div>
+                    <div class="mock-detail-label">備考</div>
+                    <div class="mock-detail-value">大阪支店での打ち合わせ</div>
+                  </div>
                 </div>
               </div>
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F4C5;</div>
-                <div>
-                  <div class="mock-detail-label">日時</div>
-                  <div class="mock-detail-value">2026/04/01 09:00 〜 17:00</div>
+              <div class="mock-modal-footer" style="justify-content: space-between;">
+                <div style="display:flex; gap:6px;">
+                  <span class="mock-btn-save" style="background:#22c55e;">&#x2714; 返却完了</span>
+                  <span class="mock-btn-save" style="background:#f59e0b;">&#x270F; 編集</span>
                 </div>
+                <span class="mock-btn-save" style="background:#ef4444;">&#x2716; キャンセル</span>
               </div>
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F4CD;</div>
-                <div>
-                  <div class="mock-detail-label">場所</div>
-                  <div class="mock-detail-value">本社駐車場 → 大阪支店</div>
-                </div>
-              </div>
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F464;</div>
-                <div>
-                  <div class="mock-detail-label">予約者</div>
-                  <div class="mock-detail-value">田中 太郎（社員番号: 1001）</div>
-                </div>
-              </div>
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F4CB;</div>
-                <div>
-                  <div class="mock-detail-label">ステータス</div>
-                  <div class="mock-detail-value"><span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:10px; font-size:11px;">使用中</span></div>
-                </div>
-              </div>
-              <div class="mock-detail-row">
-                <div class="mock-detail-icon">&#x1F4DD;</div>
-                <div>
-                  <div class="mock-detail-label">備考</div>
-                  <div class="mock-detail-value">大阪支店での打ち合わせ</div>
-                </div>
-              </div>
-            </div>
-            <div class="mock-modal-footer" style="justify-content: space-between;">
-              <div style="display:flex; gap:6px;">
-                <span class="mock-btn-save" style="background:#22c55e;">&#x2714; 返却完了</span>
-                <span class="mock-btn-save" style="background:#f59e0b;">&#x270F; 編集</span>
-              </div>
-              <span class="mock-btn-save" style="background:#ef4444;">&#x2716; キャンセル</span>
             </div>
           </div>
         </div>
       </div>
+
+      <div class="landscape-text">
+        <h4>操作ボタンの説明</h4>
+        <table class="info-table">
+          <tr>
+            <th>ボタン</th>
+            <th>説明</th>
+            <th>表示条件</th>
+          </tr>
+          <tr>
+            <td><span style="background:#22c55e; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x2714; 返却完了</span></td>
+            <td>車両の使用が完了したことを記録</td>
+            <td>「使用中」の自分の予約</td>
+          </tr>
+          <tr>
+            <td><span style="background:#f59e0b; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x270F; 編集</span></td>
+            <td>予約内容を変更</td>
+            <td>「予約中」の自分の予約</td>
+          </tr>
+          <tr>
+            <td><span style="background:#ef4444; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x2716; キャンセル</span></td>
+            <td>予約を取り消し</td>
+            <td>「予約中」の自分の予約</td>
+          </tr>
+        </table>
+
+        <div class="tip">管理者は全ユーザーの予約に対して編集・キャンセル・返却完了の操作が可能です。</div>
+
+        <h3 id="sec4-3" style="margin-top:20px;">4.3 返却完了処理</h3>
+        <p>車両の使用が終わったら、予約の「返却完了」処理を行ってください。</p>
+
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span class="step-text">カレンダー上の自分の予約（使用中）をクリックします。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span class="step-text">予約詳細画面で「&#x2714; 返却完了」ボタンをクリックします。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span class="step-text">確認メッセージが表示されるので「OK」をクリックします。</span>
+          </div>
+        </div>
+
+        <div class="note">返却完了処理を行わないと、車両が「使用中」のまま表示され続けます。使用後は必ず返却処理を行ってください。</div>
+      </div>
     </div>
-
-    <h4>操作ボタンの説明</h4>
-    <table class="info-table">
-      <tr>
-        <th>ボタン</th>
-        <th>説明</th>
-        <th>表示条件</th>
-      </tr>
-      <tr>
-        <td><span style="background:#22c55e; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x2714; 返却完了</span></td>
-        <td>車両の使用が完了したことを記録します</td>
-        <td>ステータスが「使用中」の自分の予約</td>
-      </tr>
-      <tr>
-        <td><span style="background:#f59e0b; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x270F; 編集</span></td>
-        <td>予約内容を変更します</td>
-        <td>ステータスが「予約中」の自分の予約</td>
-      </tr>
-      <tr>
-        <td><span style="background:#ef4444; color:#fff; padding:3px 10px; border-radius:6px; font-size:12px;">&#x2716; キャンセル</span></td>
-        <td>予約を取り消します</td>
-        <td>ステータスが「予約中」の自分の予約</td>
-      </tr>
-    </table>
-
-    <div class="tip">管理者は全ユーザーの予約に対して編集・キャンセル・返却完了の操作が可能です。</div>
-
-    <h3 id="sec4-3">4.3 返却完了処理</h3>
-    <p>車両の使用が終わったら、予約の「返却完了」処理を行ってください。</p>
-
-    <div class="steps">
-      <div class="step">
-        <span class="step-num">1</span>
-        <span class="step-text">カレンダー上の自分の予約（使用中のもの）をクリックします。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <span class="step-text">予約詳細画面が表示されます。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <span class="step-text">「&#x2714; 返却完了」ボタンをクリックします。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">4</span>
-        <span class="step-text">確認メッセージが表示されるので「OK」をクリックします。</span>
-      </div>
-    </div>
-
-    <div class="note">返却完了処理を行わないと、車両が「使用中」のまま表示され続けます。使用後は必ず返却処理を行ってください。</div>
 
     <h4>予約ステータスの遷移</h4>
     <div style="display:flex; align-items:center; gap:12px; margin:16px 0; flex-wrap:wrap;">
@@ -1798,12 +1902,7 @@
             </div>
           </div>
 
-          <div class="mock-main" style="position:relative;">
-            <div class="annotation" style="top: 50px; left: 20px; z-index:20;">1</div>
-            <div class="annotation" style="top: 88px; right: 30px; z-index:20;">2</div>
-            <div class="annotation" style="top: 130px; left: 20px; z-index:20;">3</div>
-            <div class="annotation" style="top: 175px; right: 30px; z-index:20;">4</div>
-
+          <div class="mock-main">
             <div class="mock-page-header">
               <h3>&#x2699; 管理ページ</h3>
             </div>
@@ -1871,205 +1970,153 @@
       </div>
     </div>
 
-    <ul class="annotation-list">
-      <li><span class="num">1</span><strong>タブ切替</strong> - 「車両管理」と「ユーザー管理」を切り替え</li>
-      <li><span class="num">2</span><strong>新規車両登録ボタン</strong> - 新しい車両を追加</li>
-      <li><span class="num">3</span><strong>車両一覧テーブル</strong> - 登録済みの全車両の情報を一覧表示</li>
-      <li><span class="num">4</span><strong>操作ボタン</strong> - &#x270F;（編集）と &#x1F5D1;（無効化）</li>
-    </ul>
-
     <h4>新規車両登録</h4>
 
-    <!-- 車両登録モーダルモック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        新規車両登録画面
-      </div>
-      <div class="mockup-body">
-        <div class="mock-modal-overlay">
-          <div class="mock-modal">
-            <div class="mock-modal-header">
-              <h4>&#x2795; 新規車両登録</h4>
-              <span class="mock-modal-close">&#x2715;</span>
-            </div>
-            <div class="mock-modal-body">
-              <div class="mock-form-group">
-                <span class="mock-label-sm">車両名（管理番号） <span class="req">*</span></span>
-                <div class="mock-input-sm">例: GR-004</div>
+    <div class="landscape-row">
+      <!-- 車両登録モーダルモック -->
+      <div class="mockup-container">
+        <div class="mockup-label">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          新規車両登録画面
+        </div>
+        <div class="mockup-body">
+          <div class="mock-modal-overlay">
+            <div class="mock-modal">
+              <div class="mock-modal-header">
+                <h4>&#x2795; 新規車両登録</h4>
+                <span class="mock-modal-close">&#x2715;</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">車種 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: トヨタ アルファード</div>
+              <div class="mock-modal-body">
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">車両名（管理番号） <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: GR-004</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">車種 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: トヨタ アルファード</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">積載可能人数 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: 7</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">現在地</span>
+                  <div class="mock-input-sm" style="color:#334155;">本社駐車場</div>
+                </div>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">積載可能人数 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: 7</div>
+              <div class="mock-modal-footer">
+                <span class="mock-btn-cancel">キャンセル</span>
+                <span class="mock-btn-save">&#x2714; 保存</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">現在地</span>
-                <div class="mock-input-sm" style="color:#334155;">本社駐車場</div>
-              </div>
-            </div>
-            <div class="mock-modal-footer">
-              <span class="mock-btn-cancel">キャンセル</span>
-              <span class="mock-btn-save">&#x2714; 保存</span>
             </div>
           </div>
         </div>
       </div>
+
+      <div class="landscape-text">
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span class="step-text">「+ 新規車両登録」ボタンをクリックします。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span class="step-text">車両名（管理番号）、車種、積載可能人数を入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span class="step-text">現在地を入力します（デフォルトは「本社駐車場」）。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">4</span>
+            <span class="step-text">「保存」ボタンをクリックして登録を完了します。</span>
+          </div>
+        </div>
+
+        <h4>車両の編集</h4>
+        <p>車両一覧の&#x270F;（編集）ボタンをクリックすると編集画面が開きます。車両名、車種、積載人数、現在地、有効/無効ステータスを変更できます。</p>
+
+        <h4>車両の無効化</h4>
+        <p>車両一覧の&#x1F5D1;（削除）ボタンをクリックすると車両が無効化されます。</p>
+        <div class="tip">車両の「無効化」は完全な削除ではなく、予約対象から外す処理です。編集画面から再び「有効」に戻すことができます。</div>
+      </div>
     </div>
-
-    <div class="steps">
-      <div class="step">
-        <span class="step-num">1</span>
-        <span class="step-text">「+ 新規車両登録」ボタンをクリックします。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <span class="step-text">車両名（管理番号）、車種、積載可能人数を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <span class="step-text">現在地を入力します（デフォルトは「本社駐車場」）。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">4</span>
-        <span class="step-text">「保存」ボタンをクリックして登録を完了します。</span>
-      </div>
-    </div>
-
-    <h4>車両の編集</h4>
-    <p>車両一覧の&#x270F;（編集）ボタンをクリックすると、車両情報の編集画面が開きます。車両名、車種、積載人数、現在地、有効/無効ステータスを変更できます。</p>
-
-    <h4>車両の無効化</h4>
-    <p>車両一覧の&#x1F5D1;（削除）ボタンをクリックすると、確認ダイアログが表示されます。「OK」をクリックすると、車両が無効化されます。</p>
-    <div class="tip">車両の「無効化」は完全な削除ではなく、予約対象から外す処理です。編集画面から再び「有効」に戻すことができます。</div>
 
     <h3 id="sec5-2">5.2 ユーザー管理</h3>
     <p>システムを利用するユーザーの登録・一覧確認を行います。</p>
 
-    <!-- ユーザー管理モック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        管理ページ - ユーザー管理
-      </div>
-      <div class="mockup-body" style="padding:20px; background: var(--bg-main);">
-        <div class="mock-tabs">
-          <span class="mock-tab">&#x1F698; 車両管理</span>
-          <span class="mock-tab active">&#x1F465; ユーザー管理</span>
+    <div class="landscape-row">
+      <!-- ユーザー管理モック -->
+      <div class="mockup-container">
+        <div class="mockup-label">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          ユーザー一覧 / 新規登録画面
         </div>
-
-        <div class="mock-card">
-          <div class="mock-card-header">
-            <span>&#x1F465; 登録ユーザー一覧</span>
-            <span class="mock-btn-sm">+ 新規ユーザー登録</span>
-          </div>
-          <table class="mock-table">
-            <thead>
-              <tr>
-                <th>社員番号</th>
-                <th>名前</th>
-                <th>権限</th>
-                <th>登録日</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>admin</strong></td>
-                <td>管理者</td>
-                <td><span style="background:var(--primary); color:#fff; padding:2px 8px; border-radius:4px; font-size:11px;">管理者</span></td>
-                <td>2026-01-01</td>
-              </tr>
-              <tr>
-                <td><strong>1001</strong></td>
-                <td>田中 太郎</td>
-                <td><span style="background:#6b7280; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px;">一般</span></td>
-                <td>2026-01-01</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <h4>新規ユーザー登録</h4>
-
-    <!-- ユーザー登録モーダルモック -->
-    <div class="mockup-container">
-      <div class="mockup-label">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-        新規ユーザー登録画面
-      </div>
-      <div class="mockup-body">
-        <div class="mock-modal-overlay">
-          <div class="mock-modal">
-            <div class="mock-modal-header">
-              <h4>&#x1F464;+ 新規ユーザー登録</h4>
-              <span class="mock-modal-close">&#x2715;</span>
-            </div>
-            <div class="mock-modal-body">
-              <div class="mock-form-group">
-                <span class="mock-label-sm">社員番号 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: 1002</div>
+        <div class="mockup-body">
+          <div class="mock-modal-overlay">
+            <div class="mock-modal">
+              <div class="mock-modal-header">
+                <h4>&#x1F464;+ 新規ユーザー登録</h4>
+                <span class="mock-modal-close">&#x2715;</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">名前 <span class="req">*</span></span>
-                <div class="mock-input-sm">例: 鈴木 花子</div>
+              <div class="mock-modal-body">
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">社員番号 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: 1002</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">名前 <span class="req">*</span></span>
+                  <div class="mock-input-sm">例: 鈴木 花子</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">パスワード <span class="req">*</span></span>
+                  <div class="mock-input-sm">パスワードを入力</div>
+                </div>
+                <div class="mock-form-group">
+                  <span class="mock-label-sm">権限</span>
+                  <div class="mock-select" style="color:#334155;">一般ユーザー</div>
+                </div>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">パスワード <span class="req">*</span></span>
-                <div class="mock-input-sm">パスワードを入力</div>
+              <div class="mock-modal-footer">
+                <span class="mock-btn-cancel">キャンセル</span>
+                <span class="mock-btn-save">&#x2714; 登録</span>
               </div>
-              <div class="mock-form-group">
-                <span class="mock-label-sm">権限</span>
-                <div class="mock-select" style="color:#334155;">一般ユーザー</div>
-              </div>
-            </div>
-            <div class="mock-modal-footer">
-              <span class="mock-btn-cancel">キャンセル</span>
-              <span class="mock-btn-save">&#x2714; 登録</span>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="steps">
-      <div class="step">
-        <span class="step-num">1</span>
-        <span class="step-text">「+ 新規ユーザー登録」ボタンをクリックします。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <span class="step-text">社員番号（ログインID として使用）を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <span class="step-text">ユーザー名を入力します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">4</span>
-        <span class="step-text">初期パスワードを設定します。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">5</span>
-        <span class="step-text">必要に応じて権限を「管理者」に変更します（デフォルトは「一般ユーザー」）。</span>
-      </div>
-      <div class="step">
-        <span class="step-num">6</span>
-        <span class="step-text">「登録」ボタンをクリックして登録を完了します。</span>
+      <div class="landscape-text">
+        <div class="steps">
+          <div class="step">
+            <span class="step-num">1</span>
+            <span class="step-text">「+ 新規ユーザー登録」ボタンをクリックします。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">2</span>
+            <span class="step-text">社員番号（ログインIDとして使用）を入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">3</span>
+            <span class="step-text">ユーザー名と初期パスワードを入力します。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">4</span>
+            <span class="step-text">必要に応じて権限を「管理者」に変更します（デフォルトは「一般ユーザー」）。</span>
+          </div>
+          <div class="step">
+            <span class="step-num">5</span>
+            <span class="step-text">「登録」ボタンをクリックして登録を完了します。</span>
+          </div>
+        </div>
+
+        <div class="note">登録した社員番号とパスワードは対象のユーザーに直接お伝えください。</div>
       </div>
     </div>
-
-    <div class="note">登録した社員番号とパスワードは対象のユーザーに直接お伝えください。</div>
   </div>
 
   <!-- ========== 6. 注意事項・FAQ ========== -->
@@ -2085,30 +2132,34 @@
     </ul>
 
     <h3>よくある質問（FAQ）</h3>
+    <div class="two-col">
+      <div>
+        <h4>Q: パスワードを忘れた場合は？</h4>
+        <p>A: 管理者に連絡して、パスワードの再設定を依頼してください。</p>
 
-    <h4>Q: パスワードを忘れた場合は？</h4>
-    <p>A: 管理者に連絡して、パスワードの再設定を依頼してください。</p>
+        <h4>Q: 他の人の予約を変更できますか？</h4>
+        <p>A: 一般ユーザーは自分の予約のみ変更できます。管理者は全ユーザーの予約を変更・キャンセルできます。</p>
 
-    <h4>Q: 他の人の予約を変更できますか？</h4>
-    <p>A: 一般ユーザーは自分の予約のみ変更できます。管理者は全ユーザーの予約を変更・キャンセルできます。</p>
+        <h4>Q: 車両を完全に削除できますか？</h4>
+        <p>A: システム上の「削除」は無効化（非表示化）です。過去の予約履歴を保持するため、完全な削除は行いません。再度有効化できます。</p>
+      </div>
+      <div>
+        <h4>Q: スマートフォンから利用できますか？</h4>
+        <p>A: はい。レスポンシブデザイン対応で、スマートフォンやタブレットでも利用可能です。画面左上のメニューボタンからサイドバーを開けます。</p>
 
-    <h4>Q: 車両を完全に削除できますか？</h4>
-    <p>A: システム上の「削除」は無効化（非表示化）です。過去の予約履歴を保持するため、完全な削除は行いません。必要に応じて再度有効化できます。</p>
+        <h4>Q: カレンダーの表示がおかしい場合は？</h4>
+        <p>A: ブラウザのキャッシュをクリアし、ページを再読み込み（Ctrl+F5）してみてください。</p>
 
-    <h4>Q: スマートフォンから利用できますか？</h4>
-    <p>A: はい。本システムはレスポンシブデザインに対応しており、スマートフォンやタブレットのブラウザからもご利用いただけます。画面左上のメニューボタンからサイドバーを開けます。</p>
-
-    <h4>Q: カレンダーの表示がおかしい場合は？</h4>
-    <p>A: ブラウザのキャッシュをクリアし、ページを再読み込み（Ctrl+F5）してみてください。</p>
-
-    <h4>Q: 予約が「使用中」に変わるタイミングは？</h4>
-    <p>A: 予約開始時刻の10分前に自動的に「使用中」ステータスに変わります。これは車両の準備時間を考慮したものです。</p>
+        <h4>Q: 予約が「使用中」に変わるタイミングは？</h4>
+        <p>A: 予約開始時刻の10分前に自動的に「使用中」ステータスに変わります。これは車両の準備時間を考慮したものです。</p>
+      </div>
+    </div>
   </div>
 
   <!-- フッター -->
   <div style="text-align:center; padding:40px 0; border-top:1px solid var(--border); color: var(--text-sub); font-size:13px;">
     <p>GR社用車管理システム 操作説明書</p>
-    <p>&copy; グローバルリゾート</p>
+    <p>&copy; (株)リベルブライト</p>
   </div>
 
 </div>
