@@ -46,14 +46,9 @@
       <div id="calendarView">
         <div class="page-header">
           <h1><i class="bi bi-calendar3"></i> 予約カレンダー</h1>
-          <div class="filter-bar">
-            <select class="form-select form-select-sm" id="carFilter">
-              <option value="">すべての車両</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
-              <i class="bi bi-plus-lg"></i> 新規予約
-            </button>
-          </div>
+          <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
+            <i class="bi bi-plus-lg"></i> 新規予約
+          </button>
         </div>
 
         <!-- 車両ステータスカード（簡易表示） -->
@@ -98,23 +93,27 @@
                 <option value="">選択してください</option>
               </select>
             </div>
-            <div class="row mb-3">
-              <div class="col-6">
-                <label class="form-label">開始日時 <span class="text-danger">*</span></label>
-                <input type="datetime-local" class="form-control" id="resStart" required>
+            <div class="mb-3">
+              <label class="form-label">開始 <span class="text-danger">*</span></label>
+              <div class="row g-2">
+                <div class="col-7"><input type="date" class="form-control" id="resStartDate" required></div>
+                <div class="col-5"><input type="time" class="form-control" id="resStartTime" required></div>
               </div>
-              <div class="col-6">
-                <label class="form-label">終了日時 <span class="text-danger">*</span></label>
-                <input type="datetime-local" class="form-control" id="resEnd" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">終了 <span class="text-danger">*</span></label>
+              <div class="row g-2">
+                <div class="col-7"><input type="date" class="form-control" id="resEndDate" required></div>
+                <div class="col-5"><input type="time" class="form-control" id="resEndTime" required></div>
               </div>
             </div>
             <div class="mb-3">
               <label class="form-label">出発場所 <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="resDeparture" placeholder="例: 本社駐車場" required>
+              <input type="text" class="form-control" id="resDeparture" placeholder="例: 弥山" required>
             </div>
             <div class="mb-3">
               <label class="form-label">返却場所 <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="resReturn" placeholder="例: 本社駐車場" required>
+              <input type="text" class="form-control" id="resReturn" placeholder="例: 弥山" required>
             </div>
             <div class="mb-3">
               <label class="form-label">備考</label>
