@@ -286,7 +286,6 @@ function showEventDetail(info) {
   let footerHtml = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>';
   if (props.status === 'active' && (props.user_id === currentUser.id || currentUser.role === 'admin')) {
     footerHtml = `
-      <button class="btn btn-success" onclick="completeReservation(${info.event.id}, ${props.car_id}, '${escapeHtml(props.return_location)}')"><i class="bi bi-check-circle"></i> 返却完了</button>
       <button class="btn btn-warning" onclick="editReservation(${info.event.id})"><i class="bi bi-pencil"></i> 編集</button>
       <button class="btn btn-danger" onclick="cancelReservation(${info.event.id})"><i class="bi bi-x-circle"></i> キャンセル</button>
       ${footerHtml}`;
@@ -374,15 +373,6 @@ async function saveReservation() {
 }
 
 // 返却完了
-async function completeReservation(id, carId, returnLocation) {
-  if (!confirm('この予約を返却完了にしますか？')) return;
-  try {
-    const res = await fetch(`/api/reservations/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed', car_id: carId, return_location: returnLocation }) });
-    if (res.ok) { bootstrap.Modal.getInstance(document.getElementById('detailModal'))?.hide(); calendar.refetchEvents(); loadCarStatusCards(); }
-    else { const d = await res.json(); alert(d.error); }
-  } catch (e) { alert('処理に失敗しました'); }
-}
-
 // 予約キャンセル
 async function cancelReservation(id) {
   if (!confirm('この予約をキャンセルしますか？')) return;

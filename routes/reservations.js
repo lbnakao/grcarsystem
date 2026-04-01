@@ -11,8 +11,22 @@ function nowJSTPlus10() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString().slice(0, 16);
 }
 
+// 終了時間を過ぎた予約を自動完了にし、車両の現在地を返却場所に更新
+async function autoCompleteExpired() {
+  const now = nowJST();
+  const expired = await query(
+    "SELECT id, car_id, return_location FROM reservations WHERE status = 'active' AND end_datetime <= ?",
+    [now]
+  );
+  for (const r of expired) {
+    await run("UPDATE reservations SET status = 'completed' WHERE id = ?", [r.id]);
+    await run("UPDATE cars SET current_location = ? WHERE id = ?", [r.return_location, r.car_id]);
+  }
+}
+
 // 予約一覧（カレンダー用）
 router.get('/', async (req, res) => {
+  await autoCompleteExpired();
   try {
     const { start, end, car_id } = req.query;
 
@@ -162,8 +176,9 @@ router.delete('/:id', async (req, res) => {
 });
 
 // 車両ステータス一括取得（現在の使用者＋次回予約）
-router.get('/status/all', async (req, res) => {
+router.get('/status/all', async (_req, res) => {
   try {
+    await autoCompleteExpired();
     const now = nowJST();
     const nowPlus10 = nowJSTPlus10();
 
