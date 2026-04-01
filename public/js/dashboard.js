@@ -169,7 +169,7 @@ function initCalendar() {
   const isMobile = window.innerWidth <= 768;
 
   calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+    initialView: 'dayGridMonth',
     locale: 'ja',
     headerToolbar: isMobile
       ? { left: 'prev,next', center: 'title', right: 'dayGridMonth,listWeek' }
@@ -191,11 +191,9 @@ function initCalendar() {
     selectable: true,
     selectMirror: true,
     nowIndicator: true,
-    eventTimeFormat: {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    },
+    eventTimeFormat: isMobile
+      ? { hour: 'numeric', hour12: false }
+      : { hour: '2-digit', minute: '2-digit', hour12: false },
     slotLabelFormat: {
       hour: '2-digit',
       minute: '2-digit',
@@ -209,6 +207,18 @@ function initCalendar() {
     eventDidMount: (info) => {
       const props = info.event.extendedProps;
       info.el.title = `${props.car_model}\n${props.departure_location} → ${props.return_location}\n予約者: ${props.user_name}`;
+
+      // スマホ月表示：時間を「9時」形式に書き換え
+      if (isMobile && info.view.type === 'dayGridMonth') {
+        const timeEl = info.el.querySelector('.fc-event-time');
+        if (timeEl) {
+          const raw = timeEl.textContent.trim();
+          const hour = parseInt(raw, 10);
+          if (!isNaN(hour)) {
+            timeEl.textContent = hour + '時';
+          }
+        }
+      }
     }
   });
 
