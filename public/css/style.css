@@ -244,6 +244,28 @@ body {
   margin-bottom: 2px;
 }
 
+/* 単日イベントもブロック表示（ドットではなく背景色付き） */
+.fc .fc-daygrid-dot-event {
+  background: var(--fc-event-bg-color, #3b82f6);
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.fc .fc-daygrid-dot-event .fc-daygrid-event-dot {
+  display: none;
+}
+
+.fc .fc-daygrid-dot-event .fc-event-title,
+.fc .fc-daygrid-dot-event .fc-event-time {
+  color: #fff;
+}
+
+.fc .fc-daygrid-dot-event:hover {
+  background: var(--fc-event-bg-color, #3b82f6);
+  opacity: 0.85;
+}
+
 .fc .event-in-use {
   animation: pulse-in-use 2s ease-in-out infinite;
   font-weight: 700;
