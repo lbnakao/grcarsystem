@@ -1139,6 +1139,100 @@
       }
     }
 
+    /* ===== スマホ対応 ===== */
+    @media (max-width: 768px) {
+      /* コンテナ */
+      .container { padding: 20px 16px; }
+
+      /* 表紙 */
+      .cover { padding: 40px 16px; }
+      .cover h1 { font-size: 24px; }
+      .cover h2 { font-size: 18px; margin-bottom: 20px; }
+      .cover-meta { margin-top: 30px; }
+
+      /* 目次 */
+      .toc { padding: 16px 20px; }
+
+      /* セクション */
+      .section h2 { font-size: 20px; }
+      .section h3 { font-size: 16px; margin: 16px 0 8px; }
+      .section h4 { font-size: 14px; }
+      .section p, .section li { font-size: 13px; }
+
+      /* 横並び → 縦並び */
+      .landscape-row {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .two-col {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      /* モックアップ */
+      .mockup-container { margin: 8px 0 12px; }
+
+      /* ダッシュボードモック：サイドバー非表示 */
+      .mock-sidebar { display: none; }
+      .mock-dashboard { min-height: auto; }
+      .mock-main { padding: 10px; }
+
+      .mock-car-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      /* カレンダーモック */
+      .mock-cal-header { flex-direction: column; gap: 6px; }
+      .mock-cal-day { min-height: 40px; }
+      .mock-cal-event { font-size: 7px; }
+      .mock-cal-title { font-size: 14px; }
+
+      /* モーダルモック */
+      .mock-modal-header { padding: 8px 12px; }
+      .mock-modal-header h4 { font-size: 13px; }
+      .mock-modal-body { padding: 10px 12px; }
+      .mock-modal-footer { padding: 8px 12px; }
+      .mock-form-group { margin-bottom: 8px; }
+      .mock-label-sm { font-size: 12px; }
+      .mock-input-sm, .mock-select { padding: 6px 10px; font-size: 12px; }
+
+      /* ログインモック */
+      .mock-login { padding: 16px 12px; }
+      .mock-login-card { width: 100%; padding: 16px; }
+      .mock-login-header .icon { font-size: 28px; }
+      .mock-login-header h3 { font-size: 14px; }
+      .mock-input { padding: 8px 10px; font-size: 13px; }
+      .mock-btn { padding: 10px; font-size: 13px; }
+
+      /* 詳細モーダル */
+      .mock-detail-icon { width: 26px; height: 26px; font-size: 12px; }
+      .mock-detail-value { font-size: 12px; }
+      .mock-detail-label { font-size: 10px; }
+
+      /* テーブル */
+      .info-table { font-size: 12px; }
+      .info-table th, .info-table td { padding: 6px 8px; }
+      .mock-table { font-size: 11px; }
+      .mock-table th, .mock-table td { padding: 6px 8px; }
+
+      /* 手順・注意 */
+      .steps { padding: 10px 12px; }
+      .step-num { width: 22px; height: 22px; font-size: 11px; }
+      .step-text { font-size: 13px; }
+      .note, .tip { font-size: 12px; padding: 8px 10px; }
+
+      /* PDFボタン */
+      .pdf-btn { padding: 8px 14px; font-size: 12px; }
+      .pdf-btn svg { width: 16px; height: 16px; }
+
+      /* 管理ページモック */
+      .mock-page-header h3 { font-size: 14px; }
+      .mock-btn-sm { font-size: 10px; padding: 4px 8px; }
+      .mock-tabs .mock-tab { padding: 6px 12px; font-size: 11px; }
+    }
+
     /* ===== ページ区切り ===== */
     .page-break {
       border-top: 1px solid var(--border);

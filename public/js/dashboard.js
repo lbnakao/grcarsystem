@@ -447,8 +447,8 @@ async function loadCarStatusCards() {
     }
 
     statusHtml += `
-      <div class="car-status-card" style="border-left-color: ${color}">
-        <div class="car-card-compact" onclick="this.parentElement.classList.toggle('expanded')">
+      <div class="car-status-card" style="border-left-color: ${color}" data-car-id="${car.id}">
+        <div class="car-card-compact" onclick="toggleCarCard(this)">
           <span class="car-compact-name">${escapeHtml(car.model)}</span>
           <span class="car-compact-right">${warningIcon} ${statusBadge} <i class="bi bi-chevron-down car-chevron"></i></span>
         </div>
@@ -463,11 +463,18 @@ async function loadCarStatusCards() {
   document.getElementById('carStatusGrid').innerHTML = statusHtml;
 }
 
+// カード個別開閉（カレンダー画面用：タップしたカードだけ開閉）
+function toggleCarCard(el) {
+  el.parentElement.classList.toggle('expanded');
+}
+
 // ビュー切り替え
 function showCarStatus() {
   document.getElementById('calendarView').classList.add('d-none');
   document.getElementById('carStatusView').classList.remove('d-none');
   document.getElementById('carStatusDetail').innerHTML = document.getElementById('carStatusGrid').innerHTML;
+  // 車両ステータス画面では全カード展開
+  document.querySelectorAll('#carStatusDetail .car-status-card').forEach(c => c.classList.add('expanded'));
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav a')[1].classList.add('active');
 }
