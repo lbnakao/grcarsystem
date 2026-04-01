@@ -31,6 +31,9 @@
             <div class="user-role" id="userRole"></div>
           </div>
         </div>
+        <button class="btn btn-outline-light btn-sm w-100 mb-2" onclick="openPasswordModal()">
+          <i class="bi bi-key"></i> パスワード変更
+        </button>
         <button class="btn btn-outline-light btn-sm w-100" onclick="logout()">
           <i class="bi bi-box-arrow-left"></i> ログアウト
         </button>
@@ -142,6 +145,40 @@
         </div>
         <div class="modal-body" id="detailBody"></div>
         <div class="modal-footer" id="detailFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- パスワード変更モーダル -->
+  <div class="modal fade" id="passwordModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-key"></i> パスワード変更</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="passwordForm">
+            <div class="mb-3">
+              <label class="form-label">現在のパスワード <span class="text-danger">*</span></label>
+              <input type="password" class="form-control" id="currentPassword" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">新しいパスワード <span class="text-danger">*</span></label>
+              <input type="password" class="form-control" id="newPassword" placeholder="4文字以上" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">新しいパスワード（確認） <span class="text-danger">*</span></label>
+              <input type="password" class="form-control" id="confirmPassword" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" onclick="changePassword()">
+            <i class="bi bi-check-lg"></i> 変更
+          </button>
+        </div>
       </div>
     </div>
   </div>

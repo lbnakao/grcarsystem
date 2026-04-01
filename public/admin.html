@@ -109,6 +109,7 @@
                       <th>名前</th>
                       <th>権限</th>
                       <th>登録日</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody id="usersTableBody">
@@ -206,6 +207,50 @@
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
           <button type="button" class="btn btn-primary" onclick="saveUser()">
             <i class="bi bi-check-lg"></i> 登録
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ユーザー編集モーダル -->
+  <div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-pencil"></i> ユーザー編集
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="editUserForm">
+            <input type="hidden" id="editUserId">
+            <div class="mb-3">
+              <label class="form-label">社員番号 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="editEmployeeId" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">名前 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="editUserName" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">新しいパスワード <small class="text-muted">（変更する場合のみ入力）</small></label>
+              <input type="password" class="form-control" id="editPassword" placeholder="変更しない場合は空欄">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">権限</label>
+              <select class="form-select" id="editUserRole">
+                <option value="user">一般ユーザー</option>
+                <option value="admin">管理者</option>
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" onclick="updateUser()">
+            <i class="bi bi-check-lg"></i> 保存
           </button>
         </div>
       </div>
@@ -377,6 +422,14 @@
                 : '<span class="badge bg-secondary">一般</span>'}
             </td>
             <td>${user.created_at || '-'}</td>
+            <td>
+              <button class="btn btn-outline-primary btn-sm" onclick='openEditUser(${JSON.stringify(user)})'>
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-sm" onclick="deleteUser(${user.id}, '${escapeHtml(user.name)}')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
           </tr>
         `).join('');
       } catch (e) {
@@ -423,6 +476,63 @@
         }
       } catch (e) {
         alert('登録に失敗しました');
+      }
+    }
+
+    function openEditUser(user) {
+      document.getElementById('editUserId').value = user.id;
+      document.getElementById('editEmployeeId').value = user.employee_id;
+      document.getElementById('editUserName').value = user.name;
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editUserRole').value = user.role;
+      new bootstrap.Modal(document.getElementById('editUserModal')).show();
+    }
+
+    async function updateUser() {
+      const id = document.getElementById('editUserId').value;
+      const data = {
+        employee_id: document.getElementById('editEmployeeId').value,
+        name: document.getElementById('editUserName').value,
+        role: document.getElementById('editUserRole').value
+      };
+      const password = document.getElementById('editPassword').value;
+      if (password) data.password = password;
+
+      if (!data.employee_id || !data.name) {
+        alert('社員番号と名前は必須です');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/auth/users/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (res.ok) {
+          bootstrap.Modal.getInstance(document.getElementById('editUserModal'))?.hide();
+          loadUsers();
+        } else {
+          alert(result.error);
+        }
+      } catch (e) {
+        alert('更新に失敗しました');
+      }
+    }
+
+    async function deleteUser(id, name) {
+      if (!confirm(`「${name}」を削除しますか？\nこのユーザーの予約データも参照できなくなります。`)) return;
+      try {
+        const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (res.ok) {
+          loadUsers();
+        } else {
+          alert(result.error);
+        }
+      } catch (e) {
+        alert('削除に失敗しました');
       }
     }
 

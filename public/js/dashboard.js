@@ -503,6 +503,50 @@ function closeSidebarOnOutsideClick(e) {
   }
 }
 
+// パスワード変更
+function openPasswordModal() {
+  document.getElementById('currentPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+  new bootstrap.Modal(document.getElementById('passwordModal')).show();
+}
+
+async function changePassword() {
+  const currentPassword = document.getElementById('currentPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    alert('全ての項目を入力してください');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    alert('新しいパスワードが一致しません');
+    return;
+  }
+  if (newPassword.length < 4) {
+    alert('パスワードは4文字以上にしてください');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+    });
+    const result = await res.json();
+    if (res.ok) {
+      alert('パスワードを変更しました');
+      bootstrap.Modal.getInstance(document.getElementById('passwordModal'))?.hide();
+    } else {
+      alert(result.error);
+    }
+  } catch (e) {
+    alert('パスワード変更に失敗しました');
+  }
+}
+
 async function logout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login';
