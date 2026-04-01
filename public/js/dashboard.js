@@ -216,6 +216,7 @@ async function fetchEvents(fetchInfo, successCallback, failureCallback) {
         title: title,
         start: r.start_datetime,
         end: r.end_datetime,
+        display: 'block',
         backgroundColor: isInUse ? '#dc2626' : color,
         borderColor: isInUse ? '#dc2626' : color,
         classNames: isInUse ? ['event-in-use'] : [],
