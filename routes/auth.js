@@ -93,10 +93,104 @@ router.get('/users', async (req, res) => {
       return res.status(403).json({ error: '管理者権限が必要です' });
     }
 
-    const rows = await query("SELECT id, employee_id, name, role, created_at FROM users ORDER BY id");
+    const rows = await query("SELECT id, employee_id, name, role, created_at FROM users ORDER BY employee_id");
     res.json(rows);
   } catch (e) {
     console.error('ユーザー一覧エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+// ユーザー編集（管理者のみ）
+router.put('/users/:id', async (req, res) => {
+  try {
+    if (!req.session || !req.session.user || req.session.user.role !== 'admin') {
+      return res.status(403).json({ error: '管理者権限が必要です' });
+    }
+
+    const { id } = req.params;
+    const { employee_id, name, role, password } = req.body;
+
+    if (!employee_id || !name) {
+      return res.status(400).json({ error: '社員番号と名前は必須です' });
+    }
+
+    // 社員番号の重複チェック（自分以外）
+    const dup = await query("SELECT id FROM users WHERE employee_id = ? AND id != ?", [employee_id, id]);
+    if (dup.length > 0) {
+      return res.status(400).json({ error: 'この社員番号は既に使用されています' });
+    }
+
+    if (password) {
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      await run("UPDATE users SET employee_id = ?, name = ?, role = ?, password = ? WHERE id = ?",
+        [employee_id, name, role || 'user', hashedPassword, id]);
+    } else {
+      await run("UPDATE users SET employee_id = ?, name = ?, role = ? WHERE id = ?",
+        [employee_id, name, role || 'user', id]);
+    }
+
+    res.json({ message: 'ユーザー情報を更新しました' });
+  } catch (e) {
+    console.error('ユーザー編集エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+// ユーザー削除（管理者のみ）
+router.delete('/users/:id', async (req, res) => {
+  try {
+    if (!req.session || !req.session.user || req.session.user.role !== 'admin') {
+      return res.status(403).json({ error: '管理者権限が必要です' });
+    }
+
+    const { id } = req.params;
+
+    // 自分自身は削除不可
+    if (parseInt(id) === req.session.user.id) {
+      return res.status(400).json({ error: '自分自身は削除できません' });
+    }
+
+    await run("DELETE FROM users WHERE id = ?", [id]);
+    res.json({ message: 'ユーザーを削除しました' });
+  } catch (e) {
+    console.error('ユーザー削除エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+// パスワード変更（ログインユーザー自身）
+router.put('/password', async (req, res) => {
+  try {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ error: 'ログインが必要です' });
+    }
+
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: '現在のパスワードと新しいパスワードを入力してください' });
+    }
+
+    if (new_password.length < 4) {
+      return res.status(400).json({ error: 'パスワードは4文字以上にしてください' });
+    }
+
+    const rows = await query("SELECT password FROM users WHERE id = ?", [req.session.user.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'ユーザーが見つかりません' });
+    }
+
+    if (!bcrypt.compareSync(current_password, rows[0].password)) {
+      return res.status(401).json({ error: '現在のパスワードが正しくありません' });
+    }
+
+    const hashedPassword = bcrypt.hashSync(new_password, 10);
+    await run("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, req.session.user.id]);
+
+    res.json({ message: 'パスワードを変更しました' });
+  } catch (e) {
+    console.error('パスワード変更エラー:', e);
     res.status(500).json({ error: 'サーバーエラー' });
   }
 });
