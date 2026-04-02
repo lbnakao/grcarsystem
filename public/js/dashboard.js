@@ -168,10 +168,11 @@ function initCalendar() {
     slotMaxTime: '22:00:00',
     height: 'auto',
     dayMaxEvents: isMobile ? 3 : false,
-    navLinks: true,
+    navLinks: false,
     editable: false,
     selectable: true,
     selectMirror: true,
+    dateClick: (info) => { openNewReservation(info.dateStr); },
     nowIndicator: true,
     displayEventEnd: false,
     eventTimeFormat: isMobile
