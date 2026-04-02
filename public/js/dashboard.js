@@ -3,6 +3,7 @@ let calendar = null;
 let cars = [];
 let reservations = [];
 let hasConflict = false;
+let hasWarnings = false;
 
 const CAR_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -130,6 +131,9 @@ async function validateReservation() {
       }
     } catch (e) { /* ignore */ }
   }
+
+  // 警告フラグ更新（重複以外の警告があるか）
+  hasWarnings = warnings.some(w => w.type === 'warning');
 
   const container = document.getElementById('resWarnings');
   container.innerHTML = warnings.map(w =>
@@ -346,6 +350,16 @@ function editReservation(id) {
 // 予約保存
 async function saveReservation() {
   if (hasConflict) return;
+
+  // 警告がある場合は確認ポップアップ
+  if (hasWarnings) {
+    const warningTexts = Array.from(document.querySelectorAll('#resWarnings .alert-warning span'))
+      .map(el => el.textContent).join('\n');
+    if (!confirm(`以下の注意事項があります：\n\n${warningTexts}\n\n予約を確定してよろしいですか？`)) {
+      return;
+    }
+  }
+
   const id = document.getElementById('reservationId').value;
   const data = {
     car_id: document.getElementById('resCarId').value,
