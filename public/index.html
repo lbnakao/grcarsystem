@@ -50,9 +50,14 @@
       <div id="calendarView">
         <div class="page-header">
           <h1><i class="bi bi-calendar3"></i> 予約カレンダー</h1>
-          <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
-            <i class="bi bi-plus-lg"></i> 新規予約
-          </button>
+          <div class="d-flex gap-2">
+            <a href="/manual.html" target="_blank" class="btn btn-danger btn-sm">
+              <i class="bi bi-book"></i> 操作説明書
+            </a>
+            <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
+              <i class="bi bi-plus-lg"></i> 新規予約
+            </button>
+          </div>
         </div>
 
         <!-- 車両ステータスカード（簡易表示） -->
