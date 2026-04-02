@@ -80,6 +80,10 @@ function setupReservationValidation() {
   fields.forEach(id => {
     document.getElementById(id).addEventListener('change', validateReservation);
   });
+  // 開始日変更時に終了日を同日に連動
+  document.getElementById('resStartDate').addEventListener('change', () => {
+    document.getElementById('resEndDate').value = document.getElementById('resStartDate').value;
+  });
 }
 
 async function validateReservation() {
