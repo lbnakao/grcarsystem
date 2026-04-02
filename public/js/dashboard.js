@@ -352,16 +352,34 @@ function editReservation(id) {
 }
 
 // 予約保存
-async function saveReservation() {
+async function saveReservation(forceConfirmed) {
   if (hasConflict) return;
 
-  // 警告がある場合は確認ポップアップ
-  if (hasWarnings) {
-    const warningTexts = Array.from(document.querySelectorAll('#resWarnings .alert-warning span'))
-      .map(el => el.textContent).join('\n');
-    if (!confirm(`以下の注意事項があります：\n\n${warningTexts}\n\n予約を確定してよろしいですか？`)) {
-      return;
-    }
+  // 警告がある場合はカスタム確認モーダルを表示
+  if (hasWarnings && !forceConfirmed) {
+    const warningHtml = Array.from(document.querySelectorAll('#resWarnings .alert-warning'))
+      .map(el => el.outerHTML).join('');
+    document.getElementById('warningConfirmBody').innerHTML =
+      `<p style="font-weight:600;margin-bottom:12px;">以下の注意事項があります：</p>
+       ${warningHtml}
+       <p class="mt-3 mb-0" style="font-size:14px;">この内容で予約を確定してよろしいですか？</p>`;
+
+    // 予約モーダルを閉じて確認モーダルを表示
+    bootstrap.Modal.getInstance(document.getElementById('reservationModal'))?.hide();
+    setTimeout(() => {
+      const confirmModal = new bootstrap.Modal(document.getElementById('warningConfirmModal'));
+      confirmModal.show();
+
+      // 確定ボタンのイベント（1回だけ発火）
+      const btn = document.getElementById('warningConfirmBtn');
+      const handler = () => {
+        btn.removeEventListener('click', handler);
+        confirmModal.hide();
+        setTimeout(() => saveReservation(true), 300);
+      };
+      btn.addEventListener('click', handler);
+    }, 300);
+    return;
   }
 
   const id = document.getElementById('reservationId').value;

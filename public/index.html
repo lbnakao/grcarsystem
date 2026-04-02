@@ -135,6 +135,25 @@
     </div>
   </div>
 
+  <!-- 警告確認モーダル -->
+  <div class="modal fade" id="warningConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-danger text-white" style="border-radius:12px 12px 0 0;">
+          <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill"></i> 予約内容の確認</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="warningConfirmBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">戻る</button>
+          <button type="button" class="btn btn-danger" id="warningConfirmBtn">
+            <i class="bi bi-check-lg"></i> このまま予約を確定
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 予約詳細モーダル -->
   <div class="modal fade" id="detailModal" tabindex="-1">
     <div class="modal-dialog">
