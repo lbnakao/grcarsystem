@@ -4,6 +4,8 @@ let cars = [];
 let reservations = [];
 let hasConflict = false;
 let hasWarnings = false;
+let groups = [];
+let currentGroupCode = 'gr';
 
 const CAR_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -15,11 +17,33 @@ const isMobile = window.innerWidth <= 768;
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
+  await loadGroups();
+  applyGroupTheme();
   await loadCars();
   initCalendar();
   loadCarStatusCards();
   setupReservationValidation();
+  setupModalCleanup();
+  checkPendingCompletions();
 });
+
+// モーダルが閉じた後の残骸クリーンアップを全モーダルに仕掛ける
+// backdropクリック・ESCキー・閉じるボタン・プログラム閉じのどれで閉じても反応する
+function setupModalCleanup() {
+  document.querySelectorAll('.modal').forEach(m => {
+    m.addEventListener('hidden.bs.modal', () => {
+      setTimeout(() => {
+        const stillOpen = document.querySelectorAll('.modal.show').length > 0;
+        if (!stillOpen) {
+          document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+          document.body.classList.remove('modal-open');
+          document.body.style.overflow = '';
+          document.body.style.paddingRight = '';
+        }
+      }, 50);
+    });
+  });
+}
 
 // 認証チェック
 async function checkAuth() {
@@ -38,13 +62,105 @@ async function checkAuth() {
     if (currentUser.role === 'admin') {
       document.getElementById('adminLink').classList.remove('d-none');
     }
+
+    // 横断可能 or 管理者は直前の選択を復元、一般は自グループ固定
+    const canCrossGroup = currentUser.role === 'admin' || currentUser.cross_group;
+    if (canCrossGroup) {
+      currentGroupCode = localStorage.getItem('selectedGroup') || currentUser.group_code || 'gr';
+    } else {
+      currentGroupCode = currentUser.group_code || 'gr';
+    }
   } catch (e) { window.location.href = '/login'; }
+}
+
+// グループ情報読み込み
+async function loadGroups() {
+  try {
+    const res = await fetch('/api/auth/groups');
+    if (res.ok) {
+      groups = await res.json();
+    }
+  } catch (e) { /* ignore */ }
+  renderGroupTabs();
+}
+
+function renderGroupTabs() {
+  const container = document.getElementById('groupTabs');
+  if (!container) return;
+
+  const canCrossGroup = currentUser.role === 'admin' || currentUser.cross_group;
+  const visibleGroups = canCrossGroup
+    ? groups
+    : groups.filter(g => g.code === currentUser.group_code);
+
+  if (visibleGroups.length <= 1) {
+    // タブ不要、見出しのみ
+    if (visibleGroups.length === 1) {
+      container.innerHTML = `
+        <div class="group-tab-single" style="border-left-color:${visibleGroups[0].color}">
+          <i class="bi bi-building"></i> ${escapeHtml(visibleGroups[0].name)}
+        </div>`;
+    } else {
+      container.innerHTML = '';
+    }
+    return;
+  }
+
+  container.innerHTML = visibleGroups.map(g => `
+    <button class="group-tab ${g.code === currentGroupCode ? 'active' : ''}"
+            data-code="${g.code}"
+            style="--tab-color:${g.color}"
+            onclick="switchGroup('${g.code}')">
+      <i class="bi bi-building"></i> ${escapeHtml(g.name)}
+    </button>
+  `).join('');
+}
+
+async function switchGroup(code) {
+  if (code === currentGroupCode) return;
+  currentGroupCode = code;
+  localStorage.setItem('selectedGroup', code);
+  applyGroupTheme();
+  renderGroupTabs();
+  await loadCars();
+  if (calendar) calendar.refetchEvents();
+  loadCarStatusCards();
+}
+
+function getCurrentGroup() {
+  return groups.find(g => g.code === currentGroupCode);
+}
+
+function isAkiota() {
+  return currentGroupCode === 'akiota';
+}
+
+function applyGroupTheme() {
+  document.body.classList.toggle('theme-akiota', isAkiota());
+  document.body.classList.toggle('theme-gr', !isAkiota());
+
+  const g = getCurrentGroup();
+  const brand = document.getElementById('brandName');
+  const title = document.getElementById('pageTitleText');
+  if (g && brand) brand.textContent = g.name;
+  if (title) title.textContent = '予約カレンダー';
+
+  // 運行記録簿リンクは安芸太田のみ
+  const navLog = document.getElementById('navOperationLog');
+  if (navLog) navLog.classList.toggle('d-none', !isAkiota());
+
+  // 操作説明書リンクをグループに応じて切替
+  const manualUrl = isAkiota() ? '/manual-akiota.html' : '/manual.html';
+  const manualLink = document.getElementById('manualLink');
+  const manualLinkHeader = document.getElementById('manualLinkHeader');
+  if (manualLink) manualLink.setAttribute('href', manualUrl);
+  if (manualLinkHeader) manualLinkHeader.setAttribute('href', manualUrl);
 }
 
 // 車両データ読み込み
 async function loadCars() {
   try {
-    const res = await fetch('/api/cars');
+    const res = await fetch(`/api/cars?group=${currentGroupCode}`);
     cars = await res.json();
     cars = cars.filter(c => c.is_active);
 
@@ -53,6 +169,14 @@ async function loadCars() {
     cars.forEach((car, i) => {
       resSelect.innerHTML += `<option value="${car.id}">${car.model} [${car.name}] - ${car.capacity}人乗り</option>`;
     });
+
+    // 運行記録簿の車両セレクトも更新
+    const logSelect = document.getElementById('logCarSelect');
+    if (logSelect) {
+      logSelect.innerHTML = cars.map(c =>
+        `<option value="${c.id}">${escapeHtml(c.model)} [${escapeHtml(c.name)}]</option>`
+      ).join('');
+    }
   } catch (e) {
     console.error('車両データ取得エラー:', e);
   }
@@ -84,6 +208,24 @@ function setupReservationValidation() {
   document.getElementById('resStartDate').addEventListener('change', () => {
     document.getElementById('resEndDate').value = document.getElementById('resStartDate').value;
   });
+
+  // 完了モーダルの距離自動計算
+  const startOdoEl = document.getElementById('completeStartOdo');
+  const endOdoEl = document.getElementById('completeEndOdo');
+  if (startOdoEl && endOdoEl) {
+    const calc = () => {
+      const s = parseFloat(startOdoEl.value);
+      const e = parseFloat(endOdoEl.value);
+      const distEl = document.getElementById('completeDistance');
+      if (!isNaN(s) && !isNaN(e) && e >= s) {
+        distEl.value = (e - s).toFixed(1);
+      } else {
+        distEl.value = '';
+      }
+    };
+    startOdoEl.addEventListener('input', calc);
+    endOdoEl.addEventListener('input', calc);
+  }
 }
 
 async function validateReservation() {
@@ -136,7 +278,6 @@ async function validateReservation() {
     } catch (e) { /* ignore */ }
   }
 
-  // 警告フラグ更新（重複以外の警告があるか）
   hasWarnings = warnings.some(w => w.type === 'warning');
 
   const container = document.getElementById('resWarnings');
@@ -203,7 +344,7 @@ function initCalendar() {
 // イベントデータ取得
 async function fetchEvents(fetchInfo, successCallback, failureCallback) {
   try {
-    const res = await fetch(`/api/reservations?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`);
+    const res = await fetch(`/api/reservations?group=${currentGroupCode}&start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`);
     reservations = await res.json();
 
     const now = new Date();
@@ -233,7 +374,9 @@ async function fetchEvents(fetchInfo, successCallback, failureCallback) {
           car_id: r.car_id, car_name: r.car_name, car_model: r.car_model,
           user_id: r.user_id, user_name: r.user_name, employee_id: r.employee_id,
           departure_location: r.departure_location, return_location: r.return_location,
-          status: r.status, notes: r.notes, isInUse: isInUse
+          status: r.status, notes: r.notes, isInUse: isInUse,
+          start_odometer: r.start_odometer, end_odometer: r.end_odometer,
+          distance_used: r.distance_used, purpose: r.purpose, completed_at: r.completed_at
         }
       };
     });
@@ -264,6 +407,23 @@ function showEventDetail(info) {
     cancelled: '<span class="status-badge" style="background:#e2e8f0;color:#475569;">キャンセル済</span>'
   };
 
+  // 運行記録（安芸太田・完了済の場合のみ表示）
+  let logHtml = '';
+  if (isAkiota() && props.status === 'completed') {
+    logHtml = `
+      <div class="detail-row">
+        <div class="detail-icon"><i class="bi bi-speedometer2"></i></div>
+        <div>
+          <div class="detail-label">積算距離</div>
+          <div class="detail-value">出庫 ${fmtKm(props.start_odometer)} → 帰着 ${fmtKm(props.end_odometer)} km</div>
+          <div class="detail-value" style="color:#059669;">使用距離: ${fmtKm(props.distance_used)} km</div>
+        </div>
+      </div>
+      ${props.purpose ? `<div class="detail-row"><div class="detail-icon"><i class="bi bi-signpost"></i></div><div><div class="detail-label">行先・使用目的</div><div class="detail-value">${escapeHtml(props.purpose)}</div></div></div>` : ''}
+      ${props.completed_at ? `<div class="detail-row"><div class="detail-icon"><i class="bi bi-clock-history"></i></div><div><div class="detail-label">帰着時間</div><div class="detail-value">${escapeHtml(props.completed_at.replace('T',' '))}</div></div></div>` : ''}
+    `;
+  }
+
   document.getElementById('detailBody').innerHTML = `
     <div class="detail-row">
       <div class="detail-icon"><i class="bi bi-car-front"></i></div>
@@ -290,17 +450,176 @@ function showEventDetail(info) {
       <div><div class="detail-label">ステータス</div><div class="detail-value">${statusText[props.status] || props.status}</div></div>
     </div>
     ${props.notes ? `<div class="detail-row"><div class="detail-icon"><i class="bi bi-chat-text"></i></div><div><div class="detail-label">備考</div><div class="detail-value">${escapeHtml(props.notes)}</div></div></div>` : ''}
+    ${logHtml}
   `;
 
   let footerHtml = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>';
-  if (props.status === 'active' && (props.user_id === currentUser.id || currentUser.role === 'admin')) {
+  const isOwner = props.user_id === currentUser.id;
+  const isOwnerOrAdmin = isOwner || currentUser.role === 'admin';
+  const canEdit = props.status === 'active' && isOwnerOrAdmin;
+
+  // 完全削除の権限: 自分の予約は誰でも / 他人の予約は管理者 or 髙宮(101)
+  const canPurgeOthers = currentUser.role === 'admin' || currentUser.employee_id === '101';
+  const canPurge = isOwner || canPurgeOthers;
+  const purgeBtn = canPurge
+    ? `<button class="btn btn-outline-danger btn-sm" onclick="purgeReservation(${info.event.id})" title="完全削除（テストデータ削除用）"><i class="bi bi-trash"></i> 削除</button>`
+    : '';
+
+  if (canEdit) {
+    const completeBtn = isAkiota()
+      ? `<button class="btn btn-success" onclick="openCompleteModal(${info.event.id})"><i class="bi bi-check-circle"></i> 完了</button>`
+      : '';
     footerHtml = `
+      ${completeBtn}
       <button class="btn btn-warning" onclick="editReservation(${info.event.id})"><i class="bi bi-pencil"></i> 編集</button>
       <button class="btn btn-danger" onclick="cancelReservation(${info.event.id})"><i class="bi bi-x-circle"></i> キャンセル</button>
+      ${purgeBtn}
       ${footerHtml}`;
+  } else {
+    footerHtml = `${purgeBtn} ${footerHtml}`;
   }
   document.getElementById('detailFooter').innerHTML = footerHtml;
   new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+function fmtKm(v) {
+  if (v == null || v === '') return '-';
+  const n = parseFloat(v);
+  return isNaN(n) ? '-' : n.toFixed(1);
+}
+
+// 完了モーダルを開く（予約IDベース：カレンダー一覧から検索）
+async function openCompleteModal(id) {
+  bootstrap.Modal.getInstance(document.getElementById('detailModal'))?.hide();
+  const r = reservations.find(r => r.id === id);
+  if (!r) return;
+  setTimeout(() => openCompleteModalWith(r), 400);
+}
+
+// 完了モーダルを開く（予約オブジェクト直接渡し：リマインダーから）
+function openCompleteModalWith(r) {
+  document.getElementById('completeResId').value = r.id;
+  const startOdo = r.start_odometer != null ? r.start_odometer : 0;
+  document.getElementById('completeStartOdo').value = startOdo;
+  document.getElementById('completeEndOdo').value = '';
+  document.getElementById('completeDistance').value = '';
+  document.getElementById('completePurpose').value = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('completeModal')).show();
+}
+
+// 安芸太田ログイン時の完了リマインダー
+async function checkPendingCompletions() {
+  if (!currentUser || currentUser.group_code !== 'akiota') return;
+  try {
+    const res = await fetch('/api/reservations/pending-complete');
+    if (!res.ok) return;
+    const list = await res.json();
+    if (list.length === 0) return;
+
+    // 優先順: まず「終了超過」、なければ「使用中」
+    const overdue = list.find(r => r.overdue);
+    const inProgress = list.find(r => r.in_progress);
+    const target = overdue || inProgress;
+    if (!target) return;
+    showCompletionPrompt(target, !!overdue);
+  } catch (e) { /* ignore */ }
+}
+
+function showCompletionPrompt(r, isOverdue) {
+  const header = document.getElementById('completionPromptHeader');
+  header.className = isOverdue
+    ? 'modal-header bg-danger text-white'
+    : 'modal-header bg-warning text-dark';
+  header.style.borderRadius = '12px 12px 0 0';
+
+  document.getElementById('completionPromptTitle').innerHTML = isOverdue
+    ? '<i class="bi bi-exclamation-triangle-fill"></i> 完了ボタンが押されていません'
+    : '<i class="bi bi-question-circle-fill"></i> 運転は終了しましたか？';
+
+  const period = `${r.start_datetime.replace('T',' ')} ～ ${r.end_datetime.replace('T',' ')}`;
+  const alertCls = isOverdue ? 'alert-danger' : 'alert-info';
+  const msg = isOverdue
+    ? '<strong>終了日時を過ぎていますが、完了ボタンが押されていません。</strong><br>使用が終了している場合は「完了」を押してください。'
+    : '現在、以下の車両を使用中です。<br><strong>運転は終了しましたか？</strong>';
+
+  document.getElementById('completionPromptBody').innerHTML = `
+    <div class="alert ${alertCls} py-2 px-3 mb-3" style="font-size:14px;">${msg}</div>
+    <div class="detail-row">
+      <div class="detail-icon"><i class="bi bi-car-front"></i></div>
+      <div><div class="detail-label">車両</div><div class="detail-value">${escapeHtml(r.car_model)}（${escapeHtml(r.car_name)}）</div></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-icon"><i class="bi bi-calendar-event"></i></div>
+      <div><div class="detail-label">予約期間</div><div class="detail-value">${period}</div></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-icon"><i class="bi bi-arrow-right"></i></div>
+      <div><div class="detail-label">出発 → 返却</div><div class="detail-value">${escapeHtml(r.departure_location)} → ${escapeHtml(r.return_location)}</div></div>
+    </div>
+  `;
+
+  // ボタンのハンドラを差し替え（前回のリスナが残らないようクローン）
+  const doneBtn = document.getElementById('completionPromptDone');
+  const newDone = doneBtn.cloneNode(true);
+  doneBtn.parentNode.replaceChild(newDone, doneBtn);
+  newDone.addEventListener('click', () => {
+    closeModalFully('completionPromptModal');
+    setTimeout(() => openCompleteModalWith(r), 400);
+  });
+
+  const notYetBtn = document.getElementById('completionPromptNotYet');
+  const newNotYet = notYetBtn.cloneNode(true);
+  notYetBtn.parentNode.replaceChild(newNotYet, notYetBtn);
+  newNotYet.addEventListener('click', () => {
+    closeModalFully('completionPromptModal');
+  });
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('completionPromptModal')).show();
+}
+
+async function submitComplete() {
+  const id = document.getElementById('completeResId').value;
+  const startOdo = document.getElementById('completeStartOdo').value;
+  const endOdo = document.getElementById('completeEndOdo').value;
+  const purpose = document.getElementById('completePurpose').value;
+
+  if (endOdo === '' || endOdo == null) {
+    alert('帰着時の積算距離を入力してください');
+    return;
+  }
+  if (!purpose.trim()) {
+    alert('行先・使用目的を入力してください');
+    return;
+  }
+  if (parseFloat(endOdo) < parseFloat(startOdo || 0)) {
+    alert('帰着距離は出庫距離以上にしてください');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/reservations/${id}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start_odometer: startOdo,
+        end_odometer: endOdo,
+        purpose: purpose
+      })
+    });
+    const result = await res.json();
+    if (res.ok) {
+      closeModalFully('completeModal');
+      closeModalFully('detailModal');
+      calendar.refetchEvents();
+      loadCarStatusCards();
+      // 他にも未完了の予約があれば引き続きプロンプト表示
+      setTimeout(() => checkPendingCompletions(), 600);
+    } else {
+      alert(result.error || '完了処理に失敗しました');
+    }
+  } catch (e) {
+    alert('完了処理に失敗しました');
+  }
 }
 
 // 新規予約モーダル
@@ -308,8 +627,10 @@ function openNewReservation(startStr, endStr) {
   document.getElementById('reservationModalTitle').innerHTML = '<i class="bi bi-plus-circle"></i> 新規予約';
   document.getElementById('reservationId').value = '';
   document.getElementById('resCarId').value = '';
-  document.getElementById('resDeparture').value = '弥山';
-  document.getElementById('resReturn').value = '弥山';
+  // 安芸太田は拠点名ベース、GRは従来どおり弥山
+  const defaultLoc = isAkiota() ? '' : '弥山';
+  document.getElementById('resDeparture').value = defaultLoc;
+  document.getElementById('resReturn').value = defaultLoc;
   document.getElementById('resNotes').value = '';
   document.getElementById('resWarnings').innerHTML = '';
   document.getElementById('saveResBtn').disabled = false;
@@ -349,7 +670,9 @@ function editReservation(id) {
   document.getElementById('saveResBtn').disabled = false;
   document.getElementById('saveResBtn').className = 'btn btn-primary';
 
-  setTimeout(() => { new bootstrap.Modal(document.getElementById('reservationModal')).show(); }, 300);
+  setTimeout(() => {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('reservationModal')).show();
+  }, 400);
 }
 
 // 予約保存
@@ -365,21 +688,19 @@ async function saveReservation(forceConfirmed) {
        ${warningHtml}
        <p class="mt-3 mb-0" style="font-size:14px;">この内容で予約を確定してよろしいですか？</p>`;
 
-    // 予約モーダルを閉じて確認モーダルを表示
     bootstrap.Modal.getInstance(document.getElementById('reservationModal'))?.hide();
     setTimeout(() => {
-      const confirmModal = new bootstrap.Modal(document.getElementById('warningConfirmModal'));
+      const confirmModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('warningConfirmModal'));
       confirmModal.show();
 
-      // 確定ボタンのイベント（1回だけ発火）
       const btn = document.getElementById('warningConfirmBtn');
       const handler = () => {
         btn.removeEventListener('click', handler);
         confirmModal.hide();
-        setTimeout(() => saveReservation(true), 300);
+        setTimeout(() => saveReservation(true), 400);
       };
       btn.addEventListener('click', handler);
-    }, 300);
+    }, 400);
     return;
   }
 
@@ -402,29 +723,45 @@ async function saveReservation(forceConfirmed) {
     const res = await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     const result = await res.json();
     if (res.ok) {
-      bootstrap.Modal.getInstance(document.getElementById('reservationModal'))?.hide();
+      closeModalFully('reservationModal');
+      closeModalFully('warningConfirmModal');
       calendar.refetchEvents();
       loadCarStatusCards();
     } else { alert(result.error); }
   } catch (e) { alert('保存に失敗しました'); }
 }
 
-// 返却完了
 // 予約キャンセル
 async function cancelReservation(id) {
   if (!confirm('この予約をキャンセルしますか？')) return;
   try {
     const res = await fetch(`/api/reservations/${id}`, { method: 'DELETE' });
-    if (res.ok) { bootstrap.Modal.getInstance(document.getElementById('detailModal'))?.hide(); calendar.refetchEvents(); loadCarStatusCards(); }
+    if (res.ok) { closeModalFully('detailModal'); calendar.refetchEvents(); loadCarStatusCards(); }
     else { const d = await res.json(); alert(d.error); }
   } catch (e) { alert('キャンセルに失敗しました'); }
+}
+
+// 予約完全削除（テストデータ整理用・DB行ごと削除）
+async function purgeReservation(id) {
+  if (!confirm('この予約を完全に削除しますか？\n\n※運行記録簿からも消え、元に戻せません。\nテストデータの削除用です。')) return;
+  try {
+    const res = await fetch(`/api/reservations/${id}/purge`, { method: 'DELETE' });
+    if (res.ok) {
+      closeModalFully('detailModal');
+      calendar.refetchEvents();
+      loadCarStatusCards();
+    } else {
+      const d = await res.json();
+      alert(d.error || '削除に失敗しました');
+    }
+  } catch (e) { alert('削除に失敗しました'); }
 }
 
 // ===== 車両ステータスカード（折りたたみ式） =====
 async function loadCarStatusCards() {
   let statusData = { current: {}, next: {} };
   try {
-    const res = await fetch('/api/reservations/status/all');
+    const res = await fetch(`/api/reservations/status/all?group=${currentGroupCode}`);
     statusData = await res.json();
   } catch (e) { /* ignore */ }
 
@@ -436,13 +773,11 @@ async function loadCarStatusCards() {
     const current = statusData.current[car.id];
     const next = statusData.next[car.id];
 
-    // ステータス判定
     const isInUse = !!current;
     const statusBadge = isInUse
       ? `<span class="status-badge in-use"><i class="bi bi-exclamation-circle"></i> 使用中</span>`
       : `<span class="status-badge available"><i class="bi bi-check-circle"></i> 空車</span>`;
 
-    // 警告判定
     let hasWarning = false;
     let locationWarning = '';
     if (next) {
@@ -455,10 +790,8 @@ async function loadCarStatusCards() {
       }
     }
 
-    // 小さいヘッダー（常時表示）
     const warningIcon = hasWarning ? ' <i class="bi bi-exclamation-triangle-fill" style="color:#f59e0b"></i>' : '';
 
-    // 詳細（展開時のみ表示）
     let detailHtml = '';
 
     if (current) {
@@ -500,7 +833,6 @@ async function loadCarStatusCards() {
   document.getElementById('carStatusGrid').innerHTML = statusHtml;
 }
 
-// カード個別開閉（カレンダー画面用：タップしたカードだけ開閉）
 function toggleCarCard(el) {
   el.parentElement.classList.toggle('expanded');
 }
@@ -509,8 +841,8 @@ function toggleCarCard(el) {
 function showCarStatus() {
   document.getElementById('calendarView').classList.add('d-none');
   document.getElementById('carStatusView').classList.remove('d-none');
+  document.getElementById('operationLogView').classList.add('d-none');
   document.getElementById('carStatusDetail').innerHTML = document.getElementById('carStatusGrid').innerHTML;
-  // 車両ステータス画面では全カード展開
   document.querySelectorAll('#carStatusDetail .car-status-card').forEach(c => c.classList.add('expanded'));
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav a')[1].classList.add('active');
@@ -519,8 +851,144 @@ function showCarStatus() {
 function showCalendar() {
   document.getElementById('calendarView').classList.remove('d-none');
   document.getElementById('carStatusView').classList.add('d-none');
+  document.getElementById('operationLogView').classList.add('d-none');
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.sidebar-nav a')[0].classList.add('active');
+}
+
+// 運行記録簿ビュー
+function showOperationLog() {
+  document.getElementById('calendarView').classList.add('d-none');
+  document.getElementById('carStatusView').classList.add('d-none');
+  document.getElementById('operationLogView').classList.remove('d-none');
+
+  // 年月セレクトを初期化（初回のみ）
+  const yearSel = document.getElementById('logYearSelect');
+  const monthSel = document.getElementById('logMonthSelect');
+  if (yearSel.options.length === 0) {
+    const now = new Date();
+    const curY = now.getFullYear();
+    for (let y = curY - 1; y <= curY + 1; y++) {
+      yearSel.innerHTML += `<option value="${y}" ${y === curY ? 'selected' : ''}>${y}</option>`;
+    }
+    for (let m = 1; m <= 12; m++) {
+      monthSel.innerHTML += `<option value="${m}" ${m === now.getMonth() + 1 ? 'selected' : ''}>${m}</option>`;
+    }
+  }
+
+  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('navOperationLog').querySelector('a').classList.add('active');
+
+  loadOperationLog();
+}
+
+async function loadOperationLog() {
+  const carId = document.getElementById('logCarSelect').value;
+  const year = document.getElementById('logYearSelect').value;
+  const month = document.getElementById('logMonthSelect').value;
+
+  if (!carId) {
+    document.getElementById('operationLogContent').innerHTML =
+      '<div class="alert alert-info">車両を選択してください</div>';
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/reservations/operation-log?car_id=${carId}&year=${year}&month=${month}`);
+    if (!res.ok) {
+      document.getElementById('operationLogContent').innerHTML =
+        '<div class="alert alert-danger">取得に失敗しました</div>';
+      return;
+    }
+    const data = await res.json();
+    renderOperationLog(data);
+  } catch (e) {
+    document.getElementById('operationLogContent').innerHTML =
+      '<div class="alert alert-danger">取得に失敗しました</div>';
+  }
+}
+
+function renderOperationLog(data) {
+  const { car, year, month, records } = data;
+
+  const rows = records.map(r => {
+    const startDate = r.start_datetime.slice(0, 10);
+    const day = parseInt(startDate.slice(8, 10));
+    const outTime = r.start_datetime.slice(11, 16);
+    const inTime = r.completed_at ? r.completed_at.slice(11, 16) : '-';
+    const startOdo = fmtKm(r.start_odometer);
+    const endOdo = fmtKm(r.end_odometer);
+    const dist = fmtKm(r.distance_used);
+    const purpose = escapeHtml(r.purpose || '');
+    return `
+      <tr>
+        <td>${day}</td>
+        <td>${escapeHtml(r.user_name)}</td>
+        <td>${outTime}</td>
+        <td>${inTime}</td>
+        <td class="num">${startOdo}</td>
+        <td class="num">${endOdo}</td>
+        <td class="num">${dist}</td>
+        <td>${purpose}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // 空の行で埋めてPDFっぽく
+  const minRows = Math.max(0, 24 - records.length);
+  let emptyRows = '';
+  for (let i = 0; i < minRows; i++) {
+    emptyRows += '<tr class="empty-row"><td>&nbsp;</td><td></td><td>：</td><td>：</td><td></td><td></td><td></td><td></td></tr>';
+  }
+
+  document.getElementById('operationLogContent').innerHTML = `
+    <div class="operation-log-sheet">
+      <div class="log-header">
+        <div class="log-title">運行記録簿</div>
+        <div class="log-meta">
+          <div><span class="meta-label">車　種</span><span class="meta-value">${escapeHtml(car.model)}</span></div>
+          <div><span class="meta-label">${year}年 ${month}月度</span></div>
+        </div>
+      </div>
+      <div class="log-sub">
+        <div><span class="meta-label">登録番号</span><span class="meta-value">${escapeHtml(car.name)}</span></div>
+        <div><span class="meta-label">拠点名</span><span class="meta-value">${escapeHtml(car.current_location)}</span></div>
+      </div>
+      <table class="operation-log-table">
+        <thead>
+          <tr>
+            <th rowspan="2">日</th>
+            <th rowspan="2">使用者</th>
+            <th rowspan="2">出庫時間</th>
+            <th rowspan="2">帰着時間</th>
+            <th colspan="2">積算距離(km)</th>
+            <th rowspan="2">使用距離<br>(km)</th>
+            <th rowspan="2">行先・使用目的</th>
+          </tr>
+          <tr>
+            <th>出庫</th>
+            <th>帰着</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          ${emptyRows}
+        </tbody>
+      </table>
+      <div class="log-footer">
+        <span>月次終了後、検印の上保管願います。</span>
+        <table class="stamp-box">
+          <tr><th>MG</th><th>担当</th></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        </table>
+      </div>
+      <div class="mt-3 d-print-none">
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+          <i class="bi bi-printer"></i> 印刷
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 // サイドバートグル
@@ -594,4 +1062,23 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// モーダルを確実に閉じる（backdrop残留対策）
+function closeModalFully(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    const inst = bootstrap.Modal.getInstance(el);
+    if (inst) inst.hide();
+  }
+  // アニメーション後、残骸を掃除
+  setTimeout(() => {
+    const stillOpen = document.querySelectorAll('.modal.show').length > 0;
+    if (!stillOpen) {
+      document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    }
+  }, 400);
 }

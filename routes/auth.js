@@ -13,7 +13,11 @@ router.post('/login', async (req, res) => {
     }
 
     const rows = await query(
-      "SELECT id, employee_id, password, name, role FROM users WHERE employee_id = ?",
+      `SELECT u.id, u.employee_id, u.password, u.name, u.role, u.group_id, u.cross_group,
+              g.code as group_code, g.name as group_name, g.color as group_color
+       FROM users u
+       LEFT JOIN groups g ON u.group_id = g.id
+       WHERE u.employee_id = ?`,
       [employee_id]
     );
 
@@ -31,7 +35,12 @@ router.post('/login', async (req, res) => {
       id: user.id,
       employee_id: user.employee_id,
       name: user.name,
-      role: user.role
+      role: user.role,
+      group_id: user.group_id,
+      group_code: user.group_code,
+      group_name: user.group_name,
+      group_color: user.group_color,
+      cross_group: !!user.cross_group
     };
 
     res.json({ message: 'ログイン成功', user: req.session.user });
@@ -55,6 +64,20 @@ router.get('/me', (req, res) => {
   res.status(401).json({ error: '未ログイン' });
 });
 
+// グループ一覧（ログイン済み全員）
+router.get('/groups', async (req, res) => {
+  try {
+    if (!req.session || !req.session.user) {
+      return res.status(401).json({ error: 'ログインが必要です' });
+    }
+    const rows = await query("SELECT id, code, name, color FROM groups ORDER BY id");
+    res.json(rows);
+  } catch (e) {
+    console.error('グループ一覧エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
 // ユーザー登録（管理者のみ）
 router.post('/register', async (req, res) => {
   try {
@@ -62,7 +85,7 @@ router.post('/register', async (req, res) => {
       return res.status(403).json({ error: '管理者権限が必要です' });
     }
 
-    const { employee_id, password, name, role } = req.body;
+    const { employee_id, password, name, role, group_id } = req.body;
 
     if (!employee_id || !password || !name) {
       return res.status(400).json({ error: '必須項目を入力してください' });
@@ -74,9 +97,10 @@ router.post('/register', async (req, res) => {
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
+    const cross = req.body.cross_group ? 1 : 0;
     await run(
-      "INSERT INTO users (employee_id, password, name, role) VALUES (?, ?, ?, ?)",
-      [employee_id, hashedPassword, name, role || 'user']
+      "INSERT INTO users (employee_id, password, name, role, group_id, cross_group) VALUES (?, ?, ?, ?, ?, ?)",
+      [employee_id, hashedPassword, name, role || 'user', parseInt(group_id) || 1, cross]
     );
 
     res.json({ message: 'ユーザーを登録しました' });
@@ -86,14 +110,27 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ユーザー一覧（管理者のみ）
+// ユーザー一覧（管理者のみ） group絞り込み可
 router.get('/users', async (req, res) => {
   try {
     if (!req.session || !req.session.user || req.session.user.role !== 'admin') {
       return res.status(403).json({ error: '管理者権限が必要です' });
     }
 
-    const rows = await query("SELECT id, employee_id, name, role, created_at FROM users ORDER BY employee_id");
+    const { group } = req.query;
+    let sql = `SELECT u.id, u.employee_id, u.name, u.role, u.group_id, u.cross_group,
+                      g.code as group_code, g.name as group_name,
+                      u.created_at
+               FROM users u
+               LEFT JOIN groups g ON u.group_id = g.id`;
+    const params = [];
+    if (group) {
+      sql += " WHERE g.code = ?";
+      params.push(group);
+    }
+    sql += " ORDER BY u.employee_id";
+
+    const rows = await query(sql, params);
     res.json(rows);
   } catch (e) {
     console.error('ユーザー一覧エラー:', e);
@@ -109,7 +146,7 @@ router.put('/users/:id', async (req, res) => {
     }
 
     const { id } = req.params;
-    const { employee_id, name, role, password } = req.body;
+    const { employee_id, name, role, password, group_id } = req.body;
 
     if (!employee_id || !name) {
       return res.status(400).json({ error: '社員番号と名前は必須です' });
@@ -121,13 +158,15 @@ router.put('/users/:id', async (req, res) => {
       return res.status(400).json({ error: 'この社員番号は既に使用されています' });
     }
 
+    const gid = parseInt(group_id) || 1;
+    const cross = req.body.cross_group ? 1 : 0;
     if (password) {
       const hashedPassword = bcrypt.hashSync(password, 10);
-      await run("UPDATE users SET employee_id = ?, name = ?, role = ?, password = ? WHERE id = ?",
-        [employee_id, name, role || 'user', hashedPassword, id]);
+      await run("UPDATE users SET employee_id = ?, name = ?, role = ?, password = ?, group_id = ?, cross_group = ? WHERE id = ?",
+        [employee_id, name, role || 'user', hashedPassword, gid, cross, id]);
     } else {
-      await run("UPDATE users SET employee_id = ?, name = ?, role = ? WHERE id = ?",
-        [employee_id, name, role || 'user', id]);
+      await run("UPDATE users SET employee_id = ?, name = ?, role = ?, group_id = ?, cross_group = ? WHERE id = ?",
+        [employee_id, name, role || 'user', gid, cross, id]);
     }
 
     res.json({ message: 'ユーザー情報を更新しました' });

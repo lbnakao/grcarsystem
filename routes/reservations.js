@@ -11,11 +11,30 @@ function nowJSTPlus10() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString().slice(0, 16);
 }
 
+// 対象グループを解決（管理者 or 横断許可ユーザーは?group=で切替可）
+function resolveGroupCode(req) {
+  const canCross = req.session.user.role === 'admin' || req.session.user.cross_group;
+  if (canCross && req.query.group) {
+    return req.query.group;
+  }
+  return req.session.user.group_code;
+}
+
+async function getGroupIdByCode(code) {
+  const rows = await query("SELECT id FROM groups WHERE code = ?", [code]);
+  return rows.length > 0 ? rows[0].id : null;
+}
+
 // 終了時間を過ぎた予約を自動完了にし、車両の現在地を返却場所に更新
+// ただし安芸太田町組は完了ボタン必須のため自動完了しない
 async function autoCompleteExpired() {
   const now = nowJST();
   const expired = await query(
-    "SELECT id, car_id, return_location FROM reservations WHERE status = 'active' AND end_datetime <= ?",
+    `SELECT r.id, r.car_id, r.return_location
+     FROM reservations r
+     JOIN cars c ON r.car_id = c.id
+     JOIN groups g ON c.group_id = g.id
+     WHERE r.status = 'active' AND r.end_datetime <= ? AND g.code = 'gr'`,
     [now]
   );
   for (const r of expired) {
@@ -29,18 +48,23 @@ router.get('/', async (req, res) => {
   await autoCompleteExpired();
   try {
     const { start, end, car_id } = req.query;
+    const code = resolveGroupCode(req);
+    const gid = await getGroupIdByCode(code);
+    if (!gid) return res.json([]);
 
     let sql = `
       SELECT r.id, r.car_id, r.user_id, r.start_datetime, r.end_datetime,
              r.departure_location, r.return_location, r.status, r.notes, r.created_at,
-             c.name as car_name, c.model as car_model,
+             r.start_odometer, r.end_odometer, r.distance_used, r.purpose, r.completed_at,
+             c.name as car_name, c.model as car_model, c.group_id,
              u.name as user_name, u.employee_id
       FROM reservations r
       JOIN cars c ON r.car_id = c.id
       JOIN users u ON r.user_id = u.id
       WHERE r.status != 'cancelled'
+      AND c.group_id = ?
     `;
-    const params = [];
+    const params = [gid];
 
     if (start) {
       sql += " AND r.end_datetime >= ?";
@@ -78,6 +102,16 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: '終了時間は開始時間より後にしてください' });
     }
 
+    // 車両のグループを確認し、一般ユーザーは自グループのみ予約可（横断許可ユーザーは除く）
+    const carRows = await query("SELECT group_id FROM cars WHERE id = ?", [parseInt(car_id)]);
+    if (carRows.length === 0) {
+      return res.status(404).json({ error: '車両が見つかりません' });
+    }
+    const canCross = req.session.user.role === 'admin' || req.session.user.cross_group;
+    if (!canCross && carRows[0].group_id !== req.session.user.group_id) {
+      return res.status(403).json({ error: 'この車両は予約できません' });
+    }
+
     // 重複チェック
     const conflict = await query(`
       SELECT id FROM reservations
@@ -89,10 +123,23 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'この時間帯は既に予約が入っています' });
     }
 
+    // 前回の帰着距離を取得して出庫距離として引用
+    const lastCompleted = await query(`
+      SELECT end_odometer FROM reservations
+      WHERE car_id = ? AND status = 'completed' AND end_odometer IS NOT NULL
+      ORDER BY completed_at DESC, end_datetime DESC
+      LIMIT 1
+    `, [parseInt(car_id)]);
+    const startOdo = lastCompleted.length > 0 && lastCompleted[0].end_odometer != null
+      ? lastCompleted[0].end_odometer
+      : 0;
+
     await run(
-      `INSERT INTO reservations (car_id, user_id, start_datetime, end_datetime, departure_location, return_location, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [parseInt(car_id), req.session.user.id, start_datetime, end_datetime, departure_location, return_location, notes || '']
+      `INSERT INTO reservations (car_id, user_id, start_datetime, end_datetime,
+        departure_location, return_location, notes, start_odometer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [parseInt(car_id), req.session.user.id, start_datetime, end_datetime,
+       departure_location, return_location, notes || '', startOdo]
     );
 
     // 車両の現在地を更新
@@ -154,7 +201,70 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// 予約キャンセル
+// 予約完了（安芸太田町組用：完了ボタン押下）
+// 帰着時間は押下時刻、帰着距離・行先/使用目的を記録
+router.post('/:id/complete', async (req, res) => {
+  try {
+    const { start_odometer, end_odometer, purpose } = req.body;
+
+    const existing = await query(
+      `SELECT r.id, r.user_id, r.car_id, r.return_location, r.start_odometer, r.status
+       FROM reservations r WHERE r.id = ?`,
+      [req.params.id]
+    );
+    if (existing.length === 0) {
+      return res.status(404).json({ error: '予約が見つかりません' });
+    }
+    const resv = existing[0];
+
+    if (resv.user_id !== req.session.user.id && req.session.user.role !== 'admin') {
+      return res.status(403).json({ error: '自分の予約のみ完了できます' });
+    }
+
+    if (resv.status !== 'active') {
+      return res.status(400).json({ error: 'この予約は既に完了またはキャンセル済みです' });
+    }
+
+    if (end_odometer == null || end_odometer === '') {
+      return res.status(400).json({ error: '帰着時の積算距離を入力してください' });
+    }
+
+    const endOdo = parseFloat(end_odometer);
+    const startOdo = start_odometer != null && start_odometer !== ''
+      ? parseFloat(start_odometer)
+      : (resv.start_odometer != null ? parseFloat(resv.start_odometer) : 0);
+
+    if (isNaN(endOdo) || endOdo < 0) {
+      return res.status(400).json({ error: '帰着距離は有効な数値を入力してください' });
+    }
+    if (endOdo < startOdo) {
+      return res.status(400).json({ error: '帰着距離は出庫距離以上にしてください' });
+    }
+
+    const distance = endOdo - startOdo;
+    const completedAt = nowJST();
+
+    // end_datetime は予約時の計画値のまま保持し、実際の帰着時刻は completed_at に記録
+    await run(
+      `UPDATE reservations SET status = 'completed',
+         start_odometer = ?, end_odometer = ?, distance_used = ?,
+         purpose = ?, completed_at = ?
+       WHERE id = ?`,
+      [startOdo, endOdo, distance, purpose || '', completedAt, req.params.id]
+    );
+
+    // 車両の現在地を返却場所に更新
+    await run("UPDATE cars SET current_location = ? WHERE id = ?",
+      [resv.return_location, resv.car_id]);
+
+    res.json({ message: '使用を完了しました', distance_used: distance, completed_at: completedAt });
+  } catch (e) {
+    console.error('予約完了エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+// 予約キャンセル（ソフト：status='cancelled'）
 router.delete('/:id', async (req, res) => {
   try {
     const existing = await query("SELECT user_id FROM reservations WHERE id = ?", [req.params.id]);
@@ -175,12 +285,42 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// 予約完全削除（DB行ごと削除。テストデータ整理用）
+// - 自分の予約は誰でも削除可
+// - 他人の予約は「管理者」または「安芸太田町組のリーダー(髙宮/社員番号101)」のみ削除可
+router.delete('/:id/purge', async (req, res) => {
+  try {
+    const existing = await query("SELECT user_id FROM reservations WHERE id = ?", [req.params.id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: '予約が見つかりません' });
+    }
+
+    const ownerId = existing[0].user_id;
+    const u = req.session.user;
+    const canDeleteOthers = u.role === 'admin' || u.employee_id === '101';
+
+    if (ownerId !== u.id && !canDeleteOthers) {
+      return res.status(403).json({ error: '自分が作成した予約のみ削除できます' });
+    }
+
+    await run("DELETE FROM reservations WHERE id = ?", [req.params.id]);
+    res.json({ message: '予約を完全に削除しました' });
+  } catch (e) {
+    console.error('予約完全削除エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
 // 車両ステータス一括取得（現在の使用者＋次回予約）
-router.get('/status/all', async (_req, res) => {
+router.get('/status/all', async (req, res) => {
   try {
     await autoCompleteExpired();
     const now = nowJST();
     const nowPlus10 = nowJSTPlus10();
+
+    const code = resolveGroupCode(req);
+    const gid = await getGroupIdByCode(code);
+    if (!gid) return res.json({ current: {}, next: {} });
 
     // 現在使用中（10分前から使用中扱い）
     const currentRows = await query(`
@@ -189,10 +329,12 @@ router.get('/status/all', async (_req, res) => {
              u.name as user_name, u.employee_id
       FROM reservations r
       JOIN users u ON r.user_id = u.id
+      JOIN cars c ON r.car_id = c.id
       WHERE r.status = 'active'
       AND r.start_datetime <= ? AND r.end_datetime > ?
+      AND c.group_id = ?
       ORDER BY r.start_datetime
-    `, [nowPlus10, now]);
+    `, [nowPlus10, now, gid]);
 
     const currentMap = {};
     currentRows.forEach(row => {
@@ -208,10 +350,12 @@ router.get('/status/all', async (_req, res) => {
              u.name as user_name, u.employee_id
       FROM reservations r
       JOIN users u ON r.user_id = u.id
+      JOIN cars c ON r.car_id = c.id
       WHERE r.status = 'active'
       AND r.start_datetime > ?
+      AND c.group_id = ?
       ORDER BY r.start_datetime
-    `, [nowPlus10]);
+    `, [nowPlus10, gid]);
 
     const nextMap = {};
     nextRows.forEach(row => {
@@ -291,6 +435,96 @@ router.get('/last-return', async (req, res) => {
   } catch (e) {
     console.error('返却場所取得エラー:', e);
     res.json({ return_location: null });
+  }
+});
+
+// ログイン時の完了リマインダー用:
+// ログインユーザーが持つ安芸太田町組のactive予約で、
+// 現在「使用中（start以降）」または「終了時刻超過」のものを返す
+router.get('/pending-complete', async (req, res) => {
+  try {
+    const now = nowJST();
+    const rows = await query(`
+      SELECT r.id, r.car_id, r.start_datetime, r.end_datetime,
+             r.departure_location, r.return_location, r.start_odometer,
+             c.name as car_name, c.model as car_model
+      FROM reservations r
+      JOIN cars c ON r.car_id = c.id
+      JOIN groups g ON c.group_id = g.id
+      WHERE r.status = 'active'
+      AND r.user_id = ?
+      AND g.code = 'akiota'
+      AND r.start_datetime <= ?
+      ORDER BY r.start_datetime
+    `, [req.session.user.id, now]);
+
+    const result = rows.map(r => ({
+      ...r,
+      overdue: r.end_datetime <= now,
+      in_progress: r.start_datetime <= now && r.end_datetime > now
+    }));
+
+    res.json(result);
+  } catch (e) {
+    console.error('pending-completeエラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
+  }
+});
+
+// 運行記録簿: 車両別・月別の完了済予約一覧（安芸太田町組用）
+router.get('/operation-log', async (req, res) => {
+  try {
+    const { car_id, year, month } = req.query;
+    if (!car_id || !year || !month) {
+      return res.status(400).json({ error: 'car_id, year, month は必須です' });
+    }
+
+    const yyyy = parseInt(year);
+    const mm = parseInt(month);
+    const monthStart = `${yyyy}-${String(mm).padStart(2, '0')}-01`;
+    // 翌月1日
+    const nextMonthDate = mm === 12
+      ? `${yyyy + 1}-01-01`
+      : `${yyyy}-${String(mm + 1).padStart(2, '0')}-01`;
+
+    // 車両情報
+    const carRows = await query(
+      `SELECT c.id, c.name, c.model, c.capacity, c.current_location, c.group_id,
+              g.code as group_code, g.name as group_name
+       FROM cars c LEFT JOIN groups g ON c.group_id = g.id
+       WHERE c.id = ?`,
+      [parseInt(car_id)]
+    );
+    if (carRows.length === 0) {
+      return res.status(404).json({ error: '車両が見つかりません' });
+    }
+    const car = carRows[0];
+
+    // 一般ユーザーは自グループのみ
+    if (req.session.user.role !== 'admin' && car.group_id !== req.session.user.group_id) {
+      return res.status(403).json({ error: 'アクセス権限がありません' });
+    }
+
+    // 完了済予約（start_datetimeが対象月）
+    const rows = await query(
+      `SELECT r.id, r.start_datetime, r.end_datetime, r.completed_at,
+              r.departure_location, r.return_location,
+              r.start_odometer, r.end_odometer, r.distance_used, r.purpose,
+              u.name as user_name, u.employee_id
+       FROM reservations r
+       JOIN users u ON r.user_id = u.id
+       WHERE r.car_id = ?
+       AND r.status = 'completed'
+       AND r.start_datetime >= ?
+       AND r.start_datetime < ?
+       ORDER BY r.start_datetime`,
+      [parseInt(car_id), monthStart, nextMonthDate]
+    );
+
+    res.json({ car, year: yyyy, month: mm, records: rows });
+  } catch (e) {
+    console.error('運行記録簿エラー:', e);
+    res.status(500).json({ error: 'サーバーエラー' });
   }
 });
 

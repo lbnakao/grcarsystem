@@ -47,6 +47,9 @@
         <h1><i class="bi bi-gear"></i> 管理ページ</h1>
       </div>
 
+      <!-- グループ切り替えタブ -->
+      <div class="group-tabs" id="groupTabs"></div>
+
       <!-- タブナビゲーション -->
       <ul class="nav nav-tabs mb-4" role="tablist">
         <li class="nav-item">
@@ -153,6 +156,10 @@
               <label class="form-label">現在地</label>
               <input type="text" class="form-control" id="carLocation" placeholder="例: 本社駐車場" value="本社駐車場">
             </div>
+            <div class="mb-3">
+              <label class="form-label">グループ</label>
+              <select class="form-select" id="carGroupId"></select>
+            </div>
             <div class="mb-3" id="carActiveGroup" style="display:none">
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="carActive" checked>
@@ -202,6 +209,10 @@
                 <option value="admin">管理者</option>
               </select>
             </div>
+            <div class="mb-3">
+              <label class="form-label">グループ</label>
+              <select class="form-select" id="newUserGroupId"></select>
+            </div>
           </form>
         </div>
         <div class="modal-footer">
@@ -246,6 +257,10 @@
                 <option value="admin">管理者</option>
               </select>
             </div>
+            <div class="mb-3">
+              <label class="form-label">グループ</label>
+              <select class="form-select" id="editUserGroupId"></select>
+            </div>
           </form>
         </div>
         <div class="modal-footer">
@@ -261,13 +276,66 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let currentUser = null;
+    let groups = [];
+    let currentGroupCode = 'gr';
 
     // 初期化
     document.addEventListener('DOMContentLoaded', async () => {
       await checkAuth();
+      await loadGroups();
+      applyGroupTheme();
+      renderGroupTabs();
+      populateGroupSelects();
       loadCars();
       loadUsers();
     });
+
+    async function loadGroups() {
+      try {
+        const res = await fetch('/api/auth/groups');
+        if (res.ok) groups = await res.json();
+      } catch (e) { /* ignore */ }
+      currentGroupCode = localStorage.getItem('selectedGroup') || 'gr';
+    }
+
+    function renderGroupTabs() {
+      const container = document.getElementById('groupTabs');
+      container.innerHTML = groups.map(g => `
+        <button class="group-tab ${g.code === currentGroupCode ? 'active' : ''}"
+                data-code="${g.code}"
+                style="--tab-color:${g.color}"
+                onclick="switchGroup('${g.code}')">
+          <i class="bi bi-building"></i> ${escapeHtml(g.name)}
+        </button>
+      `).join('');
+    }
+
+    function switchGroup(code) {
+      if (code === currentGroupCode) return;
+      currentGroupCode = code;
+      localStorage.setItem('selectedGroup', code);
+      applyGroupTheme();
+      renderGroupTabs();
+      loadCars();
+      loadUsers();
+    }
+
+    function applyGroupTheme() {
+      document.body.classList.toggle('theme-akiota', currentGroupCode === 'akiota');
+      document.body.classList.toggle('theme-gr', currentGroupCode !== 'akiota');
+    }
+
+    function populateGroupSelects() {
+      const options = groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+      document.getElementById('carGroupId').innerHTML = options;
+      document.getElementById('newUserGroupId').innerHTML = options;
+      document.getElementById('editUserGroupId').innerHTML = options;
+    }
+
+    function currentGroupId() {
+      const g = groups.find(g => g.code === currentGroupCode);
+      return g ? g.id : 1;
+    }
 
     // 認証チェック
     async function checkAuth() {
@@ -293,7 +361,7 @@
     // === 車両管理 ===
     async function loadCars() {
       try {
-        const res = await fetch('/api/cars');
+        const res = await fetch(`/api/cars?group=${currentGroupCode}`);
         const cars = await res.json();
 
         const tbody = document.getElementById('carsTableBody');
@@ -333,6 +401,7 @@
       document.getElementById('carModel').value = '';
       document.getElementById('carCapacity').value = '';
       document.getElementById('carLocation').value = '本社駐車場';
+      document.getElementById('carGroupId').value = currentGroupId();
       document.getElementById('carActiveGroup').style.display = 'none';
 
       new bootstrap.Modal(document.getElementById('carModal')).show();
@@ -346,6 +415,7 @@
       document.getElementById('carModel').value = car.model;
       document.getElementById('carCapacity').value = car.capacity;
       document.getElementById('carLocation').value = car.current_location;
+      document.getElementById('carGroupId').value = car.group_id || currentGroupId();
       document.getElementById('carActive').checked = car.is_active;
       document.getElementById('carActiveGroup').style.display = 'block';
 
@@ -359,6 +429,7 @@
         model: document.getElementById('carModel').value,
         capacity: document.getElementById('carCapacity').value,
         current_location: document.getElementById('carLocation').value,
+        group_id: document.getElementById('carGroupId').value,
         is_active: document.getElementById('carActive').checked
       };
 
@@ -409,7 +480,7 @@
     // === ユーザー管理 ===
     async function loadUsers() {
       try {
-        const res = await fetch('/api/auth/users');
+        const res = await fetch(`/api/auth/users?group=${currentGroupCode}`);
         const users = await res.json();
 
         const tbody = document.getElementById('usersTableBody');
@@ -443,6 +514,7 @@
       document.getElementById('newUserName').value = '';
       document.getElementById('newPassword').value = '';
       document.getElementById('newUserRole').value = 'user';
+      document.getElementById('newUserGroupId').value = currentGroupId();
 
       new bootstrap.Modal(document.getElementById('userModal')).show();
     }
@@ -452,7 +524,8 @@
         employee_id: document.getElementById('newEmployeeId').value,
         name: document.getElementById('newUserName').value,
         password: document.getElementById('newPassword').value,
-        role: document.getElementById('newUserRole').value
+        role: document.getElementById('newUserRole').value,
+        group_id: document.getElementById('newUserGroupId').value
       };
 
       if (!data.employee_id || !data.name || !data.password) {
@@ -486,6 +559,7 @@
       document.getElementById('editUserName').value = user.name;
       document.getElementById('editPassword').value = '';
       document.getElementById('editUserRole').value = user.role;
+      document.getElementById('editUserGroupId').value = user.group_id || 1;
       new bootstrap.Modal(document.getElementById('editUserModal')).show();
     }
 
@@ -494,7 +568,8 @@
       const data = {
         employee_id: document.getElementById('editEmployeeId').value,
         name: document.getElementById('editUserName').value,
-        role: document.getElementById('editUserRole').value
+        role: document.getElementById('editUserRole').value,
+        group_id: document.getElementById('editUserGroupId').value
       };
       const password = document.getElementById('editPassword').value;
       if (password) data.password = password;

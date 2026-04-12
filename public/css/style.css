@@ -9,6 +9,15 @@
   --card-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
 }
 
+/* 安芸太田町組テーマ：緑系 */
+body.theme-akiota {
+  --primary: #059669;
+  --primary-dark: #047857;
+  --sidebar-bg: #064e3b;
+  --sidebar-active: #10b981;
+  --bg-main: #ecfdf5;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -693,6 +702,181 @@ body {
   font-size: 24px;
   cursor: pointer;
   padding: 4px 8px;
+}
+
+/* ===== グループタブ ===== */
+.group-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.group-tab {
+  background: #fff;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px 10px 0 0;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 4px solid transparent;
+}
+
+.group-tab:hover {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.group-tab.active {
+  color: #0f172a;
+  border-color: var(--tab-color);
+  border-bottom-color: var(--tab-color);
+  background: #fff;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.06);
+}
+
+.group-tab-single {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border-radius: 8px;
+  border-left: 4px solid #1a73e8;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  box-shadow: var(--card-shadow);
+  margin-bottom: 16px;
+}
+
+body.theme-akiota .group-tab-single {
+  border-left-color: #059669;
+}
+
+/* ===== 運行記録簿 ===== */
+.operation-log-sheet {
+  background: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.operation-log-sheet .log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.operation-log-sheet .log-title {
+  background: #000;
+  color: #fff;
+  padding: 10px 30px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+
+.operation-log-sheet .log-meta,
+.operation-log-sheet .log-sub {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.operation-log-sheet .log-sub {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border: 1px solid #000;
+}
+
+.operation-log-sheet .meta-label {
+  background: #000;
+  color: #fff;
+  padding: 4px 10px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.operation-log-sheet .meta-value {
+  font-weight: 600;
+}
+
+.operation-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.operation-log-table th,
+.operation-log-table td {
+  border: 1px solid #000;
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.operation-log-table thead th {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
+.operation-log-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-log-table td:last-child {
+  text-align: left;
+}
+
+.operation-log-table tr.empty-row td {
+  color: #cbd5e1;
+  height: 28px;
+}
+
+.operation-log-sheet .log-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 16px;
+  font-weight: 600;
+}
+
+.operation-log-sheet .stamp-box {
+  border-collapse: collapse;
+}
+
+.operation-log-sheet .stamp-box th,
+.operation-log-sheet .stamp-box td {
+  border: 1px solid #000;
+  width: 60px;
+  height: 30px;
+  text-align: center;
+  font-weight: 700;
+}
+
+@media print {
+  .sidebar, .mobile-menu-btn, .page-header, .group-tabs,
+  .d-print-none, .card.mb-3 {
+    display: none !important;
+  }
+  .main-content {
+    margin-left: 0;
+    padding: 0;
+  }
+  .operation-log-sheet {
+    box-shadow: none;
+    border-radius: 0;
+  }
 }
 
 /* ===== アニメーション ===== */
