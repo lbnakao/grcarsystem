@@ -14,15 +14,16 @@
     <!-- サイドバー -->
     <nav class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <h2><i class="bi bi-car-front-fill"></i> GR社用車管理</h2>
+        <h2><i class="bi bi-car-front-fill"></i> <span id="brandName">GR社用車管理</span></h2>
         <small>グローバルリゾート</small>
         <div style="font-size:9px;color:#64748b;margin-top:4px;">supported by (株)リベルブライト</div>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="/" class="active"><i class="bi bi-calendar3"></i> 予約カレンダー</a></li>
-        <li><a href="#" onclick="showCarStatus()"><i class="bi bi-geo-alt"></i> 車両ステータス</a></li>
+        <li><a href="#" id="navCalendar" class="active" onclick="showCalendar(); return false;"><i class="bi bi-calendar3"></i> 予約カレンダー</a></li>
+        <li><a href="#" onclick="showCarStatus(); return false;"><i class="bi bi-geo-alt"></i> 車両ステータス</a></li>
+        <li id="navOperationLog" class="d-none"><a href="#" onclick="showOperationLog(); return false;"><i class="bi bi-journal-text"></i> 運行記録簿</a></li>
         <li id="adminLink" class="d-none"><a href="/admin"><i class="bi bi-gear"></i> 管理ページ</a></li>
-        <li><a href="/manual.html" target="_blank"><i class="bi bi-book"></i> 操作説明書</a></li>
+        <li><a href="/manual.html" target="_blank" id="manualLink"><i class="bi bi-book"></i> 操作説明書</a></li>
       </ul>
       <div class="sidebar-footer">
         <div class="user-info">
@@ -47,12 +48,15 @@
         <i class="bi bi-gear-fill"></i>
       </button>
 
+      <!-- グループタブ（管理者は両方、一般は自グループのみ） -->
+      <div class="group-tabs" id="groupTabs"></div>
+
       <!-- カレンダービュー -->
       <div id="calendarView">
         <div class="page-header">
-          <h1><i class="bi bi-calendar3"></i> 予約カレンダー</h1>
+          <h1><i class="bi bi-calendar3"></i> <span id="pageTitleText">予約カレンダー</span></h1>
           <div class="d-flex gap-2">
-            <a href="/manual.html" target="_blank" class="btn btn-danger btn-sm">
+            <a href="/manual.html" target="_blank" class="btn btn-danger btn-sm" id="manualLinkHeader">
               <i class="bi bi-book"></i> 操作説明書
             </a>
             <button class="btn btn-primary btn-sm" onclick="openNewReservation()">
@@ -77,6 +81,42 @@
           </button>
         </div>
         <div class="car-status-grid" id="carStatusDetail"></div>
+      </div>
+
+      <!-- 運行記録簿ビュー（安芸太田町組のみ） -->
+      <div id="operationLogView" class="d-none">
+        <div class="page-header">
+          <h1><i class="bi bi-journal-text"></i> 運行記録簿</h1>
+          <button class="btn btn-outline-secondary btn-sm" onclick="showCalendar()">
+            <i class="bi bi-arrow-left"></i> カレンダーに戻る
+          </button>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-5">
+                <label class="form-label mb-1" style="font-size:13px;">車両</label>
+                <select class="form-select" id="logCarSelect"></select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label mb-1" style="font-size:13px;">年</label>
+                <select class="form-select" id="logYearSelect"></select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label mb-1" style="form-size:13px;">月</label>
+                <select class="form-select" id="logMonthSelect"></select>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-primary w-100" onclick="loadOperationLog()">
+                  <i class="bi bi-search"></i> 表示
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="operationLogContent"></div>
       </div>
     </main>
   </div>
@@ -170,6 +210,68 @@
         </div>
         <div class="modal-body" id="detailBody"></div>
         <div class="modal-footer" id="detailFooter"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 完了モーダル（安芸太田町組用） -->
+  <div class="modal fade" id="completeModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white" style="border-radius:12px 12px 0 0;">
+          <h5 class="modal-title"><i class="bi bi-check-circle-fill"></i> 使用完了</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="completeForm">
+            <input type="hidden" id="completeResId">
+            <div class="alert alert-info py-2 px-3" style="font-size:13px;">
+              <i class="bi bi-info-circle"></i> 帰着時間は「完了」ボタン押下時刻で自動記録されます。
+            </div>
+            <div class="mb-3">
+              <label class="form-label">出庫時 積算距離 (km) <span class="text-muted">※前回帰着値を引用</span></label>
+              <input type="number" step="0.1" class="form-control" id="completeStartOdo">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">帰着時 積算距離 (km) <span class="text-danger">*</span></label>
+              <input type="number" step="0.1" class="form-control" id="completeEndOdo" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">使用距離 (km)</label>
+              <input type="text" class="form-control" id="completeDistance" readonly style="background:#f1f5f9;">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">行先・使用目的 <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="completePurpose" rows="2" placeholder="例: 温井→広島市 資材運搬" required></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-success" onclick="submitComplete()">
+            <i class="bi bi-check-lg"></i> 完了を確定
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 完了リマインダーモーダル（安芸太田ログイン時） -->
+  <div class="modal fade" id="completionPromptModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header" id="completionPromptHeader">
+          <h5 class="modal-title" id="completionPromptTitle"></h5>
+        </div>
+        <div class="modal-body" id="completionPromptBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="completionPromptNotYet">
+            完了していない
+          </button>
+          <button type="button" class="btn btn-success" id="completionPromptDone">
+            <i class="bi bi-check-lg"></i> 完了
+          </button>
+        </div>
       </div>
     </div>
   </div>

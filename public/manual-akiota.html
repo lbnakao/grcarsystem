@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>安芸太田町組 社用車管理 操作説明書</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+      background: #fff;
+      color: #1e293b;
+      line-height: 1.9;
+      font-size: 16px;
+    }
+
+    /* ===== 表紙 ===== */
+    .cover {
+      min-height: 60vh;
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: #fff;
+      text-align: center;
+      padding: 80px 20px;
+    }
+
+    .cover h1 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .cover h2 {
+      font-size: 22px;
+      font-weight: 400;
+      opacity: 0.9;
+      margin-bottom: 24px;
+    }
+
+    .cover-car {
+      font-size: 80px;
+      display: block;
+      margin-bottom: 20px;
+    }
+
+    /* ===== 本文 ===== */
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    .section {
+      margin-bottom: 48px;
+      padding-bottom: 24px;
+      border-bottom: 2px solid #a7f3d0;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    h2 {
+      font-size: 26px;
+      color: #047857;
+      margin-bottom: 16px;
+      padding-left: 14px;
+      border-left: 6px solid #059669;
+    }
+
+    h3 {
+      font-size: 19px;
+      color: #065f46;
+      margin: 20px 0 10px;
+    }
+
+    p {
+      margin-bottom: 12px;
+    }
+
+    ol, ul {
+      padding-left: 28px;
+      margin-bottom: 12px;
+    }
+
+    ol li, ul li {
+      margin-bottom: 6px;
+    }
+
+    /* 目立つボックス */
+    .important {
+      background: #fef3c7;
+      border-left: 6px solid #f59e0b;
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .important::before {
+      content: "⚠ 重要";
+      display: block;
+      font-weight: 700;
+      color: #92400e;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .tip {
+      background: #dcfce7;
+      border-left: 6px solid #22c55e;
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+
+    .tip::before {
+      content: "💡 ヒント";
+      display: block;
+      font-weight: 700;
+      color: #166534;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    /* ボタン表現 */
+    .btn-example {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 14px;
+      margin: 0 4px;
+      color: #fff;
+    }
+
+    .btn-green { background: #059669; }
+    .btn-red { background: #dc2626; }
+    .btn-yellow { background: #f59e0b; color: #1e293b; }
+
+    /* 手順の番号を大きく */
+    ol.steps {
+      counter-reset: step;
+      list-style: none;
+      padding-left: 0;
+    }
+
+    ol.steps > li {
+      counter-increment: step;
+      position: relative;
+      padding: 12px 0 12px 56px;
+      border-bottom: 1px dashed #d1fae5;
+    }
+
+    ol.steps > li::before {
+      content: counter(step);
+      position: absolute;
+      left: 8px;
+      top: 12px;
+      width: 36px;
+      height: 36px;
+      background: #059669;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    ol.steps > li:last-child {
+      border-bottom: none;
+    }
+
+    /* 目次 */
+    .toc {
+      background: #ecfdf5;
+      border: 2px solid #a7f3d0;
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 40px;
+    }
+
+    .toc h2 {
+      font-size: 20px;
+      border: none;
+      padding: 0;
+      margin-bottom: 12px;
+    }
+
+    .toc ol {
+      padding-left: 24px;
+    }
+
+    .toc a {
+      color: #047857;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    /* 強調 */
+    strong {
+      color: #b91c1c;
+    }
+
+    .print-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #fff;
+      color: #047857;
+      border: 2px solid #059669;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    /* ===== 画面モック ===== */
+    .mockup {
+      margin: 16px 0 24px;
+      border: 2px solid #cbd5e1;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+      background: #fff;
+    }
+
+    .mock-caption {
+      background: #f1f5f9;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      border-bottom: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mock-caption .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .mock-caption .dot.r { background: #ef4444; }
+    .mock-caption .dot.y { background: #f59e0b; }
+    .mock-caption .dot.g { background: #22c55e; }
+
+    .mock-body {
+      padding: 16px;
+      background: #ecfdf5;
+      font-size: 13px;
+    }
+
+    /* ログイン画面モック */
+    .mock-login {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      padding: 30px 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .mock-login-card {
+      background: #fff;
+      padding: 24px 20px;
+      border-radius: 12px;
+      width: 260px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    .mock-login-card .car-icon {
+      font-size: 36px;
+      color: #059669;
+    }
+    .mock-login-card h4 {
+      font-size: 15px;
+      margin: 6px 0 14px;
+      color: #0f172a;
+    }
+    .mock-input {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      text-align: left;
+      color: #64748b;
+      background: #f8fafc;
+    }
+    .mock-btn-full {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      background: #059669;
+      color: #fff;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      border: none;
+      margin-top: 4px;
+    }
+
+    /* カレンダー画面モック */
+    .mock-calendar {
+      background: #fff;
+      padding: 12px;
+    }
+    .mock-cal-head {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 2px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .mock-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 1px;
+      background: #cbd5e1;
+      border: 1px solid #cbd5e1;
+    }
+    .mock-cal-grid > div {
+      background: #fff;
+      padding: 6px 4px;
+      min-height: 44px;
+      font-size: 10px;
+      color: #64748b;
+    }
+    .mock-cal-grid .weekday {
+      background: #f1f5f9;
+      font-weight: 700;
+      text-align: center;
+      padding: 4px;
+      min-height: auto;
+    }
+    .mock-cal-grid .event {
+      background: #059669;
+      color: #fff;
+      border-radius: 3px;
+      padding: 2px 4px;
+      font-size: 9px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .mock-cal-grid .today {
+      background: #fef3c7;
+    }
+
+    /* 予約詳細モック */
+    .mock-modal {
+      background: #fff;
+      border-radius: 10px;
+      max-width: 340px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid #cbd5e1;
+    }
+    .mock-modal-header {
+      background: #059669;
+      color: #fff;
+      padding: 10px 14px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .mock-modal-body {
+      padding: 12px 14px;
+      font-size: 12px;
+    }
+    .mock-modal-body .row {
+      padding: 4px 0;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .mock-modal-body .row:last-child { border-bottom: none; }
+    .mock-modal-body .label {
+      color: #64748b;
+      font-size: 11px;
+    }
+    .mock-modal-footer {
+      padding: 10px 14px;
+      background: #f8fafc;
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .mock-btn {
+      padding: 5px 12px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .mock-btn.green { background: #059669; }
+    .mock-btn.yellow { background: #f59e0b; color: #1e293b; }
+    .mock-btn.red { background: #dc2626; }
+    .mock-btn.gray { background: #64748b; }
+
+    /* 完了入力モック */
+    .mock-modal-header.danger { background: #dc2626; }
+    .mock-modal-header.warn { background: #f59e0b; color: #1e293b; }
+
+    .mock-form-row {
+      margin-bottom: 8px;
+    }
+    .mock-form-row .mock-label {
+      display: block;
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 2px;
+      font-weight: 600;
+    }
+    .mock-form-row .mock-value {
+      background: #f1f5f9;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* 運行記録簿モック */
+    .mock-log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+    .mock-log-table th,
+    .mock-log-table td {
+      border: 1px solid #94a3b8;
+      padding: 3px 4px;
+      text-align: center;
+    }
+    .mock-log-table th {
+      background: #f1f5f9;
+      font-weight: 700;
+    }
+
+    @media print {
+      .print-btn { display: none; }
+      .cover { min-height: auto; padding: 40px 20px; }
+      .section { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<button class="print-btn" onclick="window.print()">🖨 印刷</button>
+
+<!-- 表紙 -->
+<div class="cover">
+  <span class="cover-car">🚐</span>
+  <h1>安芸太田町組 社用車管理</h1>
+  <h2>操作説明書</h2>
+</div>
+
+<!-- 本文 -->
+<div class="container">
+
+  <!-- 目次 -->
+  <div class="toc">
+    <h2>もくじ</h2>
+    <ol>
+      <li><a href="#sec1">このシステムでできること</a></li>
+      <li><a href="#sec2">ログインのしかた</a></li>
+      <li><a href="#sec3">予約をとる</a></li>
+      <li><a href="#sec4">使い終わったら「完了」を押す</a></li>
+      <li><a href="#sec5">ログインした時に出るお知らせ</a></li>
+      <li><a href="#sec6">運行記録簿を見る・印刷する</a></li>
+      <li><a href="#sec7">こまった時は</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. 概要 -->
+  <div class="section" id="sec1">
+    <h2>1. このシステムでできること</h2>
+    <p>紙でつけていた運行記録簿を、スマホやパソコンから入力できるようにしたものです。</p>
+    <ul>
+      <li>社用車の予約をとる</li>
+      <li>使い終わったら「完了」ボタンを押して、距離と行先を入力する</li>
+      <li>月ごとの運行記録を画面で見たり印刷したりできる</li>
+    </ul>
+    <p>予約と「完了」の入力さえできれば、あとは自動で運行記録簿ができあがります。</p>
+  </div>
+
+  <!-- 2. ログイン -->
+  <div class="section" id="sec2">
+    <h2>2. ログインのしかた</h2>
+    <ol class="steps">
+      <li>ブラウザ（Chrome・Safari など）でシステムのページを開きます</li>
+      <li><strong>社員番号</strong> を入力します<br>（例：髙宮さんなら「101」）</li>
+      <li><strong>パスワード</strong> を入力して「ログイン」を押します</li>
+    </ol>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> ログイン画面</div>
+      <div class="mock-body mock-login">
+        <div class="mock-login-card">
+          <div class="car-icon">🚐</div>
+          <h4>安芸太田町組 社用車管理</h4>
+          <div class="mock-input">社員番号</div>
+          <div class="mock-input">パスワード</div>
+          <button class="mock-btn-full">ログイン</button>
+        </div>
+      </div>
+    </div>
+
+    <h3>ログアウト</h3>
+    <p>左側のメニュー下部にある <strong>「ログアウト」</strong> ボタンを押します。</p>
+
+    <div class="tip">
+      パスワードを忘れた時は管理者に連絡してください。
+    </div>
+  </div>
+
+  <!-- 3. 予約 -->
+  <div class="section" id="sec3">
+    <h2>3. 予約をとる</h2>
+    <p>ログインするとすぐにカレンダー画面になります。</p>
+    <ol class="steps">
+      <li>カレンダーで <strong>使いたい日</strong> をクリックします</li>
+      <li>予約フォームが出るので、次を入れます：
+        <ul style="margin-top:6px;">
+          <li>車両（キャラバン／ローザ／セルボ／アトレー）</li>
+          <li>開始時間と終了時間</li>
+          <li>出発場所と返却場所（例：温井、いこい、FHG など）</li>
+          <li>備考（任意）</li>
+        </ul>
+      </li>
+      <li>「保存」を押せば予約完了です</li>
+    </ol>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> カレンダー画面 — 使いたい日をクリック</div>
+      <div class="mock-body" style="padding:8px;">
+        <div class="mock-calendar">
+          <div class="mock-cal-head">
+            <span>&lt; 前月</span><span>2026年4月</span><span>次月 &gt;</span>
+          </div>
+          <div class="mock-cal-grid">
+            <div class="weekday">日</div><div class="weekday">月</div><div class="weekday">火</div><div class="weekday">水</div><div class="weekday">木</div><div class="weekday">金</div><div class="weekday">土</div>
+            <div>29</div><div>30</div><div>31</div><div>1</div><div>2</div><div>3</div><div>4</div>
+            <div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div>
+            <div>12 <div class="event">ローザ</div></div><div class="today">13</div><div>14</div><div>15<div class="event">キャラバン</div></div><div>16</div><div>17</div><div>18</div>
+            <div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div><div>25</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 予約フォーム</div>
+      <div class="mock-body">
+        <div class="mock-modal">
+          <div class="mock-modal-header">+ 新規予約</div>
+          <div class="mock-modal-body">
+            <div class="mock-form-row"><span class="mock-label">車両 *</span><div class="mock-value">キャラバン [AK-001] - 10人乗り ▼</div></div>
+            <div class="mock-form-row"><span class="mock-label">開始 *</span><div class="mock-value">2026/04/15　09:00</div></div>
+            <div class="mock-form-row"><span class="mock-label">終了 *</span><div class="mock-value">2026/04/15　17:00</div></div>
+            <div class="mock-form-row"><span class="mock-label">出発場所 *</span><div class="mock-value">温井</div></div>
+            <div class="mock-form-row"><span class="mock-label">返却場所 *</span><div class="mock-value">温井</div></div>
+          </div>
+          <div class="mock-modal-footer">
+            <span class="mock-btn gray">キャンセル</span>
+            <span class="mock-btn green">✓ 保存</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="important">
+      同じ車両・同じ時間に他の人の予約があると、警告が出て保存できません。別の時間にしてください。
+    </div>
+  </div>
+
+  <!-- 4. 完了 -->
+  <div class="section" id="sec4">
+    <h2>4. 使い終わったら「完了」を押す</h2>
+    <p>安芸太田町組の車両は、<strong>使い終わったら必ず「完了」ボタンを押してください</strong>。これを押さないと運行記録簿に残りません。</p>
+
+    <h3>手順</h3>
+    <ol class="steps">
+      <li>カレンダーで自分の予約をクリックします</li>
+      <li>画面の下にある <span class="btn-example btn-green">✓ 完了</span> ボタンを押します</li>
+      <li>入力画面が出るので、次を入れます：
+        <ul style="margin-top:6px;">
+          <li><strong>出庫時 積算距離</strong> — 前回の数字がすでに入っているので、そのままでOK</li>
+          <li><strong>帰着時 積算距離</strong> — 車のメーターの数字を見て入力</li>
+          <li><strong>使用距離</strong> — 自動で計算されます（入力しません）</li>
+          <li><strong>行先・使用目的</strong> — 例：「温井→広島市 資材運搬」</li>
+        </ul>
+      </li>
+      <li>「完了を確定」を押します</li>
+    </ol>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 予約詳細 — 下の「完了」ボタンを押す</div>
+      <div class="mock-body">
+        <div class="mock-modal">
+          <div class="mock-modal-header" style="background:#059669;">ⓘ 予約詳細</div>
+          <div class="mock-modal-body">
+            <div class="row"><span class="label">車両</span><br>キャラバン（AK-001）</div>
+            <div class="row"><span class="label">日時</span><br>4月15日　09:00 ～ 17:00</div>
+            <div class="row"><span class="label">出発 → 返却</span><br>温井 → 温井</div>
+            <div class="row"><span class="label">予約者</span><br>髙宮（101）</div>
+          </div>
+          <div class="mock-modal-footer">
+            <span class="mock-btn green">✓ 完了</span>
+            <span class="mock-btn yellow">✎ 編集</span>
+            <span class="mock-btn red">× キャンセル</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 完了入力画面</div>
+      <div class="mock-body">
+        <div class="mock-modal">
+          <div class="mock-modal-header">✓ 使用完了</div>
+          <div class="mock-modal-body">
+            <div style="background:#dbeafe;color:#1e40af;padding:6px 8px;border-radius:4px;font-size:11px;margin-bottom:8px;">ⓘ 帰着時間は「完了」ボタン押下時刻で自動記録されます</div>
+            <div class="mock-form-row"><span class="mock-label">出庫時 積算距離 (km)</span><div class="mock-value">12,345.0</div></div>
+            <div class="mock-form-row"><span class="mock-label">帰着時 積算距離 (km) *</span><div class="mock-value" style="background:#fff;">12,470.5</div></div>
+            <div class="mock-form-row"><span class="mock-label">使用距離 (km)</span><div class="mock-value">125.5</div></div>
+            <div class="mock-form-row"><span class="mock-label">行先・使用目的 *</span><div class="mock-value" style="background:#fff;">温井→広島市 資材運搬</div></div>
+          </div>
+          <div class="mock-modal-footer">
+            <span class="mock-btn gray">キャンセル</span>
+            <span class="mock-btn green">✓ 完了を確定</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      帰着時間は「完了を確定」を押した時刻が自動で記録されます。入力する必要はありません。
+    </div>
+
+    <div class="important">
+      各車両の一番最初だけ、出庫距離が「0」になっています。<br>
+      その時だけメーターの数字を見て正しい値を入れてください。<br>
+      2回目からは前回の数字が自動で入ります。
+    </div>
+  </div>
+
+  <!-- 5. ログイン時のお知らせ -->
+  <div class="section" id="sec5">
+    <h2>5. ログインした時に出るお知らせ</h2>
+    <p>完了ボタンの押し忘れを防ぐために、ログインした時にお知らせが出ることがあります。</p>
+
+    <h3>🟡 黄色いお知らせ「運転は終了しましたか？」</h3>
+    <p>自分の予約の時間内にログインすると出ます。</p>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 使用中のお知らせ</div>
+      <div class="mock-body">
+        <div class="mock-modal">
+          <div class="mock-modal-header warn">❓ 運転は終了しましたか？</div>
+          <div class="mock-modal-body">
+            <div style="background:#dbeafe;color:#1e40af;padding:6px 8px;border-radius:4px;font-size:11px;margin-bottom:8px;">現在、以下の車両を使用中です。<br><strong>運転は終了しましたか？</strong></div>
+            <div class="row"><span class="label">車両</span><br>キャラバン（AK-001）</div>
+            <div class="row"><span class="label">予約期間</span><br>4月15日 09:00 ～ 17:00</div>
+          </div>
+          <div class="mock-modal-footer">
+            <span class="mock-btn gray">完了していない</span>
+            <span class="mock-btn green">✓ 完了</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>🔴 赤いお知らせ「完了ボタンが押されていません」</h3>
+    <p>自分の予約の終了時間を過ぎているのに、まだ「完了」を押していない時に出ます。</p>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 終了時間を過ぎた時の警告</div>
+      <div class="mock-body">
+        <div class="mock-modal">
+          <div class="mock-modal-header danger">⚠ 完了ボタンが押されていません</div>
+          <div class="mock-modal-body">
+            <div style="background:#fee2e2;color:#991b1b;padding:6px 8px;border-radius:4px;font-size:11px;margin-bottom:8px;"><strong>終了日時を過ぎていますが、完了ボタンが押されていません。</strong><br>使用が終了している場合は「完了」を押してください。</div>
+            <div class="row"><span class="label">車両</span><br>キャラバン（AK-001）</div>
+            <div class="row"><span class="label">予約期間</span><br>4月14日 09:00 ～ 17:00</div>
+          </div>
+          <div class="mock-modal-footer">
+            <span class="mock-btn gray">完了していない</span>
+            <span class="mock-btn green">✓ 完了</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>どちらの場合も選択肢は 2つ</h3>
+    <ul>
+      <li><span class="btn-example btn-green">完了</span> を押す → 完了画面が開くので、距離と行先を入れて確定してください</li>
+      <li><span style="display:inline-block;padding:4px 14px;border-radius:6px;background:#64748b;color:#fff;font-weight:700;font-size:14px;margin:0 4px;">完了していない</span> を押す → お知らせを閉じます（次回ログイン時にまた出ます）</li>
+    </ul>
+
+    <div class="important">
+      運転が終わっているのに「完了していない」を押し続けると、運行記録簿に記録されません。<br>
+      運転が終わったら必ず「完了」を押してください。
+    </div>
+  </div>
+
+  <!-- 6. 運行記録簿 -->
+  <div class="section" id="sec6">
+    <h2>6. 運行記録簿を見る・印刷する</h2>
+    <p>これまで紙でつけていた運行記録簿と同じものが画面で見られます。</p>
+
+    <ol class="steps">
+      <li>左メニューの <strong>「運行記録簿」</strong> をクリックします</li>
+      <li>車両と年月を選びます</li>
+      <li>「表示」ボタンを押します</li>
+      <li>一覧が出てきます。そのまま画面で確認できます</li>
+      <li>紙に印刷したい時は、右下の <strong>「🖨 印刷」ボタン</strong> を押します</li>
+    </ol>
+
+    <div class="mockup">
+      <div class="mock-caption"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span> 運行記録簿の画面</div>
+      <div class="mock-body" style="background:#fff;">
+        <div style="background:#000;color:#fff;padding:6px 16px;display:inline-block;font-weight:700;letter-spacing:3px;margin-bottom:6px;">運行記録簿</div>
+        <div style="font-size:11px;margin-bottom:6px;">車種: キャラバン ／ 2026年 4月度 ／ 拠点: 温井</div>
+        <table class="mock-log-table">
+          <thead>
+            <tr><th>日</th><th>使用者</th><th>出庫</th><th>帰着</th><th>積算<br>(出庫)</th><th>積算<br>(帰着)</th><th>使用距離</th><th>行先・使用目的</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>15</td><td>髙宮</td><td>9:00</td><td>17:12</td><td>12,345</td><td>12,470</td><td>125</td><td style="text-align:left;">温井→広島市 資材運搬</td></tr>
+            <tr><td>18</td><td>佐伯</td><td>8:30</td><td>15:45</td><td>12,470</td><td>12,560</td><td>90</td><td style="text-align:left;">いこい→加計 お迎え</td></tr>
+            <tr><td>&nbsp;</td><td></td><td>：</td><td>：</td><td></td><td></td><td></td><td></td></tr>
+            <tr><td>&nbsp;</td><td></td><td>：</td><td>：</td><td></td><td></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tip">
+      「完了」ボタンを押した予約だけが運行記録簿に出ます。<br>
+      押し忘れた予約は出ないので、気をつけてください。
+    </div>
+  </div>
+
+  <!-- 7. こまった時 -->
+  <div class="section" id="sec7">
+    <h2>7. こまった時は</h2>
+
+    <h3>パスワードを忘れた</h3>
+    <p>管理者に連絡してリセットしてもらってください。</p>
+
+    <h3>間違った予約を作ってしまった</h3>
+    <p>予約をクリックして、<span class="btn-example btn-red">× キャンセル</span> を押せば予約を取り消せます。</p>
+
+    <h3>間違った距離を入れて「完了」してしまった</h3>
+    <p>管理者に連絡してください。管理者が修正できます。</p>
+
+    <h3>完了ボタンを押し忘れたまま何日か経った</h3>
+    <p>次にログインした時に赤いお知らせが出ます。そこで「完了」を押して、実際の距離と行先を入れてください。<br>
+    帰着時刻はその時押した時刻になりますが、運行記録簿には残ります。</p>
+
+    <div class="important">
+      動かないなど、システム自体のトラブルは管理者に連絡してください。
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
