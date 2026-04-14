@@ -13,7 +13,7 @@ router.post('/login', async (req, res) => {
     }
 
     const rows = await query(
-      `SELECT u.id, u.employee_id, u.password, u.name, u.role, u.group_id, u.cross_group,
+      `SELECT u.id, u.employee_id, u.password, u.name, u.role, u.group_id, u.cross_group, u.keiri_access,
               g.code as group_code, g.name as group_name, g.color as group_color
        FROM users u
        LEFT JOIN groups g ON u.group_id = g.id
@@ -40,10 +40,19 @@ router.post('/login', async (req, res) => {
       group_code: user.group_code,
       group_name: user.group_name,
       group_color: user.group_color,
-      cross_group: !!user.cross_group
+      cross_group: !!user.cross_group,
+      keiri_access: !!user.keiri_access
     };
 
-    res.json({ message: 'ログイン成功', user: req.session.user });
+    // リダイレクト先を決定
+    //   管理者 → 選択画面 /select
+    //   経理アクセス権のみ（井上さん） → /keiri/
+    //   それ以外（車両予約の社員） → /
+    let redirect = '/';
+    if (user.role === 'admin') redirect = '/select';
+    else if (user.keiri_access) redirect = '/keiri/';
+
+    res.json({ message: 'ログイン成功', user: req.session.user, redirect });
   } catch (e) {
     console.error('ログインエラー:', e);
     res.status(500).json({ error: 'サーバーエラー' });

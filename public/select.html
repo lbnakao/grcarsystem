@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GR 管理システム - メニュー選択</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  body { background: linear-gradient(135deg, #1F4E79 0%, #2d5f91 100%); min-height: 100vh; font-family: 'Noto Sans JP', sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px; }
+  .header { color: #fff; text-align: center; margin-bottom: 40px; }
+  .header h1 { font-weight: 700; font-size: 28px; margin-bottom: 8px; }
+  .header .user { font-size: 14px; opacity: 0.9; }
+  .menu { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .menu-card {
+    background: #fff; border-radius: 16px; padding: 40px 32px; cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); text-align: center; border: none;
+  }
+  .menu-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  .menu-card .icon { font-size: 64px; margin-bottom: 16px; }
+  .menu-card.cars .icon { color: #e17055; }
+  .menu-card.keiri .icon { color: #0984e3; }
+  .menu-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #2d3436; }
+  .menu-card p { color: #636e72; font-size: 13px; margin: 0; }
+  .logout-btn { position: absolute; top: 24px; right: 24px; background: rgba(255,255,255,0.15); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+  .logout-btn:hover { background: rgba(255,255,255,0.25); }
+  @media (max-width: 700px) { .menu { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <button class="logout-btn" id="logoutBtn"><i class="bi bi-box-arrow-right"></i> ログアウト</button>
+  <div class="wrap">
+    <div class="header">
+      <h1>🏢 GR 管理システム</h1>
+      <div class="user" id="userName">ログイン中...</div>
+      <div style="font-size:13px;margin-top:8px;opacity:0.85;">使いたいシステムを選んでください</div>
+    </div>
+    <div class="menu">
+      <button class="menu-card cars" onclick="location.href='/'">
+        <div class="icon"><i class="bi bi-car-front-fill"></i></div>
+        <h2>🚗 社用車予約</h2>
+        <p>車両の予約・返却・カレンダー管理</p>
+      </button>
+      <button class="menu-card keiri" onclick="location.href='/keiri/'">
+        <div class="icon"><i class="bi bi-calculator-fill"></i></div>
+        <h2>📊 経理システム</h2>
+        <p>通帳・請求書・消込管理</p>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    (async function() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) { location.href = '/login'; return; }
+        const d = await res.json();
+        document.getElementById('userName').textContent = d.user.name + ' さん（' + d.user.employee_id + '）';
+        // 権限がなければリダイレクト（通常は管理者だけがここに来る）
+        // admin でもなく keiri_access も無ければ車両専用
+        if (d.user.role !== 'admin' && !d.user.keiri_access) {
+          location.href = '/';
+          return;
+        }
+        // 経理専用なら経理へ直行
+        if (d.user.role !== 'admin' && d.user.keiri_access) {
+          location.href = '/keiri/';
+          return;
+        }
+      } catch (e) { location.href = '/login'; }
+    })();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      location.href = '/login';
+    });
+  </script>
+</body>
+</html>

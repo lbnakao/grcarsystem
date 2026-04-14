@@ -39,6 +39,21 @@ async function run(sql, params = []) {
   }
 }
 
+// INSERT して挿入ID(id)を返す。プレーンなINSERT文に対して使用（ON CONFLICT系は run() を使う）
+async function runInsert(sql, params = []) {
+  if (mode === 'pg') {
+    const pgSql = convertPlaceholders(sql) + ' RETURNING id';
+    const result = await pool.query(pgSql, params);
+    return result.rows[0] ? result.rows[0].id : null;
+  } else {
+    sqliteDb.run(sql, params);
+    const r = sqliteDb.exec('SELECT last_insert_rowid() as id');
+    saveSqlite();
+    if (r.length > 0 && r[0].values.length > 0) return r[0].values[0][0];
+    return null;
+  }
+}
+
 // ? → $1, $2, ... に変換（PostgreSQL用）
 function convertPlaceholders(sql) {
   let idx = 0;
@@ -238,6 +253,8 @@ async function migrateSchema() {
   // 既存のusers/cars/reservationsにgroup_id等が無ければ追加
   await addColumnIfMissing('users', 'group_id', 'INTEGER DEFAULT 1');
   await addColumnIfMissing('users', 'cross_group', 'INTEGER DEFAULT 0');
+  // 経理モジュールへのアクセス権（井上さん=201、管理者=admin）
+  await addColumnIfMissing('users', 'keiri_access', 'INTEGER DEFAULT 0');
   await addColumnIfMissing('cars', 'group_id', 'INTEGER DEFAULT 1');
   await addColumnIfMissing('reservations', 'start_odometer', 'REAL');
   await addColumnIfMissing('reservations', 'end_odometer', 'REAL');
@@ -256,6 +273,149 @@ async function migrateSchema() {
   const crossEmpIds = ['001', '009', '010', '101'];
   for (const eid of crossEmpIds) {
     await run("UPDATE users SET cross_group = 1 WHERE employee_id = ?", [eid]);
+  }
+
+  // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
+  await createKeiriTables();
+}
+
+// ===== 経理モジュール用テーブル =====
+async function createKeiriTables() {
+  const autoIncPK = (mode === 'pg') ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const nowDefault = (mode === 'pg') ? 'TIMESTAMP DEFAULT NOW()' : "TEXT DEFAULT (datetime('now','localtime'))";
+
+  // 請求書
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_invoices (
+      id ${autoIncPK},
+      vendor TEXT NOT NULL,
+      category TEXT,
+      payment_method TEXT,
+      due_date TEXT,
+      facility TEXT,
+      entity TEXT DEFAULT '',
+      transaction_date TEXT,
+      amount INTEGER DEFAULT 0,
+      carry_1 INTEGER DEFAULT 0,
+      carry_2 INTEGER DEFAULT 0,
+      carry_3 INTEGER DEFAULT 0,
+      amount_cleared INTEGER DEFAULT 0,
+      carry_1_cleared INTEGER DEFAULT 0,
+      carry_2_cleared INTEGER DEFAULT 0,
+      carry_3_cleared INTEGER DEFAULT 0,
+      month TEXT,
+      year INTEGER,
+      note TEXT,
+      status TEXT DEFAULT '未',
+      cleared_at TEXT,
+      matched_bank_tx_id INTEGER,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 通帳取引
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_bank_transactions (
+      id ${autoIncPK},
+      account TEXT NOT NULL,
+      batch_id TEXT NOT NULL,
+      row_number INTEGER,
+      tx_date TEXT NOT NULL,
+      value_date TEXT,
+      withdrawal INTEGER DEFAULT 0,
+      deposit INTEGER DEFAULT 0,
+      check_type TEXT,
+      balance INTEGER DEFAULT 0,
+      tx_type TEXT,
+      detail_type TEXT,
+      bank_name TEXT,
+      branch_name TEXT,
+      description TEXT,
+      description_pattern TEXT DEFAULT '',
+      vendor_name TEXT DEFAULT '',
+      category TEXT DEFAULT '',
+      facility TEXT DEFAULT '',
+      is_cleared TEXT DEFAULT '',
+      note1 TEXT DEFAULT '',
+      note2 TEXT DEFAULT '',
+      month TEXT,
+      year INTEGER,
+      auto_categorized INTEGER DEFAULT 0,
+      matched_invoice_id INTEGER,
+      imported_at ${nowDefault}
+    )
+  `);
+
+  // 学習ルール
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_category_rules (
+      id ${autoIncPK},
+      description_pattern TEXT NOT NULL,
+      account TEXT DEFAULT '',
+      category TEXT DEFAULT '',
+      facility TEXT DEFAULT '',
+      vendor_name TEXT DEFAULT '',
+      priority INTEGER DEFAULT 0,
+      match_count INTEGER DEFAULT 0,
+      last_used_at TEXT,
+      created_at ${nowDefault},
+      updated_at ${nowDefault},
+      UNIQUE(description_pattern, account)
+    )
+  `);
+
+  // 銀行口座マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_bank_accounts (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 施設マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_facilities (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 消込履歴
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_clear_history (
+      id ${autoIncPK},
+      invoice_id INTEGER,
+      clear_type TEXT,
+      cleared_at TEXT
+    )
+  `);
+
+  // 初期データ（空の場合のみ）
+  const bankAccCount = await query("SELECT COUNT(*) as c FROM keiri_bank_accounts");
+  if (bankAccCount[0].c === 0) {
+    await run("INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)",
+      ['リゾート親', 'リゾート親口座', 1]);
+    await run("INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)",
+      ['モーテル', 'モーテル口座', 2]);
+    await run("INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)",
+      ['レジデンス', 'レジデンス口座', 3]);
+  }
+
+  const facCount = await query("SELECT COUNT(*) as c FROM keiri_facilities");
+  if (facCount[0].c === 0) {
+    const facList = [
+      'リゾート', 'ビュー', 'デルーネ', 'デルーネ西館', '天神ハウス', '本川', '竹原', 'たけはら',
+      'フォレストヒルズ', '温井', 'いこいの村', 'グリーンシャワー', 'パルコ',
+      'ほうらいの里', 'ほうらい(客室)', 'カフェ', '沖縄', '周防大島', '弥山',
+      'サウナ', 'マンスリー', 'ココユニバース', '不明'
+    ];
+    for (let i = 0; i < facList.length; i++) {
+      await run("INSERT INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [facList[i], i]);
+    }
   }
 }
 
@@ -328,6 +488,20 @@ async function seedData() {
     }
   }
 
+  // 経理担当 井上さん（201）を登録
+  const inoue = await query("SELECT id FROM users WHERE employee_id = ?", ['201']);
+  if (inoue.length === 0) {
+    const hash = bcrypt.hashSync('igr2026', 10);
+    await run("INSERT INTO users (employee_id, password, name, role, group_id, keiri_access) VALUES (?, ?, ?, ?, ?, ?)",
+      ['201', hash, '井上', 'user', grId, 1]);
+  } else {
+    // 既に存在する場合は keiri_access を立てる
+    await run("UPDATE users SET keiri_access = 1 WHERE employee_id = ?", ['201']);
+  }
+
+  // 管理者にも keiri_access を付与
+  await run("UPDATE users SET keiri_access = 1 WHERE role = 'admin'");
+
   // GRサンプル車両
   const grCars = await query("SELECT id FROM cars WHERE group_id = ?", [grId]);
   if (grCars.length === 0) {
@@ -353,4 +527,4 @@ async function seedData() {
   }
 }
 
-module.exports = { initDatabase, query, run };
+module.exports = { initDatabase, query, run, runInsert };
