@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GR経理 - 統合経理システム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: #f0f2f5; color: #2d3436; font-size: 13px; }
+
+  /* ─── ナビ ─── */
+  .nav { background: #1F4E79; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .nav-title { font-size: 18px; font-weight: 700; }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab { background: rgba(255,255,255,0.1); color: #fff; border: none; padding: 10px 18px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .nav-tab:hover { background: rgba(255,255,255,0.2); }
+  .nav-tab.active { background: #fff; color: #1F4E79; font-weight: 700; }
+
+  /* ─── メイン ─── */
+  .main { max-width: 1600px; margin: 0 auto; padding: 16px; }
+
+  /* ─── サブタブ（口座、エンティティ） ─── */
+  .sub-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+  .sub-tab { padding: 8px 16px; border: 2px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .sub-tab:hover { border-color: #0984e3; }
+  .sub-tab.active { background: #0984e3; color: #fff; border-color: #0984e3; font-weight: 700; }
+
+  /* ─── 月タブ ─── */
+  .month-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+  .month-tab { padding: 6px 14px; border: 2px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .month-tab:hover { border-color: #00b894; }
+  .month-tab.active { background: #00b894; color: #fff; border-color: #00b894; font-weight: 700; }
+
+  /* ─── フィルタバー ─── */
+  .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-bar select, .filter-bar input { padding: 7px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; font-family: inherit; background: #fff; }
+  .filter-bar input[type=text] { min-width: 200px; }
+
+  /* ─── サマリー ─── */
+  .summary-cards { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .summary-card { background: #fff; border-radius: 10px; padding: 14px 20px; flex: 1; min-width: 150px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .summary-card .label { font-size: 11px; color: #636e72; margin-bottom: 4px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card .value.red { color: #d63031; }
+  .summary-card .value.green { color: #00b894; }
+  .summary-card .value.blue { color: #0984e3; }
+  .summary-card .value.orange { color: #e17055; }
+
+  /* ─── テーブル ─── */
+  .table-wrap { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: auto; max-height: 70vh; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #1F4E79; color: #fff; padding: 8px 10px; text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 10; font-size: 12px; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; white-space: nowrap; }
+  tr:hover td { background: #f8fbff; }
+  tr.cleared td { background: #f5f5f5; color: #999; }
+  tr.uncategorized td { background: #fffbe6; }
+  tr.auto-categorized td { background: #e6f4ff; }
+  tr.manual-categorized td { background: #fff; }
+
+  /* ─── バッジ ─── */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .badge-done { background: #7F7F7F; color: #fff; }
+  .badge-pending { background: #e17055; color: #fff; }
+  .badge-partial { background: #fdcb6e; color: #2d3436; }
+  .badge-auto { background: #74b9ff; color: #fff; }
+  .badge-manual { background: #00b894; color: #fff; }
+
+  /* ─── 金額 ─── */
+  .amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .amount.zero { color: #ccc; }
+  .amount.withdrawal { color: #d63031; font-weight: 600; }
+  .amount.deposit { color: #00b894; font-weight: 600; }
+
+  /* ─── インライン編集 ─── */
+  td.editable { cursor: pointer; }
+  td.editable:hover { background: #eef5ff !important; }
+  td.editing { padding: 2px 4px; }
+  td.editing input, td.editing select {
+    width: 100%; padding: 4px 6px; border: 2px solid #0984e3; border-radius: 4px;
+    font-size: 12px; font-family: inherit; outline: none; background: #fff;
+  }
+
+  /* ─── ボタン ─── */
+  .btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 700; }
+  .btn-primary { background: #0984e3; color: #fff; }
+  .btn-primary:hover { background: #0775c4; }
+  .btn-success { background: #00b894; color: #fff; }
+  .btn-success:hover { background: #009975; }
+  .btn-danger { background: #d63031; color: #fff; }
+  .btn-ghost { background: transparent; color: #636e72; border: 1px solid #ddd; }
+  .btn-ghost:hover { background: #f0f0f0; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .action-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+
+  /* ─── アップロードエリア ─── */
+  .upload-area { border: 3px dashed #ccc; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 16px; background: #fafafa; cursor: pointer; transition: all 0.2s; }
+  .upload-area:hover { border-color: #0984e3; background: #eef5ff; }
+  .upload-area .icon { font-size: 32px; margin-bottom: 6px; }
+  .upload-area .title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .upload-area .hint { font-size: 12px; color: #636e72; }
+
+  /* ─── モーダル ─── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; max-width: 95%; max-height: 90vh; overflow: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .modal.large { width: 1400px; }
+  .modal.medium { width: 600px; }
+  .modal h3 { margin-bottom: 16px; font-size: 16px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* ─── トースト ─── */
+  .toast { position: fixed; top: 70px; right: 20px; background: #2d3436; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 300; opacity: 0; transform: translateY(-10px); transition: all 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.success { background: #00b894; }
+  .toast.error { background: #d63031; }
+
+  /* ─── 学習プロンプト ─── */
+  .learn-prompt { display: flex; gap: 8px; align-items: center; padding: 12px 16px; background: #fff8dc; border: 2px solid #fdcb6e; border-radius: 8px; margin-bottom: 12px; }
+  .learn-prompt button { padding: 4px 12px; font-size: 12px; }
+
+  /* ─── ピボットテーブル ─── */
+  .pivot-wrap { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: auto; max-height: 75vh; }
+  table.pivot { font-size: 11px; }
+  table.pivot th { background: #1F4E79; padding: 6px 8px; }
+  table.pivot th.facility-col { background: #ED7D31; min-width: 80px; text-align: right; }
+  table.pivot th.first-col { position: sticky; left: 0; z-index: 11; min-width: 100px; }
+  table.pivot th.vendor-col { background: #4472C4; min-width: 180px; text-align: left; position: sticky; left: 100px; z-index: 11; }
+  table.pivot td { padding: 4px 6px; border: 1px solid #e0e0e0; }
+  table.pivot td.cat-col { font-weight: 700; background: #FFF2CC; position: sticky; left: 0; z-index: 5; }
+  table.pivot td.vendor-col { background: #f8f9fa; position: sticky; left: 100px; z-index: 5; min-width: 180px; }
+  table.pivot td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+  table.pivot td.amt.zero { color: #ccc; }
+  table.pivot tr.subtotal td { background: #FCE4D6; font-weight: 700; border-top: 2px solid #ED7D31; }
+  table.pivot tr.total td { background: #FFE699; font-weight: 700; border-top: 2px solid #BF8F00; }
+
+  .page-section { display: none; }
+  .page-section.active { display: block; }
+  .sub-section { display: none; }
+  .sub-section.active { display: block; }
+
+  /* ─── スプリットビュー ─── */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .split-pane { background: #fff; border-radius: 10px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .split-pane h4 { margin-bottom: 8px; font-size: 13px; color: #636e72; }
+
+  /* ─── フォーム ─── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row { display: flex; flex-direction: column; gap: 4px; }
+  .form-row label { font-size: 11px; color: #636e72; font-weight: 700; }
+  .form-row input, .form-row select {
+    padding: 8px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; font-family: inherit;
+  }
+
+  /* ─── ヘルプ ─── */
+  .help-container { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 32px 48px; max-width: 960px; margin: 0 auto; }
+  .help-content { font-size: 14px; line-height: 1.8; color: #2d3436; }
+  .help-content h1 { font-size: 28px; font-weight: 700; color: #1F4E79; margin: 16px 0 20px; padding-bottom: 12px; border-bottom: 3px solid #1F4E79; }
+  .help-content h2 { font-size: 22px; font-weight: 700; color: #1F4E79; margin: 32px 0 14px; padding: 8px 14px; background: #eef5ff; border-left: 4px solid #1F4E79; border-radius: 4px; }
+  .help-content h3 { font-size: 17px; font-weight: 700; color: #2d3436; margin: 24px 0 10px; }
+  .help-content h4 { font-size: 15px; font-weight: 700; color: #2d3436; margin: 16px 0 8px; }
+  .help-content p { margin: 10px 0; }
+  .help-content ul, .help-content ol { margin: 10px 0 10px 28px; }
+  .help-content li { margin: 4px 0; }
+  .help-content code { background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-family: Consolas, Monaco, monospace; font-size: 13px; color: #d63031; }
+  .help-content pre { background: #2d3436; color: #dfe6e9; padding: 14px 18px; border-radius: 6px; overflow-x: auto; margin: 12px 0; }
+  .help-content pre code { background: transparent; color: inherit; padding: 0; }
+  .help-content table { border-collapse: collapse; margin: 14px 0; width: 100%; font-size: 13px; }
+  .help-content th { background: #1F4E79; color: #fff; padding: 10px 14px; text-align: left; font-weight: 700; }
+  .help-content td { padding: 8px 14px; border-bottom: 1px solid #eee; }
+  .help-content tr:hover td { background: #f8fbff; }
+  .help-content strong { font-weight: 700; color: #1F4E79; }
+  .help-content em { font-style: italic; color: #636e72; }
+  .help-content hr { border: 0; border-top: 1px dashed #ddd; margin: 24px 0; }
+  .help-content blockquote { border-left: 4px solid #fdcb6e; background: #fff8dc; padding: 10px 16px; margin: 12px 0; color: #2d3436; border-radius: 4px; }
+  .help-content a { color: #0984e3; text-decoration: none; }
+  .help-content a:hover { text-decoration: underline; }
+
+  /* ─── 遅延月数グラデーション ─── */
+  /* 0: 遅延なし, 1: 1ヶ月遅れ, 3: 2ヶ月遅れ, 5: 3ヶ月以上遅れ */
+  tr.carry-level-0 td { background: #fff; }
+  tr.carry-level-1 td { background: rgba(253, 203, 110, 0.35); }            /* 薄いオレンジ（軽度） */
+  tr.carry-level-3 td { background: rgba(225, 112, 85, 0.45); color: #2d3436; }  /* 中間のオレンジ赤（中度） */
+  tr.carry-level-5 td { background: rgba(214, 48, 49, 0.70); color: #fff; font-weight: 600; }  /* 濃い赤（深刻） */
+  tr.carry-level-5 td.editable:hover { background: rgba(214, 48, 49, 0.82) !important; color: #fff; }
+  tr.carry-level-3 td.editable:hover { background: rgba(225, 112, 85, 0.55) !important; }
+  tr.carry-level-1 td.editable:hover { background: rgba(253, 203, 110, 0.48) !important; }
+
+  /* ─── 消込済み金額の取消線 ─── */
+  .cleared-amount {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+    text-decoration-color: #d63031;
+    color: #95a5a6;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">GR経理</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-page="bank">📒 通帳（銀行取引）</button>
+    <button class="nav-tab" data-page="invoices">📋 請求書・消込</button>
+    <button class="nav-tab" data-page="summary">📊 月別経費（自動集計）</button>
+    <button class="nav-tab" data-page="settings">⚙ 設定</button>
+    <button class="nav-tab" data-page="help">❓ 使い方</button>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+    <span id="nav-user-name" style="font-size:12px;color:#cfe6ff;"></span>
+    <button id="nav-home" style="background:rgba(255,255,255,0.15);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;" title="選択画面に戻る">🏠 ホーム</button>
+    <button id="nav-logout" style="background:rgba(255,255,255,0.15);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;">ログアウト</button>
+  </div>
+</div>
+<script>
+// 認証チェック＆ユーザー情報取得
+(async function() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) { location.href = '/login'; return; }
+    const d = await res.json();
+    if (!d.user.keiri_access && d.user.role !== 'admin') { location.href = '/'; return; }
+    document.getElementById('nav-user-name').textContent = d.user.name + ' さん';
+    // 管理者のみホームボタン表示
+    if (d.user.role !== 'admin') {
+      document.getElementById('nav-home').style.display = 'none';
+    }
+  } catch (e) { location.href = '/login'; }
+})();
+document.getElementById('nav-home').addEventListener('click', () => { location.href = '/select'; });
+document.getElementById('nav-logout').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login';
+});
+</script>
+
+<div class="main">
+
+  <!-- ============================================================ -->
+  <!-- Tab 1: 通帳データ -->
+  <!-- ============================================================ -->
+  <div class="page-section active" id="page-bank">
+    <div class="action-bar">
+      <button class="btn btn-primary" id="btn-bank-upload">📂 通帳データを読み込む（CSV/Excel）</button>
+      <button class="btn btn-success" id="btn-bulk-vendor">🏢 支払先を一括で設定する</button>
+      <button class="btn btn-ghost" id="btn-bank-pivot-toggle">📊 経費の内訳を見る</button>
+      <button class="btn btn-ghost" id="btn-bootstrap-rules">今までの入力から自動認識ルールを学習</button>
+    </div>
+    <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+      💡 通帳データを読み込むと、下の表に1取引ずつ並びます。「支払先」「勘定科目」「施設名」はセルをクリックして直接入力できます。
+    </div>
+
+    <!-- 口座サブタブ -->
+    <div class="sub-tabs" id="bank-account-tabs"></div>
+
+    <!-- 月フィルタ -->
+    <div class="filter-bar">
+      <select id="bank-filter-month"><option value="">全ての月</option></select>
+      <select id="bank-filter-year"><option value="">全ての年</option></select>
+      <select id="bank-filter-status">
+        <option value="">すべて表示</option>
+        <option value="未">⚠ 科目が未入力のもの</option>
+        <option value="auto">🟦 自動で科目入力したもの</option>
+        <option value="manual">✏ 手動で科目入力したもの</option>
+      </select>
+      <input type="text" id="bank-filter-search" placeholder="摘要で検索...">
+    </div>
+
+    <!-- サマリーカード -->
+    <div class="summary-cards" id="bank-summary-cards"></div>
+
+    <!-- 通帳取引テーブル -->
+    <div class="sub-section active" id="bank-table-view">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>勘定日</th>
+              <th>出金</th>
+              <th>入金</th>
+              <th>残高</th>
+              <th>摘要</th>
+              <th>支払先（会社名）</th>
+              <th>勘定科目</th>
+              <th>施設名</th>
+              <th>済</th>
+              <th>備考</th>
+            </tr>
+          </thead>
+          <tbody id="bank-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 経費内訳ピボット -->
+    <div class="sub-section" id="bank-pivot-view">
+      <div class="pivot-wrap">
+        <table class="pivot" id="bank-pivot-table"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 2: 請求管理 -->
+  <!-- ============================================================ -->
+  <div class="page-section" id="page-invoices">
+    <div class="action-bar">
+      <button class="btn btn-success" id="btn-invoice-add">＋ 請求書を1件追加</button>
+      <button class="btn btn-primary" id="btn-invoice-upload-excel">📂 請求書Excelをまとめて読み込む</button>
+      <button class="btn btn-primary" id="btn-invoice-match">🔄 通帳と照合して消込する...</button>
+      <button class="btn btn-primary" id="btn-invoice-clear" disabled>選択した請求を消込...</button>
+      <button class="btn btn-ghost" id="btn-invoice-undo" disabled>消込を取り消す</button>
+      <button class="btn btn-danger" id="btn-invoice-delete" disabled>選択した請求を削除</button>
+      <button class="btn btn-danger" id="btn-invoice-delete-filter">今表示中の請求をまとめて削除...</button>
+      <span id="invoice-selected-count" style="font-size:12px;color:#636e72;"></span>
+    </div>
+
+    <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+      💡 ヒント：「🔄 通帳と照合して消込」を使うと、通帳の出金額と請求書の金額（今月分/前月繰越/前々月繰越/前々々月繰越）を自動で突き合わせて、まとめて消込できます。<br>
+      💡 消込すると、金額を消すのではなく <span style="text-decoration:line-through;text-decoration-color:#d63031;text-decoration-thickness:2px;color:#95a5a6;">¥10,000</span> のように赤い取消線で支払い済みを表します。
+    </div>
+
+    <!-- エンティティサブタブ -->
+    <div class="sub-tabs" id="invoice-entity-tabs"></div>
+
+    <!-- 月タブ -->
+    <div class="month-tabs" id="invoice-month-tabs"></div>
+
+    <div class="filter-bar">
+      <select id="invoice-filter-status">
+        <option value="">すべて表示</option>
+        <option value="未">未払い（消込されていないもの）</option>
+        <option value="済">支払済み（消込済み）</option>
+        <option value="一部済">一部だけ支払い済み</option>
+      </select>
+      <select id="invoice-filter-facility"><option value="">全ての施設</option></select>
+      <input type="text" id="invoice-filter-search" placeholder="業者名で検索...">
+    </div>
+
+    <div class="summary-cards" id="invoice-summary-cards"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="invoice-check-all"></th>
+            <th>状態</th>
+            <th>請求元（業者名）</th>
+            <th>勘定科目</th>
+            <th>支払方法</th>
+            <th>支払期日</th>
+            <th>請求先（施設）</th>
+            <th>取引日</th>
+            <th>今月金額</th>
+            <th>前月繰越</th>
+            <th>前々月繰越</th>
+            <th>前々々月繰越</th>
+            <th>備考</th>
+          </tr>
+        </thead>
+        <tbody id="invoice-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 3: 月別経費一覧 -->
+  <!-- ============================================================ -->
+  <div class="page-section" id="page-summary">
+    <div style="font-size:12px;color:#636e72;margin-bottom:8px;">
+      通帳データから、施設ごと・勘定科目ごとに支出を自動集計します。手入力は不要です（通帳の「支払先」「勘定科目」「施設名」がそのまま使われます）。
+    </div>
+    <div class="action-bar">
+      <select id="summary-year"><option value="">全ての年</option></select>
+      <select id="summary-account"><option value="">全ての銀行口座</option></select>
+    </div>
+
+    <div class="month-tabs" id="summary-month-tabs"></div>
+
+    <div class="pivot-wrap">
+      <table class="pivot" id="summary-table"></table>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 5: 設定 -->
+  <!-- ============================================================ -->
+  <div class="page-section" id="page-settings">
+    <div class="sub-tabs">
+      <button class="sub-tab active" data-settings="rules">支払先の自動認識ルール</button>
+      <button class="sub-tab" data-settings="accounts">銀行口座の登録</button>
+      <button class="sub-tab" data-settings="facilities">施設・物件の登録</button>
+    </div>
+
+    <!-- 支払先の自動認識ルール -->
+    <div class="sub-section active" id="settings-rules">
+      <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+        通帳の「摘要」（半角カナ）から会社名を自動で認識するルールの一覧です。
+        通帳タブで支払先を手入力するたびに、ここに自動で登録されていきます。
+        クリックで修正・削除できます。
+      </div>
+      <div class="action-bar">
+        <input type="text" id="rules-search" placeholder="ルール検索..." style="padding:7px 10px;border:1px solid #ddd;border-radius:5px;">
+        <button class="btn btn-ghost" id="btn-rules-refresh">最新に更新</button>
+        <button class="btn btn-primary" id="btn-seed-vendors">🏢 よく使う会社名をまとめて登録</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>通帳の摘要パターン</th>
+              <th>支払先（会社名）</th>
+              <th>対象口座</th>
+              <th>勘定科目</th>
+              <th>施設名</th>
+              <th>使った回数</th>
+              <th>最終更新</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="rules-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 銀行口座 -->
+    <div class="sub-section" id="settings-accounts">
+      <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+        通帳をアップロードする銀行口座の一覧です。新しい口座の通帳を取り込むと自動で追加されます。
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-success" id="btn-add-account">＋ 口座を追加する</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>口座名</th>
+              <th>表示名</th>
+              <th>並び順</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 施設・物件 -->
+    <div class="sub-section" id="settings-facilities">
+      <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+        経費を集計するときの「施設・物件」の一覧です。ここに登録した名前が、通帳や請求書の「施設名」プルダウンに並びます。
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-success" id="btn-add-facility">＋ 施設を追加する</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>施設名</th>
+              <th>並び順</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="facilities-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Tab 6: ヘルプ -->
+  <!-- ============================================================ -->
+  <div class="page-section" id="page-help">
+    <div class="help-container">
+      <div id="help-content" class="help-content">
+        <p style="color:#636e72;">読み込み中...</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─── アップロードプレビューモーダル ─── -->
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal large">
+    <h3>📂 アップロードプレビュー</h3>
+    <div class="summary-cards" id="upload-stats"></div>
+    <div style="margin-bottom:10px;font-size:12px;color:#636e72;">
+      🟦 自動カテゴリ化済み　🟨 未カテゴリ（要入力）　⬜ Excelに既に手入力済み
+    </div>
+    <div class="table-wrap" style="max-height:50vh;">
+      <table>
+        <thead>
+          <tr>
+            <th>口座</th>
+            <th>勘定日</th>
+            <th>出金</th>
+            <th>入金</th>
+            <th>摘要</th>
+            <th>支払先（会社名）</th>
+            <th>勘定科目</th>
+            <th>施設名</th>
+            <th>種別</th>
+          </tr>
+        </thead>
+        <tbody id="upload-preview-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="upload-cancel">キャンセル</button>
+      <button class="btn btn-success" id="upload-confirm">確定して保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 通帳と請求書の照合モーダル ─── -->
+<div class="modal-overlay" id="match-modal">
+  <div class="modal large">
+    <h3>🔄 通帳の出金と請求書を自動で突き合わせる</h3>
+    <div style="font-size:12px;color:#636e72;margin-bottom:12px;">
+      通帳の出金額と、未払いの請求書（今月分 / 前月繰越 / 前々月繰越 / 前々々月繰越のいずれか）を自動で照らし合わせます。<br>
+      支払いが遅れて「3か月前の20万円がようやく振り込まれた」というケースも検出します。<br>
+      🔍 通帳の「<strong>支払先（会社名）</strong>」と請求書の「<strong>業者名</strong>」を突き合わせるので、事前に設定タブで支払先を登録しておくと精度が上がります。
+    </div>
+    <div class="action-bar">
+      <button class="btn btn-primary" id="btn-run-match">🔄 照合を実行する</button>
+      <button class="btn btn-success" id="btn-confirm-match" style="display:none;">選んだものをまとめて支払い済みにする</button>
+    </div>
+
+    <div class="summary-cards" id="match-summary-cards"></div>
+
+    <div id="match-results-area" style="display:none;">
+      <div class="table-wrap" style="max-height:55vh;">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="match-check-all" checked></th>
+              <th>確度</th>
+              <th>通帳：日付</th>
+              <th>通帳：支払先（会社名）</th>
+              <th>通帳：出金額</th>
+              <th>→</th>
+              <th>請求：業者名</th>
+              <th>請求：科目</th>
+              <th>請求：施設</th>
+              <th>消込対象</th>
+            </tr>
+          </thead>
+          <tbody id="match-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="match-modal-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 請求書 部分消込モーダル ─── -->
+<div class="modal-overlay" id="invoice-clear-modal">
+  <div class="modal medium">
+    <h3>💳 どの金額を「支払い済み」にしますか？</h3>
+    <div style="font-size:12px;color:#636e72;margin-bottom:12px;" id="invoice-clear-target-info"></div>
+    <div class="form-grid">
+      <div class="form-row">
+        <label>支払い済みにする金額</label>
+        <select id="invoice-clear-type" style="padding:8px;font-size:13px;">
+          <option value="amount">今月分だけを支払い済みにする</option>
+          <option value="carry_1">前月繰越分だけを支払い済みにする</option>
+          <option value="carry_2">前々月繰越分だけを支払い済みにする</option>
+          <option value="carry_3">前々々月繰越分だけを支払い済みにする</option>
+          <option value="all">全部まとめて支払い済みにする</option>
+        </select>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#636e72;margin-top:8px;">
+      ※ 金額は消えません。赤い取消線（<span style="text-decoration:line-through;text-decoration-color:#d63031;">¥10,000</span>）で「支払い済み」を表現します。<br>
+      ※ すべての金額が支払い済みになれば状態が「済」、一部だけなら「一部済」に自動でなります。
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="invoice-clear-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="invoice-clear-exec">支払い済みにする</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 請求書アップロードプレビューモーダル ─── -->
+<div class="modal-overlay" id="invoice-upload-modal">
+  <div class="modal large">
+    <h3>📂 請求書Excelアップロード</h3>
+    <div class="summary-cards" id="invoice-upload-stats"></div>
+    <div class="table-wrap" style="max-height:50vh;">
+      <table>
+        <thead>
+          <tr>
+            <th>エンティティ</th>
+            <th>業者名</th>
+            <th>勘定科目</th>
+            <th>支払方法</th>
+            <th>期日</th>
+            <th>請求先</th>
+            <th>金額</th>
+            <th>前月繰越</th>
+            <th>前々繰越</th>
+            <th>前々々月</th>
+          </tr>
+        </thead>
+        <tbody id="invoice-upload-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="invoice-upload-cancel">キャンセル</button>
+      <button class="btn btn-success" id="invoice-upload-confirm">確定して保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 隠しファイル入力 ─── -->
+<input type="file" id="bank-file-input" accept=".xlsx,.xls,.csv" style="display:none;">
+<input type="file" id="invoice-file-input" accept=".xlsx,.xls" style="display:none;">
+
+<!-- ─── トースト ─── -->
+<div class="toast" id="toast"></div>
+
+<!-- ─── 学習プロンプト ─── -->
+<div id="learn-prompt-area"></div>
+
+<!-- ─── 支払先一括設定モーダル ─── -->
+<div class="modal-overlay" id="bulk-vendor-modal">
+  <div class="modal large">
+    <h3>🏢 支払先（会社名）一括設定</h3>
+    <div style="font-size:12px;color:#636e72;margin-bottom:12px;">
+      銀行摘要を会社名にまとめます。同じパターン（末尾の番号などを除去）の取引はまとめて1行で表示されます。<br>
+      会社名を入力して「保存」を押すと、すべての該当取引と次回以降のアップロードに適用されます。
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="bulk-search" placeholder="摘要・会社名で検索..." style="min-width:240px;">
+      <select id="bulk-filter-account"><option value="">全口座</option></select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+        <input type="checkbox" id="bulk-only-unset" checked> 未設定のみ
+      </label>
+      <span style="margin-left:auto;font-size:12px;color:#636e72;" id="bulk-count"></span>
+    </div>
+    <div class="table-wrap" style="max-height:55vh;">
+      <table>
+        <thead>
+          <tr>
+            <th>件数</th>
+            <th>口座</th>
+            <th>摘要パターン</th>
+            <th>支払先（会社名）</th>
+            <th>勘定科目</th>
+            <th>施設名</th>
+            <th>合計出金額</th>
+          </tr>
+        </thead>
+        <tbody id="bulk-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="bulk-cancel">キャンセル</button>
+      <button class="btn btn-success" id="bulk-save">変更を保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 請求書フォームモーダル ─── -->
+<div class="modal-overlay" id="invoice-modal">
+  <div class="modal medium">
+    <h3 id="invoice-modal-title">新規請求書</h3>
+    <div class="form-grid">
+      <div class="form-row"><label>業者名</label><input id="inv-vendor" type="text"></div>
+      <div class="form-row"><label>勘定科目</label><select id="inv-category"></select></div>
+      <div class="form-row"><label>支払方法</label><select id="inv-payment-method">
+        <option value="">（なし）</option><option>振替</option><option>振込</option>
+        <option>コンビニ</option><option>クレジット</option><option>銀行</option>
+      </select></div>
+      <div class="form-row"><label>期日</label><input id="inv-due-date" type="text" placeholder="例: 2/27"></div>
+      <div class="form-row"><label>請求先（施設）</label><select id="inv-facility"></select></div>
+      <div class="form-row"><label>エンティティ</label><select id="inv-entity">
+        <option value="">（なし）</option><option>リゾート</option><option>ほうらい</option>
+        <option>フォレスト</option><option>グリーンシャワー</option><option>周防大島</option>
+        <option>モーテル</option><option>レジデンス</option><option>ココユニバース</option>
+      </select></div>
+      <div class="form-row"><label>取引日</label><input id="inv-transaction-date" type="text" placeholder="例: 2/16"></div>
+      <div class="form-row"><label>月</label><input id="inv-month" type="text" placeholder="例: 2月"></div>
+      <div class="form-row"><label>金額</label><input id="inv-amount" type="number" value="0"></div>
+      <div class="form-row"><label>前月繰越</label><input id="inv-carry-1" type="number" value="0"></div>
+      <div class="form-row"><label>前々繰越</label><input id="inv-carry-2" type="number" value="0"></div>
+      <div class="form-row"><label>前々々月</label><input id="inv-carry-3" type="number" value="0"></div>
+    </div>
+    <div class="form-row" style="margin-top:12px;">
+      <label>備考</label>
+      <input id="inv-note" type="text">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="inv-modal-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="inv-modal-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================================================
+// State
+// =============================================================================
+let CATEGORIES = [];
+let ACCOUNTS = [];
+let FACILITIES = [];
+let currentBankAccount = '';
+let currentInvoiceEntity = '';
+let currentInvoiceMonth = '';
+let currentSummaryMonth = '';
+let bankTransactions = [];
+let invoices = [];
+let selectedInvoices = new Set();
+let pendingUpload = null;
+let matchData = [];
+
+// =============================================================================
+// Utilities
+// =============================================================================
+function yen(n) {
+  if (!n || n === 0) return '0';
+  return Number(n).toLocaleString();
+}
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+async function api(url, opts = {}) {
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+// =============================================================================
+// Init
+// =============================================================================
+async function init() {
+  // ナビゲーションを最優先で設定（API失敗してもタブ切替は動く）
+  setupEvents();
+
+  // 各ロードは独立して try/catch（一つ失敗しても他は動く）
+  try { CATEGORIES = await api('/api/keiri/categories'); } catch(e) { console.error('categories:', e); CATEGORIES = []; }
+  try { await loadAccounts(); } catch(e) { console.error('accounts:', e); }
+  try { await loadFacilities(); } catch(e) { console.error('facilities:', e); }
+  try { populateInvoiceCategoryDropdown(); } catch(e) { console.error('invCatDropdown:', e); }
+  try { await loadBankAccountTabs(); } catch(e) { console.error('bankAcctTabs:', e); }
+  try { await loadInvoiceEntityTabs(); } catch(e) { console.error('invEntityTabs:', e); }
+  try { await loadInvoiceMonthTabs(); } catch(e) { console.error('invMonthTabs:', e); }
+  try { await loadSummaryMonthTabs(); } catch(e) { console.error('sumMonthTabs:', e); }
+  try { await loadBankTransactions(); } catch(e) { console.error('bankTx:', e); }
+  try { await loadInvoices(); } catch(e) { console.error('invoices:', e); }
+}
+
+async function loadAccounts() {
+  ACCOUNTS = await api('/api/keiri/accounts');
+}
+
+async function loadFacilities() {
+  FACILITIES = await api('/api/keiri/facilities');
+  // 請求管理の施設フィルタ
+  const fSel = document.getElementById('invoice-filter-facility');
+  fSel.innerHTML = '<option value="">全施設</option>' + FACILITIES.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+  // 請求書フォームの施設
+  const invFac = document.getElementById('inv-facility');
+  invFac.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+}
+
+function populateInvoiceCategoryDropdown() {
+  const sel = document.getElementById('inv-category');
+  sel.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+// =============================================================================
+// Tab 1: 通帳データ
+// =============================================================================
+async function loadBankAccountTabs() {
+  await loadAccounts();
+  const tabs = document.getElementById('bank-account-tabs');
+  if (ACCOUNTS.length === 0) {
+    tabs.innerHTML = '<span style="color:#636e72;font-size:12px;">口座が未登録です。設定タブから追加してください。</span>';
+    return;
+  }
+  if (!currentBankAccount) currentBankAccount = ACCOUNTS[0].name;
+  tabs.innerHTML = '<button class="sub-tab" data-account="">全口座</button>' +
+    ACCOUNTS.map(a => `<button class="sub-tab" data-account="${a.name}">${a.display_name || a.name}</button>`).join('');
+  tabs.querySelectorAll('.sub-tab').forEach(t => {
+    if (t.dataset.account === currentBankAccount) t.classList.add('active');
+    t.addEventListener('click', () => {
+      tabs.querySelectorAll('.sub-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentBankAccount = t.dataset.account;
+      loadBankTransactions();
+    });
+  });
+}
+
+async function loadBankTransactions() {
+  const params = new URLSearchParams();
+  if (currentBankAccount) params.set('account', currentBankAccount);
+  const month = document.getElementById('bank-filter-month').value;
+  const year = document.getElementById('bank-filter-year').value;
+  const search = document.getElementById('bank-filter-search').value;
+  if (month) params.set('month', month);
+  if (year) params.set('year', year);
+  if (search) params.set('search', search);
+  bankTransactions = await api('/api/keiri/bank/transactions?' + params);
+  renderBankTable();
+  renderBankSummary();
+  populateBankFilterMonths();
+}
+
+function populateBankFilterMonths() {
+  const months = [...new Set(bankTransactions.map(t => t.month).filter(Boolean))].sort();
+  const years = [...new Set(bankTransactions.map(t => t.year).filter(Boolean))].sort();
+  const monthSel = document.getElementById('bank-filter-month');
+  const yearSel = document.getElementById('bank-filter-year');
+  const curMonth = monthSel.value;
+  const curYear = yearSel.value;
+  monthSel.innerHTML = '<option value="">全月</option>' + months.map(m => `<option value="${m}" ${m === curMonth ? 'selected' : ''}>${m}</option>`).join('');
+  yearSel.innerHTML = '<option value="">全年</option>' + years.map(y => `<option value="${y}" ${String(y) === curYear ? 'selected' : ''}>${y}</option>`).join('');
+}
+
+function renderBankTable() {
+  const status = document.getElementById('bank-filter-status').value;
+  let filtered = bankTransactions;
+  if (status === '未') filtered = filtered.filter(t => !t.category);
+  else if (status === 'auto') filtered = filtered.filter(t => t.auto_categorized === 1);
+  else if (status === 'manual') filtered = filtered.filter(t => t.category && t.auto_categorized === 0);
+
+  const tbody = document.getElementById('bank-tbody');
+  tbody.innerHTML = filtered.map(t => {
+    let rowClass = '';
+    if (!t.category) rowClass = 'uncategorized';
+    else if (t.auto_categorized === 1) rowClass = 'auto-categorized';
+    else rowClass = 'manual-categorized';
+    if (t.is_cleared === '済') rowClass += ' cleared';
+
+    return `<tr class="${rowClass}" data-id="${t.id}">
+      <td>${t.tx_date || ''}</td>
+      <td class="amount ${t.withdrawal > 0 ? 'withdrawal' : 'zero'}">${yen(t.withdrawal)}</td>
+      <td class="amount ${t.deposit > 0 ? 'deposit' : 'zero'}">${yen(t.deposit)}</td>
+      <td class="amount">${yen(t.balance)}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#888;" title="${(t.description || '').replace(/"/g,'&quot;')}">${t.description || ''}</td>
+      <td class="editable" data-field="vendor_name" data-type="text" style="font-weight:600;">${t.vendor_name || '<span style="color:#bbb;">未入力</span>'}</td>
+      <td class="editable" data-field="category" data-type="select-category">${t.category || '<span style="color:#bbb;">未入力</span>'}</td>
+      <td class="editable" data-field="facility" data-type="select-facility">${t.facility || '<span style="color:#bbb;">未入力</span>'}</td>
+      <td class="editable" data-field="is_cleared" data-type="text">${t.is_cleared || ''}</td>
+      <td class="editable" data-field="note1" data-type="text">${t.note1 || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderBankSummary() {
+  const total = bankTransactions.length;
+  const totalW = bankTransactions.reduce((s, t) => s + (t.withdrawal || 0), 0);
+  const totalD = bankTransactions.reduce((s, t) => s + (t.deposit || 0), 0);
+  const uncat = bankTransactions.filter(t => !t.category).length;
+  const auto = bankTransactions.filter(t => t.auto_categorized === 1).length;
+
+  document.getElementById('bank-summary-cards').innerHTML = `
+    <div class="summary-card"><div class="label">取引件数</div><div class="value blue">${total}件</div></div>
+    <div class="summary-card"><div class="label">出金合計</div><div class="value red">¥${yen(totalW)}</div></div>
+    <div class="summary-card"><div class="label">入金合計</div><div class="value green">¥${yen(totalD)}</div></div>
+    <div class="summary-card"><div class="label">自動カテゴリ化</div><div class="value blue">${auto}件</div></div>
+    <div class="summary-card"><div class="label">未カテゴリ</div><div class="value orange">${uncat}件</div></div>
+  `;
+}
+
+// 通帳セルのインライン編集
+document.getElementById('bank-tbody').addEventListener('click', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || td.classList.contains('editing')) return;
+  const tr = td.closest('tr');
+  const id = Number(tr.dataset.id);
+  const field = td.dataset.field;
+  const type = td.dataset.type;
+  const tx = bankTransactions.find(t => t.id === id);
+  if (!tx) return;
+  const current = tx[field] ?? '';
+  td.classList.add('editing');
+
+  let input;
+  if (type === 'select-category') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+  } else if (type === 'select-facility') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === current ? 'selected' : ''}>${f.name}</option>`).join('');
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+  }
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  let saved = false;
+  async function save() {
+    if (saved) return;
+    saved = true;
+    const newVal = input.value;
+    if (newVal === current) {
+      td.classList.remove('editing');
+      renderBankTable();
+      return;
+    }
+    // 学習対象：勘定科目・施設名・会社名の変更
+    const learn = (field === 'category' || field === 'facility' || field === 'vendor_name');
+    const result = await api(`/api/bank/transactions/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ [field]: newVal, learn })
+    });
+    // ローカルデータ更新
+    Object.assign(tx, result);
+    if (result.propagated > 0) {
+      // 同じ摘要の他の行も更新されたので再取得
+      await loadBankTransactions();
+    } else {
+      renderBankTable();
+      renderBankSummary();
+    }
+    if (learn && newVal && result.learned_rule_id) {
+      const propMsg = result.propagated > 0 ? `（同じ摘要の${result.propagated}件にも反映）` : '';
+      showToast(`✓ 学習しました${propMsg}`, 'success');
+    } else {
+      showToast('保存しました');
+    }
+  }
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { saved = true; td.classList.remove('editing'); renderBankTable(); }
+  });
+  if (input.tagName === 'SELECT') input.addEventListener('change', save);
+});
+
+// 通帳フィルタ
+['bank-filter-month', 'bank-filter-year', 'bank-filter-status'].forEach(id => {
+  document.getElementById(id).addEventListener('change', loadBankTransactions);
+});
+document.getElementById('bank-filter-search').addEventListener('input', () => {
+  clearTimeout(window.__bankSearchT);
+  window.__bankSearchT = setTimeout(loadBankTransactions, 300);
+});
+
+// 経費内訳ビュー切替
+document.getElementById('btn-bank-pivot-toggle').addEventListener('click', async () => {
+  const tableView = document.getElementById('bank-table-view');
+  const pivotView = document.getElementById('bank-pivot-view');
+  if (tableView.classList.contains('active')) {
+    tableView.classList.remove('active');
+    pivotView.classList.add('active');
+    document.getElementById('btn-bank-pivot-toggle').textContent = '📋 取引一覧ビュー';
+    await loadBankPivot();
+  } else {
+    pivotView.classList.remove('active');
+    tableView.classList.add('active');
+    document.getElementById('btn-bank-pivot-toggle').textContent = '📊 経費内訳ビュー';
+  }
+});
+
+async function loadBankPivot() {
+  const params = new URLSearchParams();
+  if (currentBankAccount) params.set('account', currentBankAccount);
+  const month = document.getElementById('bank-filter-month').value;
+  const year = document.getElementById('bank-filter-year').value;
+  if (month) params.set('month', month);
+  if (year) params.set('year', year);
+  const data = await api('/api/keiri/bank/pivot?' + params);
+  // ピボット組み立て
+  const facilities = [...new Set(data.map(r => r.facility || '不明'))].sort();
+  const categories = [...new Set(data.map(r => r.category || '不明'))].sort();
+  const map = {};
+  data.forEach(r => {
+    const f = r.facility || '不明';
+    const c = r.category || '不明';
+    if (!map[f]) map[f] = {};
+    map[f][c] = r.total;
+  });
+  const tbl = document.getElementById('bank-pivot-table');
+  let html = '<thead><tr><th class="first-col">施設</th>';
+  categories.forEach(c => html += `<th class="facility-col">${c}</th>`);
+  html += '<th class="facility-col">合計</th></tr></thead><tbody>';
+  facilities.forEach(f => {
+    html += `<tr><td class="cat-col">${f}</td>`;
+    let rowTotal = 0;
+    categories.forEach(c => {
+      const v = (map[f] && map[f][c]) || 0;
+      rowTotal += v;
+      html += `<td class="amt ${v === 0 ? 'zero' : ''}">${v ? yen(v) : ''}</td>`;
+    });
+    html += `<td class="amt"><strong>${yen(rowTotal)}</strong></td></tr>`;
+  });
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
+
+// アップロード
+document.getElementById('btn-bank-upload').addEventListener('click', () => {
+  document.getElementById('bank-file-input').click();
+});
+document.getElementById('bank-file-input').addEventListener('change', async (e) => {
+  if (!e.target.files[0]) return;
+  const file = e.target.files[0];
+  const fd = new FormData();
+  fd.append('file', file);
+  showToast('アップロード中...');
+  try {
+    const res = await fetch('/api/keiri/bank/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    pendingUpload = data;
+    showUploadPreview(data);
+  } catch (err) {
+    showToast('エラー: ' + err.message, 'error');
+  }
+  e.target.value = '';
+});
+
+function showUploadPreview(data) {
+  const stats = data.stats;
+  document.getElementById('upload-stats').innerHTML = `
+    <div class="summary-card"><div class="label">取引総数</div><div class="value blue">${stats.total}</div></div>
+    <div class="summary-card"><div class="label">自動カテゴリ化</div><div class="value blue">${stats.auto_categorized}</div></div>
+    <div class="summary-card"><div class="label">既存カテゴリ</div><div class="value green">${stats.has_existing_category}</div></div>
+    <div class="summary-card"><div class="label">未カテゴリ</div><div class="value orange">${stats.uncategorized}</div></div>
+  `;
+  // プレビュー（最初の100件のみ表示）
+  const tbody = document.getElementById('upload-preview-tbody');
+  const preview = data.transactions.slice(0, 200);
+  tbody.innerHTML = preview.map((t, i) => {
+    let rowClass = 'manual-categorized';
+    let typeLabel = '<span class="badge badge-manual">既存</span>';
+    if (!t.category) {
+      rowClass = 'uncategorized';
+      typeLabel = '<span class="badge badge-pending">未</span>';
+    } else if (t.auto_categorized === 1) {
+      rowClass = 'auto-categorized';
+      typeLabel = '<span class="badge badge-auto">自動</span>';
+    }
+    return `<tr class="${rowClass}" data-idx="${i}">
+      <td>${t.account}</td>
+      <td>${t.tx_date}</td>
+      <td class="amount ${t.withdrawal > 0 ? 'withdrawal' : 'zero'}">${yen(t.withdrawal)}</td>
+      <td class="amount ${t.deposit > 0 ? 'deposit' : 'zero'}">${yen(t.deposit)}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#888;">${t.description}</td>
+      <td>
+        <input class="prev-vendor" data-idx="${i}" value="${(t.vendor_name || '').replace(/"/g,'&quot;')}" style="font-size:11px;padding:2px 4px;width:140px;border:1px solid #ddd;border-radius:3px;">
+      </td>
+      <td>
+        <select class="prev-cat" data-idx="${i}" style="font-size:11px;padding:2px;">
+          <option value="">（なし）</option>
+          ${CATEGORIES.map(c => `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="prev-fac" data-idx="${i}" style="font-size:11px;padding:2px;">
+          <option value="">（なし）</option>
+          ${FACILITIES.map(f => `<option value="${f.name}" ${f.name === t.facility ? 'selected' : ''}>${f.name}</option>`).join('')}
+        </select>
+      </td>
+      <td>${typeLabel}</td>
+    </tr>`;
+  }).join('');
+  if (data.transactions.length > 200) {
+    tbody.innerHTML += `<tr><td colspan="8" style="text-align:center;padding:12px;color:#636e72;">… ほか ${data.transactions.length - 200} 件（保存時に全件処理されます）</td></tr>`;
+  }
+
+  // プレビューの編集を反映
+  const onChange = (e) => {
+    if (e.target.matches('.prev-cat')) {
+      const idx = Number(e.target.dataset.idx);
+      pendingUpload.transactions[idx].category = e.target.value;
+      pendingUpload.transactions[idx].auto_categorized = 0;
+    }
+    if (e.target.matches('.prev-fac')) {
+      const idx = Number(e.target.dataset.idx);
+      pendingUpload.transactions[idx].facility = e.target.value;
+    }
+    if (e.target.matches('.prev-vendor')) {
+      const idx = Number(e.target.dataset.idx);
+      pendingUpload.transactions[idx].vendor_name = e.target.value;
+    }
+  };
+  tbody.addEventListener('change', onChange);
+  tbody.addEventListener('input', onChange);
+
+  document.getElementById('upload-modal').classList.add('show');
+}
+
+document.getElementById('upload-cancel').addEventListener('click', () => {
+  document.getElementById('upload-modal').classList.remove('show');
+  pendingUpload = null;
+});
+document.getElementById('upload-confirm').addEventListener('click', async () => {
+  if (!pendingUpload) return;
+  showToast('保存中...');
+  const res = await api('/api/keiri/bank/upload/confirm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ transactions: pendingUpload.transactions, learn: true })
+  });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ ${res.inserted}件保存（重複スキップ:${res.skipped}, 学習:${res.learned}）`, 'success');
+  if (res.new_accounts && res.new_accounts.length > 0) {
+    await loadBankAccountTabs();
+  }
+  document.getElementById('upload-modal').classList.remove('show');
+  pendingUpload = null;
+  await loadBankTransactions();
+});
+
+// 既存データから学習
+document.getElementById('btn-bootstrap-rules').addEventListener('click', async () => {
+  if (!confirm('既存の通帳データから学習ルールを生成します。実行しますか？')) return;
+  const res = await api('/api/keiri/rules/learn', { method: 'POST' });
+  showToast(`✓ ルール作成:${res.created}件 / 更新:${res.updated}件`, 'success');
+});
+
+// =============================================================================
+// 支払先一括設定モーダル
+// =============================================================================
+let bulkPatterns = [];
+let bulkChanges = new Map(); // key: pattern|account → { vendor_name, category, facility }
+
+document.getElementById('btn-bulk-vendor').addEventListener('click', async () => {
+  // 口座フィルタを口座一覧から生成
+  const acctSel = document.getElementById('bulk-filter-account');
+  acctSel.innerHTML = '<option value="">全口座</option>' + ACCOUNTS.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+  bulkChanges.clear();
+  document.getElementById('bulk-vendor-modal').classList.add('show');
+  await loadBulkPatterns();
+});
+
+async function loadBulkPatterns() {
+  const params = new URLSearchParams();
+  const acct = document.getElementById('bulk-filter-account').value;
+  const onlyUnset = document.getElementById('bulk-only-unset').checked;
+  if (acct) params.set('account', acct);
+  if (onlyUnset) params.set('only_unset', '1');
+  bulkPatterns = await api('/api/keiri/bank/patterns?' + params);
+  renderBulkTable();
+}
+
+function renderBulkTable() {
+  const search = document.getElementById('bulk-search').value.toLowerCase();
+  let filtered = bulkPatterns;
+  if (search) {
+    filtered = filtered.filter(p =>
+      (p.pattern || '').toLowerCase().includes(search) ||
+      (p.sample_description || '').toLowerCase().includes(search) ||
+      (p.vendor_name || '').toLowerCase().includes(search)
+    );
+  }
+  document.getElementById('bulk-count').textContent = `${filtered.length} 件 / 全 ${bulkPatterns.length} パターン`;
+
+  const tbody = document.getElementById('bulk-tbody');
+  tbody.innerHTML = filtered.map((p, i) => {
+    const key = p.pattern + '|' + p.account;
+    const ch = bulkChanges.get(key) || {};
+    const vendor = ch.vendor_name !== undefined ? ch.vendor_name : (p.vendor_name === '（混在）' ? '' : p.vendor_name);
+    const cat = ch.category !== undefined ? ch.category : (p.category === '（混在）' ? '' : p.category);
+    const fac = ch.facility !== undefined ? ch.facility : (p.facility === '（混在）' ? '' : p.facility);
+    const isMixed = p.is_mixed;
+    const rowStyle = isMixed ? 'background:#fff8dc;' : '';
+
+    return `<tr data-key="${key.replace(/"/g,'&quot;')}" style="${rowStyle}">
+      <td class="amount" style="font-weight:700;">${p.count}</td>
+      <td style="font-size:11px;">${p.account || ''}</td>
+      <td style="font-family:monospace;font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;" title="${(p.sample_description || '').replace(/"/g,'&quot;')}">${p.pattern}</td>
+      <td><input class="bulk-vendor" data-key="${key.replace(/"/g,'&quot;')}" value="${(vendor || '').replace(/"/g,'&quot;')}" placeholder="会社名" style="width:160px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px;${vendor ? 'background:#e6f4ff;font-weight:600;' : ''}"></td>
+      <td><select class="bulk-cat" data-key="${key.replace(/"/g,'&quot;')}" style="font-size:11px;padding:3px;width:130px;">
+        <option value="">${p.category === '（混在）' ? '（混在）' : '（なし）'}</option>
+        ${CATEGORIES.map(c => `<option value="${c}" ${c === cat ? 'selected' : ''}>${c}</option>`).join('')}
+      </select></td>
+      <td><select class="bulk-fac" data-key="${key.replace(/"/g,'&quot;')}" style="font-size:11px;padding:3px;width:120px;">
+        <option value="">${p.facility === '（混在）' ? '（混在）' : '（なし）'}</option>
+        ${FACILITIES.map(f => `<option value="${f.name}" ${f.name === fac ? 'selected' : ''}>${f.name}</option>`).join('')}
+      </select></td>
+      <td class="amount withdrawal">¥${yen(p.total_withdrawal)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// 入力監視
+document.getElementById('bulk-tbody').addEventListener('input', (e) => {
+  if (e.target.matches('.bulk-vendor')) {
+    const key = e.target.dataset.key;
+    const cur = bulkChanges.get(key) || {};
+    cur.vendor_name = e.target.value;
+    bulkChanges.set(key, cur);
+  }
+});
+document.getElementById('bulk-tbody').addEventListener('change', (e) => {
+  if (e.target.matches('.bulk-cat')) {
+    const key = e.target.dataset.key;
+    const cur = bulkChanges.get(key) || {};
+    cur.category = e.target.value;
+    bulkChanges.set(key, cur);
+  }
+  if (e.target.matches('.bulk-fac')) {
+    const key = e.target.dataset.key;
+    const cur = bulkChanges.get(key) || {};
+    cur.facility = e.target.value;
+    bulkChanges.set(key, cur);
+  }
+});
+
+// フィルタ・検索
+document.getElementById('bulk-filter-account').addEventListener('change', loadBulkPatterns);
+document.getElementById('bulk-only-unset').addEventListener('change', loadBulkPatterns);
+document.getElementById('bulk-search').addEventListener('input', () => {
+  clearTimeout(window.__bulkT);
+  window.__bulkT = setTimeout(renderBulkTable, 200);
+});
+
+document.getElementById('bulk-cancel').addEventListener('click', () => {
+  if (bulkChanges.size > 0 && !confirm(`${bulkChanges.size}件の変更を破棄しますか？`)) return;
+  document.getElementById('bulk-vendor-modal').classList.remove('show');
+  bulkChanges.clear();
+});
+
+document.getElementById('bulk-save').addEventListener('click', async () => {
+  if (bulkChanges.size === 0) {
+    showToast('変更がありません', 'error');
+    return;
+  }
+  const updates = [];
+  for (const [key, ch] of bulkChanges.entries()) {
+    const [pattern, account] = key.split('|');
+    updates.push({ pattern, account, ...ch });
+  }
+  showToast('保存中...');
+  const res = await api('/api/keiri/bank/patterns/bulk-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ updates })
+  });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ ${res.transactions_updated}件の取引を更新、${res.rules_learned}件のルールを学習`, 'success');
+  bulkChanges.clear();
+  await loadBulkPatterns();
+  await loadBankTransactions();
+});
+
+// =============================================================================
+// Tab 2: 請求管理
+// =============================================================================
+async function loadInvoiceEntityTabs() {
+  const entities = ['', 'リゾート', 'ほうらい', 'フォレスト', 'グリーンシャワー', '周防大島', 'モーテル', 'レジデンス', 'ココユニバース'];
+  const tabs = document.getElementById('invoice-entity-tabs');
+  tabs.innerHTML = entities.map(e => `<button class="sub-tab ${e === currentInvoiceEntity ? 'active' : ''}" data-entity="${e}">${e || '全体'}</button>`).join('');
+  tabs.querySelectorAll('.sub-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.querySelectorAll('.sub-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentInvoiceEntity = t.dataset.entity;
+      loadInvoices();
+    });
+  });
+}
+
+async function loadInvoiceMonthTabs() {
+  const months = await api('/api/keiri/invoices/months');
+  const tabs = document.getElementById('invoice-month-tabs');
+  const monthList = ['', ...months.map(m => m.month)];
+  tabs.innerHTML = monthList.map(m => `<button class="month-tab ${m === currentInvoiceMonth ? 'active' : ''}" data-month="${m}">${m || 'すべて'}</button>`).join('');
+  tabs.querySelectorAll('.month-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.querySelectorAll('.month-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentInvoiceMonth = t.dataset.month;
+      loadInvoices();
+    });
+  });
+}
+
+async function loadInvoices() {
+  const params = new URLSearchParams();
+  const status = document.getElementById('invoice-filter-status').value;
+  const facility = document.getElementById('invoice-filter-facility').value;
+  const search = document.getElementById('invoice-filter-search').value;
+  if (status) params.set('status', status);
+  if (facility) params.set('facility', facility);
+  if (currentInvoiceMonth) params.set('month', currentInvoiceMonth);
+  if (currentInvoiceEntity) params.set('entity', currentInvoiceEntity);
+  if (search) params.set('search', search);
+  invoices = await api('/api/keiri/invoices?' + params);
+  renderInvoiceTable();
+  renderInvoiceSummary();
+}
+
+function renderInvoiceTable() {
+  const tbody = document.getElementById('invoice-tbody');
+
+  // 遅延月数でレベル判定（支払いが遅れている月数が多いほど濃い赤）
+  // 0: 遅延なし
+  // 1: 前月繰越のみ（1か月遅れ）
+  // 3: 前々月繰越まで（2か月遅れ）
+  // 5: 前々々月繰越まで（3か月以上遅れ＝最も深刻）
+  function carryLevelByMonths(inv) {
+    if (inv.status === '済') return 0;
+    const c1 = (inv.carry_1 || 0) > 0 && !inv.carry_1_cleared;
+    const c2 = (inv.carry_2 || 0) > 0 && !inv.carry_2_cleared;
+    const c3 = (inv.carry_3 || 0) > 0 && !inv.carry_3_cleared;
+    if (c3) return 5;  // 3か月以上遅れ
+    if (c2) return 3;  // 2か月遅れ
+    if (c1) return 1;  // 1か月遅れ
+    return 0;
+  }
+
+  // 繰越合計額（バッジ表示用、未消込のみカウント）
+  function carryTotalOf(i) {
+    if (i.status === '済') return 0;
+    let t = 0;
+    if ((i.carry_1 || 0) > 0 && !i.carry_1_cleared) t += i.carry_1;
+    if ((i.carry_2 || 0) > 0 && !i.carry_2_cleared) t += i.carry_2;
+    if ((i.carry_3 || 0) > 0 && !i.carry_3_cleared) t += i.carry_3;
+    return t;
+  }
+
+  tbody.innerHTML = invoices.map(inv => {
+    const carryTotal = carryTotalOf(inv);
+    const lvl = carryLevelByMonths(inv);
+    let rowClass = '';
+    if (inv.status === '済') rowClass = 'cleared';
+    else if (lvl > 0) rowClass = `carry-level-${lvl}`;
+
+    const checked = selectedInvoices.has(inv.id) ? 'checked' : '';
+    const disabled = inv.status === '済' ? 'disabled' : '';
+    const sb = inv.status === '済' ? '<span class="badge badge-done">済</span>' :
+               (inv.status === '一部済' ? '<span class="badge badge-partial">一部</span>' :
+                '<span class="badge badge-pending">未</span>');
+    const carryBadge = (inv.status !== '済' && carryTotal > 0)
+      ? ` <span style="font-size:10px;font-weight:700;color:#d63031;" title="繰越合計">📛¥${yen(carryTotal)}</span>`
+      : '';
+    // 消込フラグ付きの列は取消線で表示
+    const strikeOrValue = (val, cleared) => {
+      if (!val) return '';
+      return cleared
+        ? `<span class="cleared-amount">¥${yen(val)}</span>`
+        : yen(val);
+    };
+    return `<tr class="${rowClass}" data-id="${inv.id}">
+      <td><input type="checkbox" data-id="${inv.id}" ${checked}></td>
+      <td>${sb}${carryBadge}</td>
+      <td class="editable" data-field="vendor" data-type="text">${inv.vendor || ''}</td>
+      <td class="editable" data-field="category" data-type="select-category">${inv.category || ''}</td>
+      <td class="editable" data-field="payment_method" data-type="select-payment">${inv.payment_method || ''}</td>
+      <td class="editable" data-field="due_date" data-type="text">${inv.due_date || ''}</td>
+      <td class="editable" data-field="facility" data-type="select-facility">${inv.facility || ''}</td>
+      <td class="editable" data-field="transaction_date" data-type="text">${inv.transaction_date || ''}</td>
+      <td class="editable amount" data-field="amount" data-type="number">${strikeOrValue(inv.amount, inv.amount_cleared)}</td>
+      <td class="editable amount" data-field="carry_1" data-type="number">${strikeOrValue(inv.carry_1, inv.carry_1_cleared)}</td>
+      <td class="editable amount" data-field="carry_2" data-type="number">${strikeOrValue(inv.carry_2, inv.carry_2_cleared)}</td>
+      <td class="editable amount" data-field="carry_3" data-type="number">${strikeOrValue(inv.carry_3, inv.carry_3_cleared)}</td>
+      <td class="editable" data-field="note" data-type="text" style="font-size:11px;color:#636e72;">${inv.note || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderInvoiceSummary() {
+  const total = invoices.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
+  const pending = invoices.filter(i => i.status !== '済');
+  const pendingTotal = pending.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
+  const cleared = invoices.filter(i => i.status === '済').length;
+  const delayed = invoices.filter(i => i.carry_1 > 0 || i.carry_2 > 0 || i.carry_3 > 0).length;
+  document.getElementById('invoice-summary-cards').innerHTML = `
+    <div class="summary-card"><div class="label">請求総額</div><div class="value blue">¥${yen(total)}</div></div>
+    <div class="summary-card"><div class="label">未消込額</div><div class="value red">¥${yen(pendingTotal)}</div></div>
+    <div class="summary-card"><div class="label">消込済</div><div class="value green">${cleared}/${invoices.length}件</div></div>
+    <div class="summary-card"><div class="label">遅延あり</div><div class="value orange">${delayed}件</div></div>
+  `;
+}
+
+// 請求書セルのインライン編集
+document.getElementById('invoice-tbody').addEventListener('click', (e) => {
+  const td = e.target.closest('td.editable');
+  if (!td || td.classList.contains('editing')) return;
+  const tr = td.closest('tr');
+  const id = Number(tr.dataset.id);
+  const field = td.dataset.field;
+  const type = td.dataset.type;
+  const inv = invoices.find(i => i.id === id);
+  if (!inv) return;
+  const current = inv[field] ?? '';
+  td.classList.add('editing');
+  let input;
+  if (type === 'select-category') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+  } else if (type === 'select-facility') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === current ? 'selected' : ''}>${f.name}</option>`).join('');
+  } else if (type === 'select-payment') {
+    input = document.createElement('select');
+    input.innerHTML = ['', '振替', '振込', 'コンビニ', 'クレジット', '銀行'].map(p => `<option value="${p}" ${p === current ? 'selected' : ''}>${p || '（なし）'}</option>`).join('');
+  } else if (type === 'number') {
+    input = document.createElement('input');
+    input.type = 'number';
+    input.value = current || 0;
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+  }
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+  let saved = false;
+  async function save() {
+    if (saved) return;
+    saved = true;
+    const newVal = type === 'number' ? Number(input.value) || 0 : input.value;
+    if (newVal === current) {
+      td.classList.remove('editing');
+      renderInvoiceTable();
+      return;
+    }
+    await api(`/api/invoices/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ [field]: newVal })
+    });
+    showToast('保存しました');
+    await loadInvoices();
+  }
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { saved = true; td.classList.remove('editing'); renderInvoiceTable(); }
+  });
+  if (input.tagName === 'SELECT') input.addEventListener('change', save);
+});
+
+// チェックボックス
+function updateInvoiceActionButtons() {
+  const n = selectedInvoices.size;
+  document.getElementById('btn-invoice-clear').disabled = n === 0;
+  document.getElementById('btn-invoice-undo').disabled = n === 0;
+  document.getElementById('btn-invoice-delete').disabled = n === 0;
+  document.getElementById('invoice-selected-count').textContent = n > 0 ? `${n}件選択中` : '';
+}
+document.getElementById('invoice-tbody').addEventListener('change', (e) => {
+  if (e.target.type === 'checkbox') {
+    const id = Number(e.target.dataset.id);
+    if (e.target.checked) selectedInvoices.add(id); else selectedInvoices.delete(id);
+    updateInvoiceActionButtons();
+  }
+});
+document.getElementById('invoice-check-all').addEventListener('change', (e) => {
+  document.querySelectorAll('#invoice-tbody input[type=checkbox]:not(:disabled)').forEach(cb => {
+    cb.checked = e.target.checked;
+    const id = Number(cb.dataset.id);
+    if (e.target.checked) selectedInvoices.add(id); else selectedInvoices.delete(id);
+  });
+  updateInvoiceActionButtons();
+});
+
+// 請求書フィルタ
+['invoice-filter-status', 'invoice-filter-facility'].forEach(id => {
+  document.getElementById(id).addEventListener('change', loadInvoices);
+});
+document.getElementById('invoice-filter-search').addEventListener('input', () => {
+  clearTimeout(window.__invSearchT);
+  window.__invSearchT = setTimeout(loadInvoices, 300);
+});
+
+// 消込ボタン → 消込対象選択モーダル
+document.getElementById('btn-invoice-clear').addEventListener('click', () => {
+  if (selectedInvoices.size === 0) return;
+  // 選択中の請求書の情報を表示
+  const selected = invoices.filter(i => selectedInvoices.has(i.id));
+  const infoHtml = selected.slice(0, 3).map(inv => {
+    const parts = [];
+    if (inv.amount) parts.push(`当月¥${yen(inv.amount)}`);
+    if (inv.carry_1) parts.push(`前月繰越¥${yen(inv.carry_1)}`);
+    if (inv.carry_2) parts.push(`前々月繰越¥${yen(inv.carry_2)}`);
+    if (inv.carry_3) parts.push(`前々々月¥${yen(inv.carry_3)}`);
+    return `<div>・${inv.vendor}：${parts.join(' / ') || '（金額なし）'}</div>`;
+  }).join('');
+  const more = selected.length > 3 ? `<div>…他${selected.length - 3}件</div>` : '';
+  document.getElementById('invoice-clear-target-info').innerHTML =
+    `<strong>${selected.length}件を消込します：</strong>` + infoHtml + more;
+  document.getElementById('invoice-clear-type').value = 'amount';
+  document.getElementById('invoice-clear-modal').classList.add('show');
+});
+
+document.getElementById('invoice-clear-cancel').addEventListener('click', () => {
+  document.getElementById('invoice-clear-modal').classList.remove('show');
+});
+
+document.getElementById('invoice-clear-exec').addEventListener('click', async () => {
+  const clearType = document.getElementById('invoice-clear-type').value;
+  const labels = { amount: '当月金額', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越', all: '全額' };
+  await api('/api/keiri/invoices/clear', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ids: [...selectedInvoices], clear_type: clearType })
+  });
+  showToast(`✓ ${selectedInvoices.size}件の${labels[clearType]}を消込しました`);
+  selectedInvoices.clear();
+  document.getElementById('invoice-clear-modal').classList.remove('show');
+  await loadInvoices();
+});
+
+document.getElementById('btn-invoice-undo').addEventListener('click', async () => {
+  for (const id of selectedInvoices) {
+    await api('/api/keiri/invoices/undo', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ id })
+    });
+  }
+  selectedInvoices.clear();
+  await loadInvoices();
+});
+
+// 選択した請求書を削除
+document.getElementById('btn-invoice-delete').addEventListener('click', async () => {
+  if (selectedInvoices.size === 0) return;
+  if (!confirm(`${selectedInvoices.size}件の請求書を削除します。よろしいですか？\n※この操作は取り消せません`)) return;
+  const res = await api('/api/keiri/invoices/bulk-delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ids: [...selectedInvoices] })
+  });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ ${res.deleted}件を削除しました`);
+  selectedInvoices.clear();
+  await loadInvoices();
+  await loadInvoiceMonthTabs();
+});
+
+// フィルタ対象を一括削除（請求書再取込用）
+document.getElementById('btn-invoice-delete-filter').addEventListener('click', async () => {
+  const filter = {};
+  if (currentInvoiceMonth) filter.month = currentInvoiceMonth;
+  if (currentInvoiceEntity) filter.entity = currentInvoiceEntity;
+  const status = document.getElementById('invoice-filter-status').value;
+  if (status) filter.status = status;
+
+  if (Object.keys(filter).length === 0) {
+    showToast('月またはエンティティタブで絞り込んでから実行してください', 'error');
+    return;
+  }
+
+  const desc = [];
+  if (filter.month) desc.push(`月=${filter.month}`);
+  if (filter.entity) desc.push(`エンティティ=${filter.entity}`);
+  if (filter.status) desc.push(`ステータス=${filter.status}`);
+
+  if (!confirm(`現在のフィルタ（${desc.join(' / ')}）に該当する請求書をすべて削除します。\n表示中の ${invoices.length}件 が対象です。\n\n※この操作は取り消せません。再取込の前の掃除に使用してください。\n\n続行しますか？`)) return;
+
+  const res = await api('/api/keiri/invoices/bulk-delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ filter })
+  });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ ${res.deleted}件を削除しました`);
+  selectedInvoices.clear();
+  await loadInvoices();
+  await loadInvoiceMonthTabs();
+  await loadInvoiceEntityTabs();
+});
+
+// 新規追加モーダル
+let editingInvoiceId = null;
+document.getElementById('btn-invoice-add').addEventListener('click', () => {
+  editingInvoiceId = null;
+  document.getElementById('invoice-modal-title').textContent = '新規請求書';
+  ['inv-vendor', 'inv-due-date', 'inv-transaction-date', 'inv-month', 'inv-note'].forEach(id => document.getElementById(id).value = '');
+  ['inv-amount', 'inv-carry-1', 'inv-carry-2', 'inv-carry-3'].forEach(id => document.getElementById(id).value = 0);
+  ['inv-category', 'inv-payment-method', 'inv-facility', 'inv-entity'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('inv-month').value = currentInvoiceMonth || '';
+  document.getElementById('inv-entity').value = currentInvoiceEntity || '';
+  document.getElementById('invoice-modal').classList.add('show');
+});
+
+document.getElementById('inv-modal-cancel').addEventListener('click', () => {
+  document.getElementById('invoice-modal').classList.remove('show');
+});
+document.getElementById('inv-modal-save').addEventListener('click', async () => {
+  const data = {
+    vendor: document.getElementById('inv-vendor').value,
+    category: document.getElementById('inv-category').value,
+    payment_method: document.getElementById('inv-payment-method').value,
+    due_date: document.getElementById('inv-due-date').value,
+    facility: document.getElementById('inv-facility').value,
+    entity: document.getElementById('inv-entity').value,
+    transaction_date: document.getElementById('inv-transaction-date').value,
+    month: document.getElementById('inv-month').value,
+    amount: Number(document.getElementById('inv-amount').value) || 0,
+    carry_1: Number(document.getElementById('inv-carry-1').value) || 0,
+    carry_2: Number(document.getElementById('inv-carry-2').value) || 0,
+    carry_3: Number(document.getElementById('inv-carry-3').value) || 0,
+    note: document.getElementById('inv-note').value,
+  };
+  if (!data.vendor) { showToast('業者名は必須です', 'error'); return; }
+  await api('/api/keiri/invoices', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  document.getElementById('invoice-modal').classList.remove('show');
+  await loadInvoices();
+  await loadInvoiceMonthTabs();
+  showToast('追加しました');
+});
+
+// =============================================================================
+// 請求書Excelアップロード
+// =============================================================================
+let pendingInvoiceUpload = null;
+
+document.getElementById('btn-invoice-upload-excel').addEventListener('click', () => {
+  document.getElementById('invoice-file-input').click();
+});
+
+document.getElementById('invoice-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  showToast('読み込み中...');
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await api('/api/keiri/invoices/upload', { method: 'POST', body: formData });
+  if (res.error) { showToast(res.error, 'error'); return; }
+
+  pendingInvoiceUpload = res;
+
+  // サマリー表示
+  document.getElementById('invoice-upload-stats').innerHTML = `
+    <div class="summary-card"><div class="label">読込件数</div><div class="value blue">${res.stats.total}件</div></div>
+    <div class="summary-card"><div class="label">合計金額</div><div class="value red">¥${yen(res.stats.total_amount)}</div></div>
+    <div class="summary-card"><div class="label">月</div><div class="value">${res.stats.month || '不明'}</div></div>
+    <div class="summary-card"><div class="label">エンティティ</div><div class="value">${res.stats.entities.length}件</div></div>
+  `;
+
+  // プレビューテーブル
+  const tbody = document.getElementById('invoice-upload-tbody');
+  tbody.innerHTML = res.invoices.map((inv, i) => `<tr>
+    <td>${inv.entity || ''}</td>
+    <td>${inv.vendor || ''}</td>
+    <td>${inv.category || ''}</td>
+    <td>${inv.payment_method || ''}</td>
+    <td>${inv.due_date || ''}</td>
+    <td>${inv.facility || ''}</td>
+    <td class="amount withdrawal">¥${yen(inv.amount)}</td>
+    <td class="amount">${inv.carry_1 ? '¥' + yen(inv.carry_1) : ''}</td>
+    <td class="amount">${inv.carry_2 ? '¥' + yen(inv.carry_2) : ''}</td>
+    <td class="amount">${inv.carry_3 ? '¥' + yen(inv.carry_3) : ''}</td>
+  </tr>`).join('');
+
+  document.getElementById('invoice-upload-modal').classList.add('show');
+});
+
+document.getElementById('invoice-upload-cancel').addEventListener('click', () => {
+  document.getElementById('invoice-upload-modal').classList.remove('show');
+  pendingInvoiceUpload = null;
+});
+
+document.getElementById('invoice-upload-confirm').addEventListener('click', async () => {
+  if (!pendingInvoiceUpload) return;
+  showToast('保存中...');
+  const res = await api('/api/keiri/invoices/upload/confirm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ invoices: pendingInvoiceUpload.invoices })
+  });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ ${res.inserted}件の請求書を保存しました`, 'success');
+  document.getElementById('invoice-upload-modal').classList.remove('show');
+  pendingInvoiceUpload = null;
+  await loadInvoices();
+  await loadInvoiceMonthTabs();
+  await loadInvoiceEntityTabs();
+});
+
+// =============================================================================
+// Tab 3: 月別経費一覧
+// =============================================================================
+async function loadSummaryMonthTabs() {
+  const months = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+  const tabs = document.getElementById('summary-month-tabs');
+  tabs.innerHTML = months.map(m => `<button class="month-tab ${m === currentSummaryMonth ? 'active' : ''}" data-month="${m}">${m || '年間'}</button>`).join('');
+  tabs.querySelectorAll('.month-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      tabs.querySelectorAll('.month-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentSummaryMonth = t.dataset.month;
+      loadSummary();
+    });
+  });
+}
+
+async function loadSummary() {
+  const params = new URLSearchParams();
+  if (currentSummaryMonth) params.set('month', currentSummaryMonth);
+  const year = document.getElementById('summary-year').value;
+  const account = document.getElementById('summary-account').value;
+  if (year) params.set('year', year);
+  if (account) params.set('account', account);
+  const data = await api('/api/keiri/summary/monthly?' + params);
+  renderSummary(data);
+}
+
+function renderSummary(data) {
+  const { facilities, groups } = data;
+  const tbl = document.getElementById('summary-table');
+  // 列: 科目, 支払先, ...施設, 合計
+  let html = '<thead><tr><th class="first-col">科目</th><th class="vendor-col">支払先</th>';
+  facilities.forEach(f => html += `<th class="facility-col">${f}</th>`);
+  html += '<th class="facility-col">合計</th></tr></thead><tbody>';
+  let grandTotal = 0;
+  const facilityTotals = facilities.map(() => 0);
+  Object.keys(groups).sort().forEach(cat => {
+    const vendors = groups[cat];
+    const vendorNames = Object.keys(vendors).sort();
+    let catTotal = 0;
+    const catFacTotals = facilities.map(() => 0);
+    vendorNames.forEach((v, vi) => {
+      const facMap = vendors[v];
+      let rowTotal = 0;
+      html += `<tr>${vi === 0 ? `<td class="cat-col" rowspan="${vendorNames.length}">${cat}</td>` : ''}<td class="vendor-col">${v}</td>`;
+      facilities.forEach((f, fi) => {
+        const v2 = facMap[f] || 0;
+        rowTotal += v2;
+        catFacTotals[fi] += v2;
+        facilityTotals[fi] += v2;
+        html += `<td class="amt ${v2 === 0 ? 'zero' : ''}">${v2 ? yen(v2) : ''}</td>`;
+      });
+      catTotal += rowTotal;
+      grandTotal += rowTotal;
+      html += `<td class="amt"><strong>${yen(rowTotal)}</strong></td></tr>`;
+    });
+    // 科目小計
+    html += `<tr class="subtotal"><td class="cat-col"></td><td class="vendor-col">${cat} 小計</td>`;
+    catFacTotals.forEach(v => html += `<td class="amt ${v === 0 ? 'zero' : ''}">${v ? yen(v) : ''}</td>`);
+    html += `<td class="amt">${yen(catTotal)}</td></tr>`;
+  });
+  // 総合計
+  html += '<tr class="total"><td class="cat-col"></td><td class="vendor-col">総合計</td>';
+  facilityTotals.forEach(v => html += `<td class="amt">${yen(v)}</td>`);
+  html += `<td class="amt">${yen(grandTotal)}</td></tr>`;
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
+
+document.getElementById('summary-year').addEventListener('change', loadSummary);
+document.getElementById('summary-account').addEventListener('change', loadSummary);
+
+// =============================================================================
+// 通帳と照合して消込（モーダル）
+// =============================================================================
+document.getElementById('btn-invoice-match').addEventListener('click', () => {
+  // モーダルを開いて結果エリアをリセット
+  document.getElementById('match-results-area').style.display = 'none';
+  document.getElementById('btn-confirm-match').style.display = 'none';
+  document.getElementById('match-summary-cards').innerHTML = '';
+  document.getElementById('match-modal').classList.add('show');
+});
+
+document.getElementById('match-modal-close').addEventListener('click', () => {
+  document.getElementById('match-modal').classList.remove('show');
+});
+
+document.getElementById('btn-run-match').addEventListener('click', async () => {
+  showToast('マッチング中...');
+  const data = await api('/api/keiri/match/auto', { method: 'POST' });
+  matchData = data.matches;
+  renderMatchSummary(data);
+  renderMatchTable(data.matches);
+  document.getElementById('match-results-area').style.display = 'block';
+  document.getElementById('btn-confirm-match').style.display = 'inline-block';
+});
+
+function renderMatchSummary(data) {
+  const d = data.diagnostic || {};
+  const high = data.matches.filter(m => m.confidence === 'high').length;
+  const med = data.matches.filter(m => m.confidence === 'medium').length;
+  const low = data.matches.filter(m => m.confidence === 'low').length;
+
+  let diagMsg = '';
+  const hints = [];
+  if (d.no_vendor_name > 0) {
+    hints.push(`通帳の <strong>${d.no_vendor_name}件</strong> が「支払先（会社名）」未設定のためスキップされました → 設定タブの「学習ルール」で支払先を登録してください`);
+  }
+  if (d.no_amount_match > 0) {
+    hints.push(`通帳 <strong>${d.no_amount_match}件</strong> が請求書の金額（当月/繰越）と一致しません（手数料差や一括支払の可能性）`);
+  }
+  if (hints.length > 0) {
+    const icon = data.matches.length === 0 ? '⚠️' : '💡';
+    const bg = data.matches.length === 0 ? '#fff8dc' : '#e6f4ff';
+    const border = data.matches.length === 0 ? '#fdcb6e' : '#74b9ff';
+    diagMsg = `<div style="grid-column:1/-1;background:${bg};padding:10px 14px;border-left:4px solid ${border};border-radius:4px;font-size:12px;color:#2d3436;">
+      ${icon} <strong>診断：</strong>
+      <ul style="margin:6px 0 0 24px;">
+        ${hints.map(h => '<li>' + h + '</li>').join('')}
+      </ul>
+    </div>`;
+  }
+
+  document.getElementById('match-summary-cards').innerHTML = `
+    <div class="summary-card"><div class="label">マッチ件数</div><div class="value green">${data.matches.length}件</div></div>
+    <div class="summary-card"><div class="label">◎高確度 / ○中 / △低</div><div class="value" style="font-size:14px;">${high} / ${med} / ${low}</div></div>
+    <div class="summary-card"><div class="label">未マッチ通帳</div><div class="value red">${data.unmatched_count}件</div></div>
+    <div class="summary-card"><div class="label">未消込請求</div><div class="value orange">${data.total_unmatched_invoices}件</div></div>
+    ${diagMsg}
+  `;
+}
+
+function renderMatchTable(matches) {
+  const tbody = document.getElementById('match-tbody');
+  tbody.innerHTML = matches.map((m, i) => {
+    const confMap = {
+      high: '<span style="color:#00b894;font-weight:700;">◎ 高</span>',
+      medium: '<span style="color:#fdcb6e;font-weight:700;">○ 中</span>',
+      low: '<span style="color:#e17055;font-weight:700;">△ 低</span>',
+    };
+    const conf = confMap[m.confidence] || '';
+    const labels = { amount: '当月', carry_1: '前月繰越', carry_2: '前々繰越', carry_3: '前々々月' };
+    const checked = m.confidence !== 'low' ? 'checked' : '';
+    const simInfo = m.similarity !== undefined ? `<span style="font-size:10px;color:#636e72;">業者名類似度 ${m.similarity}%</span>` : '';
+    const altInfo = m.alternatives ? `<span style="font-size:10px;color:#e17055;">（他${m.alternatives}候補）</span>` : '';
+    return `<tr>
+      <td><input type="checkbox" class="match-cb" data-idx="${i}" ${checked}></td>
+      <td>${conf}<br>${simInfo}</td>
+      <td>${m.bank_tx.tx_date}</td>
+      <td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="摘要: ${m.bank_tx.description}">${m.bank_tx.vendor_name || ''}</td>
+      <td class="amount withdrawal">¥${yen(m.bank_tx.withdrawal)}</td>
+      <td>→</td>
+      <td>${m.invoice.vendor} ${altInfo}</td>
+      <td>${m.invoice.category}</td>
+      <td>${m.invoice.facility || ''}</td>
+      <td><span class="badge badge-auto">${labels[m.clear_type] || m.clear_type}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('match-check-all').addEventListener('change', (e) => {
+  document.querySelectorAll('.match-cb').forEach(cb => cb.checked = e.target.checked);
+});
+
+document.getElementById('btn-confirm-match').addEventListener('click', async () => {
+  const confirmations = [];
+  document.querySelectorAll('.match-cb:checked').forEach(cb => {
+    const m = matchData[Number(cb.dataset.idx)];
+    confirmations.push({ invoice_id: m.invoice.id, clear_type: m.clear_type, bank_tx_id: m.bank_tx.id });
+  });
+  if (confirmations.length === 0) return;
+  await api('/api/keiri/match/confirm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ confirmations })
+  });
+  showToast(`✓ ${confirmations.length}件消込しました`);
+  document.getElementById('match-results-area').style.display = 'none';
+  document.getElementById('btn-confirm-match').style.display = 'none';
+  document.getElementById('match-modal').classList.remove('show');
+  await loadInvoices();
+  await loadBankTransactions();
+});
+
+// =============================================================================
+// Tab 5: 設定
+// =============================================================================
+document.querySelectorAll('[data-settings]').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('[data-settings]').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelectorAll('#page-settings .sub-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('settings-' + t.dataset.settings).classList.add('active');
+    if (t.dataset.settings === 'rules') loadRules();
+    if (t.dataset.settings === 'accounts') loadAccountsTable();
+    if (t.dataset.settings === 'facilities') loadFacilitiesTable();
+  });
+});
+
+async function loadRules() {
+  const search = document.getElementById('rules-search').value;
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  const rules = await api('/api/keiri/rules?' + params);
+  document.getElementById('rules-tbody').innerHTML = rules.map(r => `
+    <tr data-id="${r.id}">
+      <td style="font-family:monospace;font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis;" title="${(r.description_pattern || '').replace(/"/g,'&quot;')}">${r.description_pattern}</td>
+      <td class="rule-editable" data-field="vendor_name" data-id="${r.id}" style="font-weight:600;cursor:pointer;" title="クリックで編集">${r.vendor_name || '<span style="color:#ccc;">（未設定）</span>'}</td>
+      <td>${r.account || '（全口座）'}</td>
+      <td class="rule-editable" data-field="category" data-id="${r.id}" style="cursor:pointer;" title="クリックで編集">${r.category ? `<span class="badge badge-auto">${r.category}</span>` : '<span style="color:#ccc;">（未設定）</span>'}</td>
+      <td class="rule-editable" data-field="facility" data-id="${r.id}" style="cursor:pointer;" title="クリックで編集">${r.facility || '<span style="color:#ccc;">（未設定）</span>'}</td>
+      <td class="amount">${r.match_count}</td>
+      <td style="font-size:11px;color:#636e72;">${r.updated_at || ''}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deleteRule(${r.id})">削除</button></td>
+    </tr>
+  `).join('');
+}
+
+// 学習ルールのインライン編集
+document.getElementById('rules-tbody').addEventListener('click', (e) => {
+  const td = e.target.closest('td.rule-editable');
+  if (!td || td.classList.contains('editing')) return;
+  const id = Number(td.dataset.id);
+  const field = td.dataset.field;
+  td.classList.add('editing');
+
+  let input;
+  const currentText = td.textContent.trim();
+  const currentVal = currentText === '（未設定）' ? '' : currentText;
+
+  if (field === 'category') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
+    input.style.cssText = 'font-size:11px;padding:3px;width:130px;';
+  } else if (field === 'facility') {
+    input = document.createElement('select');
+    input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === currentVal ? 'selected' : ''}>${f.name}</option>`).join('');
+    input.style.cssText = 'font-size:11px;padding:3px;width:120px;';
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentVal;
+    input.style.cssText = 'font-size:12px;padding:4px 6px;width:160px;border:1px solid #0984e3;border-radius:4px;';
+  }
+
+  td.textContent = '';
+  td.appendChild(input);
+  input.focus();
+  if (input.select) input.select();
+
+  let saved = false;
+  async function save() {
+    if (saved) return;
+    saved = true;
+    const newVal = input.value;
+    if (newVal === currentVal) {
+      td.classList.remove('editing');
+      loadRules();
+      return;
+    }
+    await api(`/api/rules/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ [field]: newVal })
+    });
+    showToast('ルールを更新しました');
+    td.classList.remove('editing');
+    loadRules();
+  }
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') input.blur();
+    if (ev.key === 'Escape') { saved = true; td.classList.remove('editing'); loadRules(); }
+  });
+  if (input.tagName === 'SELECT') input.addEventListener('change', save);
+});
+
+document.getElementById('btn-rules-refresh').addEventListener('click', loadRules);
+document.getElementById('rules-search').addEventListener('input', () => {
+  clearTimeout(window.__rulesT);
+  window.__rulesT = setTimeout(loadRules, 300);
+});
+window.deleteRule = async (id) => {
+  if (!confirm('このルールを削除しますか？')) return;
+  await api(`/api/rules/${id}`, { method: 'DELETE' });
+  loadRules();
+};
+
+// 会社名自動設定（シード）
+document.getElementById('btn-seed-vendors').addEventListener('click', async () => {
+  if (!confirm('既知の振込人名義から会社名を自動設定します。\n既に設定済みの会社名は上書きされません。実行しますか？')) return;
+  showToast('設定中...');
+  const res = await api('/api/keiri/rules/seed-vendors', { method: 'POST' });
+  if (res.error) { showToast(res.error, 'error'); return; }
+  showToast(`✓ 新規作成:${res.created}件 / 更新:${res.updated}件（全${res.total}件中）`, 'success');
+  loadRules();
+});
+
+async function loadAccountsTable() {
+  await loadAccounts();
+  document.getElementById('accounts-tbody').innerHTML = ACCOUNTS.map(a => `
+    <tr data-id="${a.id}">
+      <td>${a.name}</td>
+      <td>${a.display_name || ''}</td>
+      <td>${a.sort_order}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deleteAccount(${a.id})">削除</button></td>
+    </tr>
+  `).join('');
+}
+document.getElementById('btn-add-account').addEventListener('click', async () => {
+  const name = prompt('口座名:');
+  if (!name) return;
+  const display = prompt('表示名（省略可）:') || name;
+  await api('/api/keiri/accounts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, display_name: display })
+  });
+  loadAccountsTable();
+  loadBankAccountTabs();
+});
+window.deleteAccount = async (id) => {
+  if (!confirm('この口座を削除しますか？（取引データは残ります）')) return;
+  await api(`/api/accounts/${id}`, { method: 'DELETE' });
+  loadAccountsTable();
+  loadBankAccountTabs();
+};
+
+async function loadFacilitiesTable() {
+  await loadFacilities();
+  document.getElementById('facilities-tbody').innerHTML = FACILITIES.map(f => `
+    <tr data-id="${f.id}">
+      <td>${f.name}</td>
+      <td>${f.sort_order}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deleteFacility(${f.id})">削除</button></td>
+    </tr>
+  `).join('');
+}
+document.getElementById('btn-add-facility').addEventListener('click', async () => {
+  const name = prompt('施設名:');
+  if (!name) return;
+  await api('/api/keiri/facilities', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name })
+  });
+  loadFacilitiesTable();
+});
+window.deleteFacility = async (id) => {
+  if (!confirm('この施設を削除しますか？')) return;
+  await api(`/api/facilities/${id}`, { method: 'DELETE' });
+  loadFacilitiesTable();
+};
+
+// =============================================================================
+// ナビゲーション
+// =============================================================================
+function setupEvents() {
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + tab.dataset.page).classList.add('active');
+      // タブ初期化
+      if (tab.dataset.page === 'summary') loadSummary();
+      if (tab.dataset.page === 'settings') loadRules();
+      if (tab.dataset.page === 'help') loadHelp();
+    });
+  });
+}
+
+// =============================================================================
+// ヘルプ（説明書）読み込み・Markdownレンダリング
+// =============================================================================
+let helpLoaded = false;
+async function loadHelp() {
+  if (helpLoaded) return;
+  try {
+    const res = await fetch('/api/keiri/help');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const md = await res.text();
+    document.getElementById('help-content').innerHTML = markdownToHtml(md);
+    helpLoaded = true;
+  } catch (e) {
+    document.getElementById('help-content').innerHTML =
+      '<p style="color:#d63031;">説明書の読み込みに失敗しました: ' + e.message + '</p>';
+  }
+}
+
+// シンプルなMarkdown→HTML変換（このアプリ用の簡易版）
+function markdownToHtml(md) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let inCodeBlock = false;
+  let inTable = false;
+  let tableRows = [];
+  let inList = null; // 'ul' or 'ol'
+  let paraBuffer = [];
+
+  function flushPara() {
+    if (paraBuffer.length) {
+      out.push('<p>' + inlineMd(paraBuffer.join(' ')) + '</p>');
+      paraBuffer = [];
+    }
+  }
+  function flushList() {
+    if (inList) {
+      out.push(`</${inList}>`);
+      inList = null;
+    }
+  }
+  function flushTable() {
+    if (inTable && tableRows.length) {
+      let html = '<table>';
+      tableRows.forEach((row, i) => {
+        if (i === 1) return; // separator
+        const tag = i === 0 ? 'th' : 'td';
+        html += '<tr>' + row.map(c => `<${tag}>${inlineMd(c.trim())}</${tag}>`).join('') + '</tr>';
+      });
+      html += '</table>';
+      out.push(html);
+    }
+    inTable = false;
+    tableRows = [];
+  }
+
+  function inlineMd(s) {
+    s = esc(s);
+    // code
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // bold
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // italic
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // links [text](url)
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    return s;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // コードブロック
+    if (/^```/.test(line)) {
+      flushPara(); flushList(); flushTable();
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        out.push('<pre><code>');
+      } else {
+        inCodeBlock = false;
+        out.push('</code></pre>');
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      out.push(esc(line));
+      continue;
+    }
+
+    // テーブル
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      flushPara(); flushList();
+      inTable = true;
+      const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+      tableRows.push(cells);
+      continue;
+    } else if (inTable) {
+      flushTable();
+    }
+
+    // 見出し
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      flushPara(); flushList();
+      const lvl = h[1].length;
+      out.push(`<h${lvl}>${inlineMd(h[2])}</h${lvl}>`);
+      continue;
+    }
+
+    // 水平線
+    if (/^---+$/.test(line.trim())) {
+      flushPara(); flushList();
+      out.push('<hr>');
+      continue;
+    }
+
+    // リスト
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ul || ol) {
+      flushPara();
+      const want = ul ? 'ul' : 'ol';
+      if (inList !== want) {
+        flushList();
+        out.push(`<${want}>`);
+        inList = want;
+      }
+      out.push(`<li>${inlineMd((ul || ol)[1])}</li>`);
+      continue;
+    }
+
+    // 空行
+    if (/^\s*$/.test(line)) {
+      flushPara(); flushList();
+      continue;
+    }
+
+    // 段落
+    paraBuffer.push(line);
+  }
+  flushPara(); flushList(); flushTable();
+  if (inCodeBlock) out.push('</code></pre>');
+
+  return out.join('\n');
+}
+
+// 起動
+init();
+</script>
+</body>
+</html>
