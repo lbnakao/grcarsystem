@@ -931,6 +931,8 @@ setTimeout(() => panelSetups.overview.reset(), 100);
         if (!moved && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) moved = true;
         el.style.left = (startLeft + dx) + 'px';
         el.style.top  = (startTop  + dy) + 'px';
+        // ノード移動時、それに繋がっている線も追従させる
+        if (el.dataset.nodeId) refreshLinesAnchoredTo(panelOf(el), el.dataset.nodeId);
       }
       function onUp() {
         window.removeEventListener('mousemove', onMove);
@@ -1056,89 +1058,341 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     });
   }
 
-  // ----- Add-sticky mode -----
-  let addArmed = false;
-  function setupAddSticky() {
-    const btn = document.getElementById('add-sticky');
-    btn.addEventListener('click', () => {
-      addArmed = !addArmed;
-      btn.classList.toggle('active', addArmed);
-      btn.textContent = addArmed ? 'キャンバスをクリック…' : '＋付箋';
+  // ----- 線（ライン） -----
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const panelLines = { overview: [], facility: [], crossfunc: [], actions: [] };
+
+  function getOrCreateUserSvg(canvas) {
+    let svg = canvas.querySelector('svg.user-edges');
+    if (!svg) {
+      svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('class', 'user-edges');
+      svg.setAttribute('width',  parseFloat(canvas.style.width)  || canvas.offsetWidth  || 5000);
+      svg.setAttribute('height', parseFloat(canvas.style.height) || canvas.offsetHeight || 5000);
+      svg.style.position = 'absolute';
+      svg.style.top = '0'; svg.style.left = '0';
+      svg.style.pointerEvents = 'none';
+      svg.style.overflow = 'visible';
+      canvas.appendChild(svg);
+    }
+    return svg;
+  }
+  function nodeAtPoint(panel, x, y) {
+    const nodes = document.querySelectorAll('[data-panel="' + panel + '"][data-node-id]');
+    for (const n of nodes) {
+      const nx = parseFloat(n.style.left) || 0;
+      const ny = parseFloat(n.style.top)  || 0;
+      const nw = n.offsetWidth, nh = n.offsetHeight;
+      if (x >= nx && x <= nx+nw && y >= ny && y <= ny+nh) {
+        const d = { top: y-ny, bottom: ny+nh-y, left: x-nx, right: nx+nw-x };
+        let side = 'top', min = d.top;
+        for (const k of ['bottom','left','right']) if (d[k] < min) { side = k; min = d[k]; }
+        return { nodeId: n.dataset.nodeId, side };
+      }
+    }
+    return null;
+  }
+  function anchorPoint(panel, ref) {
+    if (!ref) return { x: 0, y: 0 };
+    if (ref.type === 'free' || !ref.nodeId) return { x: ref.x || 0, y: ref.y || 0 };
+    const el = document.querySelector('[data-panel="' + panel + '"][data-node-id="' + ref.nodeId + '"]');
+    if (!el) return { x: ref.x || 0, y: ref.y || 0 };
+    const x = parseFloat(el.style.left) || 0;
+    const y = parseFloat(el.style.top)  || 0;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    switch (ref.side) {
+      case 'top':    return { x: x + w/2, y };
+      case 'bottom': return { x: x + w/2, y: y + h };
+      case 'left':   return { x, y: y + h/2 };
+      case 'right':  return { x: x + w, y: y + h/2 };
+      default:       return { x: x + w/2, y: y + h/2 };
+    }
+  }
+  function refreshLinesAnchoredTo(panel, nodeId) {
+    if (!panel || !panelLines[panel]) return;
+    panelLines[panel].forEach(L => {
+      const f = L.line.from, t = L.line.to;
+      if ((f && f.nodeId === nodeId) || (t && t.nodeId === nodeId)) L.refresh();
     });
+  }
+  function createLineEl(panel, line) {
+    const canvas = panelSetups[panel].getCanvas();
+    const svg = getOrCreateUserSvg(canvas);
+    const lineEl = document.createElementNS(SVG_NS, 'line');
+    lineEl.setAttribute('class', 'user-line');
+    lineEl.dataset.lineId = line.id;
+    lineEl.setAttribute('stroke', line.color || '#1E2761');
+    lineEl.setAttribute('stroke-width', line.width || 2.5);
+    if (line.dashed) lineEl.setAttribute('stroke-dasharray', '8 4');
+    lineEl.setAttribute('stroke-linecap', 'round');
+    function refresh() {
+      const a = anchorPoint(panel, line.from);
+      const b = anchorPoint(panel, line.to);
+      lineEl.setAttribute('x1', a.x); lineEl.setAttribute('y1', a.y);
+      lineEl.setAttribute('x2', b.x); lineEl.setAttribute('y2', b.y);
+    }
+    refresh();
+    lineEl.addEventListener('click', e => {
+      if (!document.body.classList.contains('edit-mode')) return;
+      e.stopPropagation();
+      if (!confirm('この線を削除しますか？')) return;
+      api('DELETE', '/line/' + line.id).then(() => {
+        lineEl.remove();
+        const arr = panelLines[panel];
+        const i = arr.findIndex(L => L.line.id === line.id);
+        if (i >= 0) arr.splice(i, 1);
+      }).catch(() => setStatus('削除失敗', true));
+    });
+    svg.appendChild(lineEl);
+    const wrap = { el: lineEl, refresh, line };
+    panelLines[panel].push(wrap);
+    return wrap;
+  }
+
+  // ----- 枠（フレーム） -----
+  function createFrameEl(panel, frame) {
+    const canvas = panelSetups[panel].getCanvas();
+    const el = document.createElement('div');
+    el.className = 'user-frame';
+    el.dataset.frameId = frame.id;
+    el.dataset.panel = panel;
+    el.style.left = (frame.x || 0) + 'px';
+    el.style.top  = (frame.y || 0) + 'px';
+    el.style.width  = (frame.w || 200) + 'px';
+    el.style.height = (frame.h || 120) + 'px';
+
+    const label = document.createElement('div');
+    label.className = 'frame-label';
+    label.textContent = frame.label || '';
+    label.contentEditable = document.body.classList.contains('edit-mode') ? 'true' : 'false';
+    el.appendChild(label);
+
+    const del = document.createElement('button');
+    del.className = 'frame-del edit-handle';
+    del.textContent = '×';
+    del.title = '削除';
+    del.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (!confirm('この枠を削除しますか？')) return;
+      api('DELETE', '/frame/' + frame.id).then(() => el.remove())
+        .catch(() => setStatus('削除失敗', true));
+    });
+    el.appendChild(del);
+
+    function save() {
+      debounce('frame:' + frame.id, () => {
+        const data = {
+          x: Math.round(parseFloat(el.style.left)) || 0,
+          y: Math.round(parseFloat(el.style.top))  || 0,
+          w: Math.round(parseFloat(el.style.width)) || 200,
+          h: Math.round(parseFloat(el.style.height)) || 120,
+          label: label.textContent
+        };
+        api('PUT', '/frame/' + frame.id, { data })
+          .then(() => setStatus('保存しました'))
+          .catch(() => setStatus('保存失敗', true));
+      }, 400);
+    }
+    wireDraggable(el, save);
+    label.addEventListener('input', save);
+
+    canvas.appendChild(el);
+    return el;
+  }
+
+  // ----- ツール（追加モード）状態管理 -----
+  // tool: 'none' | 'sticky' | 'line' | 'frame'
+  let tool = 'none';
+  let linePending = null; // { panel, from }
+  function refreshToolButtons() {
+    document.querySelectorAll('#edit-toolbar button[data-tool]').forEach(b => {
+      const isActive = b.dataset.tool === tool;
+      b.classList.toggle('active', isActive);
+      b.textContent = isActive ? (b.dataset.activeLabel || b.textContent)
+                               : (b.dataset.label || b.textContent);
+    });
+    document.body.classList.toggle('tool-armed', tool !== 'none');
+  }
+  function setTool(t) {
+    if (tool === t) t = 'none'; // toggle
+    tool = t;
+    linePending = null;
+    refreshToolButtons();
+    if (t === 'sticky')      setStatus('キャンバスをクリック');
+    else if (t === 'line')   setStatus('始点をクリック');
+    else if (t === 'frame')  setStatus('ドラッグで枠を描画');
+    else                     setStatus('');
+  }
+  function refreshFrameEditability(on) {
+    document.querySelectorAll('.frame-label').forEach(l => l.contentEditable = on ? 'true' : 'false');
+  }
+  function setupCanvasInteractions() {
     document.querySelectorAll('.panel-canvas').forEach(canvas => {
+      // 単発クリック: sticky / line（frame は mousedown ドラッグで処理）
       canvas.addEventListener('click', async e => {
-        if (!addArmed) return;
-        if (e.target.closest('.sticky-note, [data-node-id]')) return;
+        if (tool === 'none' || tool === 'frame') return;
+        if (e.target.closest('.sticky-note, .user-frame, .user-line, .frame-del, .sticky-del')) return;
         const panel = panelOf(canvas);
         const setup = panelSetups[panel];
         const scale = setup.getScale();
         const rect = canvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) / scale;
         const y = (e.clientY - rect.top)  / scale;
-        const data = { x: Math.round(x), y: Math.round(y), w: 220, text: '' };
-        try {
-          const r = await api('POST', '/sticky', { panel, data });
-          const stickyEl = createStickyEl(panel, { id: r.id, ...data });
-          addArmed = false;
-          btn.classList.remove('active');
-          btn.textContent = '＋付箋';
-          stickyEl.querySelector('.sticky-text').focus();
-          setStatus('付箋を追加');
-        } catch (err) { setStatus('追加失敗', true); }
+
+        if (tool === 'sticky') {
+          if (e.target.closest('[data-node-id]')) return;
+          const data = { x: Math.round(x), y: Math.round(y), w: 220, text: '' };
+          try {
+            const r = await api('POST', '/sticky', { panel, data });
+            const stickyEl = createStickyEl(panel, { id: r.id, ...data });
+            setTool('none');
+            stickyEl.querySelector('.sticky-text').focus();
+            setStatus('付箋を追加');
+          } catch { setStatus('追加失敗', true); }
+        } else if (tool === 'line') {
+          const snap = nodeAtPoint(panel, x, y);
+          const ref = snap ? { type: 'node', nodeId: snap.nodeId, side: snap.side }
+                           : { type: 'free', x: Math.round(x), y: Math.round(y) };
+          if (!linePending) {
+            linePending = { panel, from: ref };
+            setStatus('終点をクリック' + (snap ? '（始点: ' + snap.nodeId + '）' : ''));
+          } else if (linePending.panel !== panel) {
+            setStatus('同じパネル内で2点指定', true);
+            linePending = null;
+          } else {
+            const data = { from: linePending.from, to: ref, color: '#1E2761', width: 2.5 };
+            linePending = null;
+            try {
+              const r = await api('POST', '/line', { panel, data });
+              createLineEl(panel, { id: r.id, ...data });
+              setTool('none');
+              setStatus('線を追加');
+            } catch { setStatus('追加失敗', true); }
+          }
+        }
+      });
+
+      // ドラッグで枠を描画
+      canvas.addEventListener('mousedown', e => {
+        if (tool !== 'frame') return;
+        if (e.button !== 0) return;
+        if (e.target.closest('[data-node-id], .sticky-note, .user-frame, .user-line')) return;
+        e.stopPropagation(); e.preventDefault();
+        const panel = panelOf(canvas);
+        const setup = panelSetups[panel];
+        const scale = setup.getScale();
+        const rect = canvas.getBoundingClientRect();
+        const x0 = (e.clientX - rect.left) / scale;
+        const y0 = (e.clientY - rect.top)  / scale;
+
+        const preview = document.createElement('div');
+        preview.className = 'user-frame frame-preview';
+        preview.style.left = x0 + 'px'; preview.style.top = y0 + 'px';
+        preview.style.width = '0px'; preview.style.height = '0px';
+        canvas.appendChild(preview);
+
+        function onMove(ev) {
+          const x1 = (ev.clientX - rect.left) / scale;
+          const y1 = (ev.clientY - rect.top)  / scale;
+          preview.style.left = Math.min(x0, x1) + 'px';
+          preview.style.top  = Math.min(y0, y1) + 'px';
+          preview.style.width  = Math.abs(x1 - x0) + 'px';
+          preview.style.height = Math.abs(y1 - y0) + 'px';
+        }
+        async function onUp(ev) {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+          const x1 = (ev.clientX - rect.left) / scale;
+          const y1 = (ev.clientY - rect.top)  / scale;
+          const left = Math.min(x0, x1), top = Math.min(y0, y1);
+          const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+          preview.remove();
+          if (w < 30 || h < 30) { setTool('none'); return; }
+          const data = { x: Math.round(left), y: Math.round(top), w: Math.round(w), h: Math.round(h), label: '' };
+          try {
+            const r = await api('POST', '/frame', { panel, data });
+            createFrameEl(panel, { id: r.id, ...data });
+            setTool('none');
+            setStatus('枠を追加');
+          } catch { setStatus('追加失敗', true); }
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
       });
     });
   }
 
-  // ----- Edit mode toggle -----
+  // ----- 編集モード切替 -----
   function toggleEditMode() {
     const on = !document.body.classList.contains('edit-mode');
     document.body.classList.toggle('edit-mode', on);
     const tBtn = document.getElementById('edit-toggle');
     tBtn.textContent = on ? '編集中（クリックで終了）' : '✎ 編集モード';
     tBtn.classList.toggle('active', on);
-    document.getElementById('add-sticky').style.display = on ? '' : 'none';
+    document.querySelectorAll('#edit-toolbar button[data-tool]').forEach(b => {
+      b.style.display = on ? '' : 'none';
+    });
     refreshStickyEditability(on);
-    if (!on) {
-      addArmed = false;
-      const aBtn = document.getElementById('add-sticky');
-      aBtn.classList.remove('active'); aBtn.textContent = '＋付箋';
-    }
+    refreshFrameEditability(on);
+    if (!on) setTool('none');
   }
 
-  // ----- Inject CSS -----
+  // ----- CSS 注入 -----
   const style = document.createElement('style');
   style.textContent = `
     body.edit-mode [data-node-id] { cursor: move; outline: 2px dashed transparent; transition: outline-color 0.15s; }
     body.edit-mode [data-node-id]:hover { outline-color: rgba(30,39,97,0.5); }
     .editing-text { outline: 2px solid #FFC107 !important; background: rgba(255,236,179,0.45); cursor: text !important; }
+
     .sticky-note { position: absolute; background: #FFF59D; border: 1.5px solid #C9A14A; border-radius: 6px; padding: 10px 28px 10px 10px; font-size: 12px; line-height: 1.45; box-shadow: 2px 3px 6px rgba(0,0,0,0.12); min-height: 32px; }
     body.edit-mode .sticky-note { cursor: move; }
     .sticky-text { outline: none; word-break: break-word; white-space: pre-wrap; min-height: 16px; }
     .sticky-del { position: absolute; top: 1px; right: 4px; background: transparent; border: none; font-size: 18px; line-height: 1; color: #888; cursor: pointer; padding: 2px 6px; display: none; font-family: inherit; }
     body.edit-mode .sticky-note:hover .sticky-del { display: block; }
     body.edit-mode .sticky-del:hover { color: #c00; }
+
+    .user-frame { position: absolute; border: 2px dashed rgba(30,39,97,0.45); border-radius: 12px; background: rgba(30,39,97,0.04); z-index: 0; pointer-events: auto; }
+    .user-frame.frame-preview { background: rgba(30,39,97,0.1); pointer-events: none; }
+    .frame-label { position: absolute; top: -12px; left: 14px; background: white; padding: 1px 10px; font-size: 11px; font-weight: 700; color: #1E2761; border: 1px solid rgba(30,39,97,0.5); border-radius: 6px; outline: none; min-width: 16px; }
+    body.edit-mode .user-frame { cursor: move; }
+    .frame-del { position: absolute; top: -10px; right: 6px; background: white; border: 1px solid #ddd; font-size: 14px; line-height: 1; color: #888; cursor: pointer; padding: 1px 6px; display: none; border-radius: 6px; font-family: inherit; }
+    body.edit-mode .user-frame:hover .frame-del { display: block; }
+    body.edit-mode .frame-del:hover { color: #c00; border-color: #c00; }
+
+    svg.user-edges line { transition: stroke-width 0.1s; }
+    body.edit-mode svg.user-edges line { pointer-events: stroke; cursor: pointer; }
+    body.edit-mode svg.user-edges line:hover { stroke-width: 5 !important; }
+
+    body.tool-armed .panel-viewport { cursor: crosshair; }
+    body.tool-armed .panel-canvas { cursor: crosshair; }
+
     #edit-toolbar { margin-left: auto; padding-right: 6px; display: flex; gap: 6px; align-items: center; }
     #edit-toolbar button { border: 1px solid #ddd; background: #f8f9fa; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; font-family: inherit; white-space: nowrap; }
     #edit-toolbar button:hover { background: #e9ecef; }
     #edit-toolbar button.active { background: #1E2761; color: white; border-color: #1E2761; }
-    #edit-status { font-size: 11px; min-width: 90px; text-align: right; }
+    #edit-status { font-size: 11px; min-width: 110px; text-align: right; }
   `;
   document.head.appendChild(style);
 
-  // ----- Inject toolbar into the tab bar -----
+  // ----- ツールバー注入 -----
   const toolbar = document.createElement('div');
   toolbar.id = 'edit-toolbar';
   toolbar.innerHTML = '<button id="edit-toggle">✎ 編集モード</button>'
-                   + '<button id="add-sticky" style="display:none">＋付箋</button>'
-                   + '<span id="edit-status"></span>';
+    + '<button data-tool="sticky" data-label="＋付箋" data-active-label="付箋: 配置場所をクリック…" style="display:none">＋付箋</button>'
+    + '<button data-tool="line"   data-label="／線"   data-active-label="線: 2点をクリック…"     style="display:none">／線</button>'
+    + '<button data-tool="frame"  data-label="▢枠"   data-active-label="枠: ドラッグで描画…"     style="display:none">▢枠</button>'
+    + '<span id="edit-status"></span>';
   document.getElementById('tab-bar').appendChild(toolbar);
   document.getElementById('edit-toggle').addEventListener('click', toggleEditMode);
-  setupAddSticky();
+  document.querySelectorAll('#edit-toolbar button[data-tool]').forEach(b => {
+    b.addEventListener('click', () => setTool(b.dataset.tool));
+  });
+  setupCanvasInteractions();
 
-  // ----- Wire all existing nodes -----
+  // ----- 既存ノードを wire -----
   document.querySelectorAll('[data-node-id]').forEach(wireNode);
 
-  // ----- Load saved edits and apply -----
+  // ----- 保存済み編集を読み込んで適用 -----
   (async function loadAll() {
     for (const panel of ['overview', 'facility', 'crossfunc', 'actions']) {
       try {
@@ -1152,6 +1406,8 @@ setTimeout(() => panelSetups.overview.reset(), 100);
           }
         }
         for (const sticky of data.stickies || []) createStickyEl(panel, sticky);
+        for (const frame  of data.frames   || []) createFrameEl(panel,  frame);
+        for (const line   of data.lines    || []) createLineEl(panel,   line);
       } catch (e) { console.error('load failed for', panel, e); }
     }
   })();
