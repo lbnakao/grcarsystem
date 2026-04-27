@@ -889,8 +889,17 @@ setTimeout(() => panelSetups.overview.reset(), 100);
       if (s) s.textContent = patch.sub;
     }
     if (patch.person != null) {
-      const p = el.querySelector('.person, .hub-person, .fc-role');
-      if (p) p.textContent = patch.person;
+      const p = el.querySelector('.person, .hub-person, .fc-role, .vacancy');
+      if (p) {
+        // 担当未定（.vacancy）に名前が入ったら通常の .person 表示に切替
+        if (p.classList.contains('vacancy') && patch.person.trim()) {
+          p.className = 'person';
+        } else if (p.classList.contains('vacant') && patch.person.trim()) {
+          // .hub-person.vacant も同様に vacant 装飾を外す
+          p.classList.remove('vacant');
+        }
+        p.textContent = patch.person;
+      }
     }
   }
   function saveNodePatch(panel, nodeId) {
@@ -950,23 +959,37 @@ setTimeout(() => panelSetups.overview.reset(), 100);
       e.stopPropagation();
       const titleEl  = el.querySelector('.title, .hub-title, .fc-title, .card-title');
       const subEl    = el.querySelector('.sub, .hub-sub, .fc-sub, .card-meta');
-      const personEl = el.querySelector('.person, .hub-person, .fc-role');
+      const personEl = el.querySelector('.person, .hub-person, .fc-role, .vacancy');
       const editables = [titleEl, subEl, personEl].filter(Boolean);
+      function selectAll(t) {
+        const r = document.createRange(); r.selectNodeContents(t);
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      }
       editables.forEach(t => {
         t.contentEditable = 'true';
         t.classList.add('editing-text');
+        t.addEventListener('focus', () => selectAll(t));
         t.addEventListener('blur', onBlur);
         t.addEventListener('keydown', onKeydown);
       });
-      if (titleEl) { titleEl.focus();
-        const r = document.createRange(); r.selectNodeContents(titleEl);
-        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-      }
+      // ダブルクリックされた要素（または title）にフォーカス＋全選択
+      const initial = (e.target && editables.includes(e.target.closest('.title, .hub-title, .fc-title, .card-title, .sub, .hub-sub, .fc-sub, .card-meta, .person, .hub-person, .fc-role, .vacancy')))
+        ? e.target.closest('.title, .hub-title, .fc-title, .card-title, .sub, .hub-sub, .fc-sub, .card-meta, .person, .hub-person, .fc-role, .vacancy')
+        : (titleEl || editables[0]);
+      if (initial) { initial.focus(); selectAll(initial); }
       function onBlur() {
         const p = getPatch(panel, nodeId);
         if (titleEl)  p.title  = titleEl.textContent;
         if (subEl)    p.sub    = subEl.textContent;
-        if (personEl) p.person = personEl.textContent;
+        if (personEl) {
+          p.person = personEl.textContent;
+          // 担当未定 → 名前入り 切替（即時反映）
+          if (personEl.classList.contains('vacancy') && p.person.trim()) {
+            personEl.className = 'person';
+          } else if (personEl.classList.contains('vacant') && p.person.trim()) {
+            personEl.classList.remove('vacant');
+          }
+        }
         editables.forEach(t => {
           t.contentEditable = 'false';
           t.classList.remove('editing-text');
