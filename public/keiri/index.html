@@ -490,6 +490,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
   <div class="modal large">
     <h3>📂 アップロードプレビュー</h3>
     <div class="summary-cards" id="upload-stats"></div>
+    <div id="upload-estimate" style="margin:8px 0;padding:10px 14px;background:#fff3cd;border:1px solid #ffe69c;border-radius:6px;font-size:13px;color:#664d03;font-weight:600;display:none;"></div>
     <div style="margin-bottom:10px;font-size:12px;color:#636e72;">
       🟦 自動カテゴリ化済み　🟨 未カテゴリ（要入力）　⬜ Excelに既に手入力済み
     </div>
@@ -594,6 +595,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
   <div class="modal large">
     <h3>📂 請求書Excelアップロード</h3>
     <div class="summary-cards" id="invoice-upload-stats"></div>
+    <div id="invoice-upload-estimate" style="margin:8px 0;padding:10px 14px;background:#fff3cd;border:1px solid #ffe69c;border-radius:6px;font-size:13px;color:#664d03;font-weight:600;display:none;"></div>
     <div class="table-wrap" style="max-height:50vh;">
       <table>
         <thead>
@@ -735,9 +737,30 @@ function showToast(msg, type = 'success') {
   t.className = `toast show ${type}`;
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+function formatSeconds(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return `${s}秒`;
+  return `${Math.floor(s / 60)}分${s % 60}秒`;
+}
+function estimateSaveSeconds(count, msPerRow = 45) {
+  return Math.max(1, Math.round(count * msPerRow / 1000));
+}
 async function api(url, opts = {}) {
   const res = await fetch(url, opts);
-  return res.json();
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    if (!res.ok) {
+      const snippet = (text || '').replace(/<[^>]+>/g, '').trim().slice(0, 200);
+      throw new Error(`サーバーエラー (${res.status})${snippet ? ': ' + snippet : ''}`);
+    }
+    return {};
+  }
+  const data = await res.json();
+  if (!res.ok && !data.error) {
+    throw new Error(`サーバーエラー (${res.status})`);
+  }
+  return data;
 }
 
 // =============================================================================
@@ -1031,6 +1054,10 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
 
 function showUploadPreview(data) {
   const stats = data.stats;
+  const estSec = estimateSaveSeconds(stats.total);
+  const estEl = document.getElementById('upload-estimate');
+  estEl.textContent = `⏱ 「確定して保存」を押すと約${formatSeconds(estSec)}かかります（${stats.total}件）。完了まで画面はそのままお待ちください。`;
+  estEl.style.display = 'block';
   document.getElementById('upload-stats').innerHTML = `
     <div class="summary-card"><div class="label">取引総数</div><div class="value blue">${stats.total}</div></div>
     <div class="summary-card"><div class="label">自動カテゴリ化</div><div class="value blue">${stats.auto_categorized}</div></div>
@@ -1106,20 +1133,57 @@ document.getElementById('upload-cancel').addEventListener('click', () => {
 });
 document.getElementById('upload-confirm').addEventListener('click', async () => {
   if (!pendingUpload) return;
-  showToast('保存中...');
-  const res = await api('/api/keiri/bank/upload/confirm', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ transactions: pendingUpload.transactions, learn: true })
-  });
-  if (res.error) { showToast(res.error, 'error'); return; }
-  showToast(`✓ ${res.inserted}件保存（重複スキップ:${res.skipped}, 学習:${res.learned}）`, 'success');
-  if (res.new_accounts && res.new_accounts.length > 0) {
-    await loadBankAccountTabs();
+  const btn = document.getElementById('upload-confirm');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  const txs = pendingUpload.transactions;
+  const total = txs.length;
+  const CHUNK_SIZE = 100;
+  const estSec = estimateSaveSeconds(total);
+  const t0 = Date.now();
+  let inserted = 0, skipped = 0, learned = 0;
+  const newAccountsAll = new Set();
+  let processed = 0;
+  btn.textContent = `保存中... 0/${total}件`;
+  showToast(`保存中... ${total}件、推定 約${formatSeconds(estSec)}`);
+  const tick = setInterval(() => {
+    const elapsed = (Date.now() - t0) / 1000;
+    const remain = Math.max(0, estSec - elapsed);
+    btn.textContent = `保存中... ${processed}/${total}件 (${formatSeconds(elapsed)}経過 / 残り約${formatSeconds(remain)})`;
+  }, 1000);
+  try {
+    for (let i = 0; i < txs.length; i += CHUNK_SIZE) {
+      const chunk = txs.slice(i, i + CHUNK_SIZE);
+      const res = await api('/api/keiri/bank/upload/confirm', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ transactions: chunk, learn: true })
+      });
+      if (res.error) throw new Error(res.error);
+      inserted += res.inserted || 0;
+      skipped += res.skipped || 0;
+      learned += res.learned || 0;
+      if (res.new_accounts) res.new_accounts.forEach(a => newAccountsAll.add(a));
+      processed += chunk.length;
+    }
+    const took = formatSeconds((Date.now() - t0) / 1000);
+    showToast(`✓ ${inserted}件保存（${took}・重複:${skipped}, 学習:${learned}）`, 'success');
+    if (newAccountsAll.size > 0) {
+      await loadBankAccountTabs();
+    }
+    document.getElementById('upload-modal').classList.remove('show');
+    pendingUpload = null;
+    await loadBankTransactions();
+  } catch (err) {
+    console.error('upload-confirm failed:', err);
+    const partial = processed > 0 ? `（${processed}/${total}件まで処理済み）` : '';
+    showToast('保存に失敗しました: ' + (err && err.message ? err.message : '不明なエラー') + partial, 'error');
+  } finally {
+    clearInterval(tick);
+    btn.disabled = false;
+    btn.textContent = originalLabel;
   }
-  document.getElementById('upload-modal').classList.remove('show');
-  pendingUpload = null;
-  await loadBankTransactions();
 });
 
 // 既存データから学習
@@ -1645,6 +1709,11 @@ document.getElementById('invoice-file-input').addEventListener('change', async (
 
   pendingInvoiceUpload = res;
 
+  const estSec = estimateSaveSeconds(res.stats.total);
+  const estEl = document.getElementById('invoice-upload-estimate');
+  estEl.textContent = `⏱ 「確定して保存」を押すと約${formatSeconds(estSec)}かかります（${res.stats.total}件）。完了まで画面はそのままお待ちください。`;
+  estEl.style.display = 'block';
+
   // サマリー表示
   document.getElementById('invoice-upload-stats').innerHTML = `
     <div class="summary-card"><div class="label">読込件数</div><div class="value blue">${res.stats.total}件</div></div>
@@ -1678,19 +1747,42 @@ document.getElementById('invoice-upload-cancel').addEventListener('click', () =>
 
 document.getElementById('invoice-upload-confirm').addEventListener('click', async () => {
   if (!pendingInvoiceUpload) return;
-  showToast('保存中...');
-  const res = await api('/api/keiri/invoices/upload/confirm', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ invoices: pendingInvoiceUpload.invoices })
-  });
-  if (res.error) { showToast(res.error, 'error'); return; }
-  showToast(`✓ ${res.inserted}件の請求書を保存しました`, 'success');
-  document.getElementById('invoice-upload-modal').classList.remove('show');
-  pendingInvoiceUpload = null;
-  await loadInvoices();
-  await loadInvoiceMonthTabs();
-  await loadInvoiceEntityTabs();
+  const btn = document.getElementById('invoice-upload-confirm');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  const count = pendingInvoiceUpload.invoices.length;
+  const estSec = estimateSaveSeconds(count);
+  const t0 = Date.now();
+  btn.textContent = `保存中... 0秒 / 推定${formatSeconds(estSec)}`;
+  showToast(`保存中... ${count}件、推定 約${formatSeconds(estSec)}`);
+  const tick = setInterval(() => {
+    const elapsed = (Date.now() - t0) / 1000;
+    const remain = Math.max(0, estSec - elapsed);
+    btn.textContent = `保存中... ${formatSeconds(elapsed)}経過 / 残り約${formatSeconds(remain)}`;
+  }, 1000);
+  try {
+    const res = await api('/api/keiri/invoices/upload/confirm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ invoices: pendingInvoiceUpload.invoices })
+    });
+    if (res.error) { showToast(res.error, 'error'); return; }
+    const took = formatSeconds((Date.now() - t0) / 1000);
+    showToast(`✓ ${res.inserted}件の請求書を保存しました（${took}）`, 'success');
+    document.getElementById('invoice-upload-modal').classList.remove('show');
+    pendingInvoiceUpload = null;
+    await loadInvoices();
+    await loadInvoiceMonthTabs();
+    await loadInvoiceEntityTabs();
+  } catch (err) {
+    console.error('invoice-upload-confirm failed:', err);
+    showToast('保存に失敗しました: ' + (err && err.message ? err.message : '不明なエラー'), 'error');
+  } finally {
+    clearInterval(tick);
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 });
 
 // =============================================================================
