@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GR 組織体制図ハブ</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f6f8; overflow: hidden; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; height: 100vh; user-select: none; }
+  #tab-bar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: white; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 0 14px; gap: 6px; z-index: 200; box-shadow: 0 2px 4px rgba(0,0,0,0.04); overflow-x: auto; }
+  #tab-bar .brand { font-weight: 700; font-size: 14px; color: #1E2761; margin-right: 20px; white-space: nowrap; }
+  .tab-btn { padding: 8px 16px; background: transparent; border: 1px solid transparent; font-size: 13px; cursor: pointer; border-radius: 6px; color: #555; font-family: inherit; white-space: nowrap; }
+  .tab-btn:hover { background: #f5f5f5; }
+  .tab-btn.active { background: #1E2761; color: white; font-weight: 700; }
+  .panel { display: none; position: absolute; top: 52px; left: 0; width: 100vw; height: calc(100vh - 52px); }
+  .panel.active { display: block; }
+  .panel-viewport { width: 100%; height: 100%; overflow: hidden; cursor: grab; position: relative; background: radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 0); background-size: 24px 24px; }
+  .panel-viewport.grabbing { cursor: grabbing; }
+  .panel-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  .node { position: absolute; background: white; border: 2px solid; border-radius: 10px; padding: 7px 11px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); text-align: center; line-height: 1.25; }
+  .node .title { font-weight: 700; font-size: 13px; color: #222; }
+  .node .sub { font-size: 10.5px; color: #666; margin-top: 3px; }
+  .node .person { display: inline-block; background: #1E2761; color: white; font-size: 10px; padding: 2px 7px; border-radius: 9px; margin-top: 5px; font-weight: 500; line-height: 1.3; max-width: 100%; }
+  .node .person.small { font-size: 9.5px; padding: 1px 5px; }
+  .node .person.multi { white-space: normal; line-height: 1.35; }
+  .node .vacancy { display: inline-block; background: #f1f3f5; color: #888; font-size: 9.5px; padding: 1px 7px; border-radius: 9px; margin-top: 5px; border: 1px dashed #ccc; }
+  .node.ceo { background: #1E2761; border-color: #1E2761; color: white; }
+  .node.ceo .title { color: white; font-size: 15px; }
+  .node.ceo .sub { color: #cad; }
+  .node.coo { background: #3B4695; border-color: #3B4695; color: white; }
+  .node.coo .title { color: white; font-size: 14px; }
+  .node.coo .sub { color: #c2cbe8; }
+  .node.coo .person { background: #FFC107; color: #333; font-weight: 700; }
+  .node.dept-admin { border-color: #028090; background: #E6F4F5; }
+  .node.dept-overseas { border-color: #7B1FA2; background: #F3E5F5; }
+  .node.dept-rc { border-color: #F96167; background: #FFEDEE; }
+  .node.dept-hotel { border-color: #2C5F2D; background: #E8F1E6; }
+  .node.sub-sales { border-color: #B85042; background: #FBEEEB; }
+  .node.sub-reserve { border-color: #E8554E; background: #FEF4F4; }
+  .node.func-admin { border-color: #5BAEB5; background: #F2FAFB; }
+  .node.func-overseas { border-color: #9C27B0; background: #F8EEFB; }
+  .node.func-sales { border-color: #D38579; background: #FCF5F3; }
+  .node.func-rc { border-color: #F96167; background: #FFF5F5; }
+  .node.area { border-color: #5A8F5B; background: #F0F7EE; }
+  .node.area.category { border-color: #8E6FC4; background: #F4EFF9; }
+  .node.facility { border-color: #97BC62; background: #F8FBF1; min-width: 95px; }
+  .node.facility.manned { border-color: #4A8B43; background: #EAF5E5; }
+  .node.facility.monthly { border-color: #8E6FC4; background: #F8F4FC; }
+  .node.facility.takamiya { border-color: #FF6B35; background: #FFF0E6; }
+  .node.facility .title { font-size: 11.5px; }
+  .node.facility .sub { font-size: 9.5px; }
+  .node.facility .person { font-size: 9px; padding: 1px 5px; }
+  .manned-badge { display: inline-block; background: #4A8B43; color: white; font-size: 8.5px; padding: 1px 5px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+  .takamiya-badge { display: inline-block; background: #FF6B35; color: white; font-size: 8.5px; padding: 1px 5px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
+  .panel-header { position: absolute; top: 12px; left: 12px; background: white; padding: 10px 16px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; font-size: 13px; max-width: 480px; }
+  .panel-header .ttl { font-weight: 700; font-size: 15px; color: #1E2761; }
+  .panel-header .sub { color: #666; font-size: 11px; margin-top: 3px; }
+  .panel-controls { position: absolute; top: 12px; right: 12px; background: white; padding: 8px 12px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .panel-controls button { border: 1px solid #ddd; background: #f8f9fa; border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .panel-controls button:hover { background: #e9ecef; }
+  .panel-legend { position: absolute; bottom: 12px; left: 12px; background: white; padding: 10px 14px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); font-size: 11px; z-index: 100; max-width: 310px; }
+  .panel-legend .h { font-weight: 700; margin-bottom: 5px; color: #333; }
+  .lg-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .lg-dot { width: 14px; height: 10px; border-radius: 3px; border: 2px solid; flex-shrink: 0; }
+  .lg-line { width: 26px; height: 0; flex-shrink: 0; }
+  .lg-badge { display: inline-block; font-size: 9.5px; padding: 1px 6px; border-radius: 8px; flex-shrink: 0; }
+  .panel-hint { position: absolute; bottom: 12px; right: 12px; background: rgba(30,39,97,0.9); color: white; padding: 8px 12px; border-radius: 8px; font-size: 11px; z-index: 100; }
+  .sidebox { position: absolute; background: #FFF8E7; border: 2px dashed #C9A14A; border-radius: 10px; padding: 12px 14px; width: 290px; font-size: 11px; line-height: 1.5; }
+  .sidebox .h { font-weight: 700; color: #8B6914; margin-bottom: 6px; font-size: 12px; }
+  .sidebox ul { margin: 4px 0 0 0; padding-left: 18px; }
+  .sidebox li { margin: 2px 0; }
+  .memo { position: absolute; padding: 10px 12px; background: #E8F0FE; border: 1px solid #4285F4; border-radius: 8px; font-size: 10.5px; line-height: 1.55; }
+  .memo .h { font-weight: 700; color: #1967D2; margin-bottom: 4px; }
+  .matrix-label { position: absolute; padding: 7px 11px; background: rgba(249,97,103,0.1); border: 1px dashed #F96167; border-radius: 6px; font-size: 11px; color: #B03A40; text-align: center; }
+  .group-frame { position: absolute; border: 2px dashed rgba(232,85,78,0.4); border-radius: 14px; background: rgba(255,237,238,0.25); z-index: -1; }
+  .group-frame .group-title { position: absolute; top: -12px; left: 16px; background: white; padding: 1px 10px; font-size: 11px; font-weight: 700; color: #B03A40; border-radius: 6px; border: 1px solid #F96167; }
+  .card { position: absolute; background: white; border: 2px solid #4A8B43; border-radius: 14px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); overflow: hidden; }
+  .card.transfer { border-color: #999; opacity: 0.85; }
+  .card.pre-open { border-color: #FF9800; background: #FFF8E1; }
+  .card-header { background: #4A8B43; color: white; padding: 10px 14px; }
+  .card.transfer .card-header { background: #999; }
+  .card.pre-open .card-header { background: #FF9800; }
+  .card-title { font-size: 15px; font-weight: 700; }
+  .card-meta { font-size: 10.5px; margin-top: 2px; opacity: 0.95; }
+  .card-body { padding: 10px 14px 12px; }
+  .role-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed #e8e8e8; }
+  .role-row:last-child { border-bottom: none; }
+  .role-icon { width: 22px; height: 22px; border-radius: 50%; background: #EAF5E5; color: #4A8B43; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; font-weight: 700; }
+  .role-name { font-size: 12px; color: #333; flex: 1; }
+  .role-name .badge { display: inline-block; font-size: 9.5px; padding: 1px 6px; border-radius: 8px; margin-left: 5px; vertical-align: middle; }
+  .role-person { display: inline-block; background: #1E2761; color: white; font-size: 9.5px; padding: 1px 6px; border-radius: 8px; margin-left: 4px; font-weight: 500; }
+  .badge.cross { background: #FDE7E7; color: #C62828; border: 1px solid #EF9A9A; }
+  .badge.chef { background: #FFF3E0; color: #E65100; border: 1px solid #FFCC80; }
+  .badge.manager { background: #E3F2FD; color: #1565C0; border: 1px solid #90CAF9; }
+  .badge.vacant { background: #f1f3f5; color: #888; border: 1px dashed #ccc; }
+  .badge.leader { background: #E8F5E9; color: #2E7D32; border: 1px solid #A5D6A7; }
+  .badge.recruiting { background: #FFEBEE; color: #C62828; border: 1px solid #EF9A9A; font-weight: 600; }
+  .card-title-heading { font-size: 11px; color: #666; margin: 10px 0 4px; font-weight: 700; letter-spacing: 0.5px; border-left: 3px solid #4A8B43; padding-left: 7px; }
+  .card-note { margin-top: 10px; padding: 6px 8px; background: #FFF8E7; border-left: 3px solid #C9A14A; font-size: 10.5px; color: #6E5A2F; border-radius: 3px; line-height: 1.45; }
+  .section { position: absolute; border-radius: 18px; border: 3px dashed; padding: 50px 30px 30px; }
+  .section.chef { background: rgba(255, 243, 224, 0.5); border-color: #E65100; }
+  .section.clean { background: rgba(253, 231, 231, 0.5); border-color: #C62828; }
+  .section-title { position: absolute; top: -16px; left: 30px; background: white; padding: 5px 14px; font-weight: 700; border-radius: 8px; font-size: 14px; }
+  .section.chef .section-title { border: 2px solid #E65100; color: #E65100; }
+  .section.clean .section-title { border: 2px solid #C62828; color: #C62828; }
+  .section-desc { position: absolute; top: 20px; left: 200px; font-size: 11.5px; color: #666; max-width: 580px; }
+  .hub { position: absolute; background: white; border: 3px solid; border-radius: 14px; padding: 14px 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; min-width: 240px; }
+  .hub.chef { border-color: #E65100; background: #FFF8EE; }
+  .hub.clean { border-color: #C62828; background: #FFF5F5; }
+  .hub-title { font-weight: 700; font-size: 16px; color: #222; }
+  .hub-sub { font-size: 11px; color: #666; margin-top: 4px; }
+  .hub-person { display: inline-block; background: #1E2761; color: white; font-size: 11px; padding: 3px 10px; border-radius: 10px; margin-top: 8px; font-weight: 500; }
+  .hub-person.vacant { background: #f1f3f5; color: #888; border: 1px dashed #bbb; }
+  .facility-chip { position: absolute; background: white; border: 2px solid #4A8B43; border-radius: 10px; padding: 8px 11px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); text-align: center; line-height: 1.25; }
+  .facility-chip.unmanned { border-color: #999; background: #F8F8F8; opacity: 0.85; }
+  .facility-chip.pre-open { border-color: #FF9800; }
+  .facility-chip.transfer { border-color: #999; }
+  .facility-chip.recruiting { border-color: #C62828; background: #FFF0F0; }
+  .fc-title { font-weight: 700; font-size: 11.5px; color: #222; }
+  .fc-sub { font-size: 9.5px; color: #666; margin-top: 2px; }
+  .fc-role { font-size: 9.5px; color: #E65100; margin-top: 3px; padding: 1px 5px; background: #FFF3E0; border-radius: 5px; display: inline-block; }
+  .fc-role.recruit { color: #C62828; background: #FFEBEE; font-weight: 600; }
+  .group-label { position: absolute; font-weight: 700; font-size: 12px; color: #555; padding: 3px 10px; background: white; border-radius: 6px; border: 1px solid #ddd; }
+
+  .action-col { position: absolute; }
+  .action-card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; overflow: hidden; }
+  .action-card-header { padding: 10px 14px; font-weight: 700; font-size: 14px; color: white; }
+  .action-card.high .action-card-header { background: #D32F2F; }
+  .action-card.medium .action-card-header { background: #F57C00; }
+  .action-card.low .action-card-header { background: #388E3C; }
+  .action-card.info .action-card-header { background: #1976D2; }
+  .action-card.future .action-card-header { background: #616161; }
+  .action-item { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+  .action-item:last-child { border-bottom: none; }
+  .action-item-title { font-weight: 700; font-size: 12.5px; color: #222; line-height: 1.4; }
+  .action-item-owner { font-size: 10.5px; color: #1E2761; margin-top: 4px; }
+  .action-item-detail { font-size: 11px; color: #555; margin-top: 5px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div id="tab-bar">
+  <div class="brand">🏢 GR組織体制図</div>
+  <button class="tab-btn active" data-tab="overview">① 全社俯瞰図</button>
+  <button class="tab-btn" data-tab="facility">② 施設内部体制図</button>
+  <button class="tab-btn" data-tab="crossfunc">③ 横断機能図</button>
+  <button class="tab-btn" data-tab="actions">④ 今後のアクション</button>
+</div>
+
+<div class="panel active" id="panel-overview" data-canvas-w="4800" data-canvas-h="2300">
+  <div class="panel-viewport">
+    <div class="panel-canvas" style="width:4800px; height:2300px;">
+      <svg class="panel-edges" width="4800" height="2300" style="position:absolute; top:0; left:0; pointer-events:none;"></svg>
+    </div>
+  </div>
+  <div class="panel-header"><div class="ttl">① GLOBAL RESORT 全社俯瞰図</div><div class="sub">部門・エリア・施設｜2026-04-24 v6｜作成: 仲尾</div></div>
+  <div class="panel-controls"><button class="zoom-out">−</button><span class="zoom-level">—</span><button class="zoom-in">＋</button><button class="reset">全体表示</button></div>
+  <div class="panel-legend">
+    <div class="h">凡例</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#1E2761;background:#1E2761"></span>経営トップ</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#3B4695;background:#3B4695"></span>全体統括（COO相当）</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#028090;background:#E6F4F5"></span>経営管理部門</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#7B1FA2;background:#F3E5F5"></span>海外部門（新設）</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#F96167;background:#FFEDEE"></span>総合予約センター</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#2C5F2D;background:#E8F1E6"></span>施設運営部門</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#4A8B43;background:#EAF5E5"></span>有人施設</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#FF6B35;background:#FFF0E6"></span>髙宮直轄（FHガーデン）</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#8E6FC4;background:#F4EFF9"></span>一棟貸し・マンスリー（ルール化運用）</div>
+    <div class="lg-row"><span class="lg-line" style="border-top:1.5px solid #7A8B99;"></span>指揮命令ライン</div>
+    <div class="lg-row"><span class="lg-line" style="border-top:2px dashed #F96167;"></span>横断連携</div>
+  </div>
+  <div class="panel-hint">ドラッグ移動／ホイールでズーム</div>
+</div>
+
+<div class="panel" id="panel-facility" data-canvas-w="2600" data-canvas-h="1800">
+  <div class="panel-viewport"><div class="panel-canvas" style="width:2600px; height:1800px;"></div></div>
+  <div class="panel-header"><div class="ttl">② 施設内部体制図（有人6施設）</div><div class="sub">支配人＝責任の所在／リーダー制導入方針｜2026-04-24 v6</div></div>
+  <div class="panel-controls"><button class="zoom-out">−</button><span class="zoom-level">—</span><button class="zoom-in">＋</button><button class="reset">全体表示</button></div>
+  <div class="panel-legend">
+    <div class="h">凡例</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#E3F2FD;color:#1565C0;border:1px solid #90CAF9;">支配人</span>責任の所在（通常業務は常駐不要）</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#E8F5E9;color:#2E7D32;border:1px solid #A5D6A7;">リーダー</span>ポストのリーダー（新・導入方針）</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#FDE7E7;color:#C62828;border:1px solid #EF9A9A;">横断</span>清掃部隊などの横串</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#FFF3E0;color:#E65100;border:1px solid #FFCC80;">総料理長</span>総料理長監修</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#FFEBEE;color:#C62828;border:1px solid #EF9A9A;">要募集</span>担当者募集中</div>
+  </div>
+  <div class="panel-hint">ドラッグ移動／ホイールでズーム</div>
+</div>
+
+<div class="panel" id="panel-crossfunc" data-canvas-w="2800" data-canvas-h="2000">
+  <div class="panel-viewport"><div class="panel-canvas" style="width:2800px; height:2000px;"><svg class="panel-edges" width="2800" height="2000" style="position:absolute; top:0; left:0; pointer-events:none;"></svg></div></div>
+  <div class="panel-header"><div class="ttl">③ 横断機能図</div><div class="sub">施設をまたいで動く横串組織｜2026-04-24 v6</div></div>
+  <div class="panel-controls"><button class="zoom-out">−</button><span class="zoom-level">—</span><button class="zoom-in">＋</button><button class="reset">全体表示</button></div>
+  <div class="panel-legend">
+    <div class="h">凡例</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#E65100;background:#FFF8EE"></span>料理部門</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#C62828;background:#FFF5F5"></span>清掃部隊</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#4A8B43;background:white"></span>有人施設</div>
+    <div class="lg-row"><span class="lg-dot" style="border-color:#999;background:#F8F8F8"></span>無人施設</div>
+    <div class="lg-row"><span class="lg-line" style="border-top:2px solid #E65100;"></span>料理部門の監修先</div>
+    <div class="lg-row"><span class="lg-line" style="border-top:2px solid #C62828;"></span>清掃部隊の巡回先</div>
+  </div>
+  <div class="panel-hint">ドラッグ移動／ホイールでズーム</div>
+</div>
+
+<div class="panel" id="panel-actions" data-canvas-w="2400" data-canvas-h="2200">
+  <div class="panel-viewport"><div class="panel-canvas" style="width:2400px; height:2200px;"></div></div>
+  <div class="panel-header"><div class="ttl">④ 今後のアクション（体制図を充実させるため）</div><div class="sub">2026-04-24 下坂・仲尾ミーティング反映｜優先度別</div></div>
+  <div class="panel-controls"><button class="zoom-out">−</button><span class="zoom-level">—</span><button class="zoom-in">＋</button><button class="reset">全体表示</button></div>
+  <div class="panel-legend">
+    <div class="h">優先度凡例</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#D32F2F;color:white;">🚨 緊急</span>現場運営に直接影響</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#F57C00;color:white;">📋 重要</span>体制構築の根幹</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#388E3C;color:white;">🏗️ 中期</span>体制強化・育成</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#1976D2;color:white;">📢 集客</span>広報・マーケ強化</div>
+    <div class="lg-row"><span class="lg-badge" style="background:#616161;color:white;">🔄 次回</span>情報待ちで次回反映</div>
+  </div>
+  <div class="panel-hint">ドラッグ移動／ホイールでズーム</div>
+</div>
+
+<script>
+// ===== Panel 1 Data =====
+const p1Nodes = [
+  {id:'ceo', type:'ceo', title:'社長', sub:'経営判断・最終承認', x:1950, y:40, w:220, h:76},
+  {id:'coo', type:'coo', title:'全体統括', sub:'全社オペレーション統括', x:1965, y:160, w:190, h:86, person:'下坂'},
+  {id:'admin', type:'dept-admin', title:'経営管理部門', sub:'管理・間接機能', x:300, y:300, w:170, h:66},
+  {id:'overseas', type:'dept-overseas', title:'海外部門', sub:'特定技能者管理（新設）', x:800, y:300, w:190, h:66},
+  {id:'rc', type:'dept-rc', title:'総合予約センター', sub:'予約コントロール統括', x:1890, y:300, w:220, h:66},
+  {id:'hotel', type:'dept-hotel', title:'施設運営部門', sub:'各施設の現場運営', x:3550, y:300, w:180, h:66},
+  {id:'office', type:'func-admin', title:'事務', sub:'総務・人事・庶務', x:210, y:460, w:150, h:82, person:'井上（兼任）'},
+  {id:'accounting', type:'func-admin', title:'経理', sub:'会計・財務・請求', x:380, y:460, w:150, h:82, person:'井上（兼任）'},
+  {id:'overseas-support', type:'func-overseas', title:'特定技能者管理', sub:'ビザ更新・登録支援機関', x:670, y:460, w:170, h:92, person:'フエン'},
+  {id:'overseas-onsite', type:'func-overseas', title:'現場外国人支援', sub:'育成・サポート', x:850, y:460, w:170, h:92, person:'マリエル／ジャム'},
+  {id:'sales', type:'sub-sales', title:'営業部', sub:'法人・団体・BtoC集客', x:1420, y:460, w:180, h:66},
+  {id:'reserve', type:'sub-reserve', title:'予約運用部', sub:'本部の予約オペレーション', x:2300, y:460, w:210, h:66},
+  {id:'area-akiota', type:'area', title:'安芸太田エリア', sub:'★最重点／髙宮EM統括', x:2850, y:460, w:170, h:82, person:'髙宮EM'},
+  {id:'area-hatsukaichi', type:'area', title:'廿日市エリア', sub:'宮島・市内含む', x:3300, y:460, w:160, h:82, person:'西（リーダー）'},
+  {id:'area-yamaguchi', type:'area', title:'山口エリア', sub:'柳井・周防大島', x:3720, y:460, w:150, h:82, person:'中村（エリア担当）'},
+  {id:'area-monthly', type:'area', typeExtra:'category', title:'一棟貸し・マンスリー', sub:'7施設（ルール化運用）', x:4090, y:460, w:200, h:82, person:'トップ不在（無人運用）'},
+  {id:'sales-group', type:'func-sales', title:'団体・法人営業', sub:'エージェント／学校／企業', x:1280, y:660, w:160, h:82, person:'髙宮'},
+  {id:'sales-indiv', type:'func-sales', title:'個人営業', sub:'BtoC マーケ・集客', x:1530, y:660, w:140, h:66},
+  {id:'r-ota', type:'func-rc', title:'OTA・ねっぱん操作', sub:'予約サイト操作の専門', x:2100, y:660, w:190, h:104, person:'白井（8月〜メイン）／ 仲尾（〜7月）／ ギルバート（ピンチ時）', personClass:'multi'},
+  {id:'r-price', type:'func-rc', title:'価格・在庫管理', sub:'料金カレンダー・売止', x:2300, y:660, w:170, h:82, vacant:true},
+  {id:'r-ops', type:'func-rc', title:'現場連携・分析', sub:'支配人連絡・データ報告', x:2490, y:660, w:170, h:82, vacant:true},
+  {id:'f-nukui', type:'facility', typeExtra:'manned', title:'GR温井', sub:'31室／温泉・団体', x:2780, y:660, w:135, h:62, mannedBadge:true},
+  {id:'f-ikoi', type:'facility', typeExtra:'manned', title:'いこいの村ひろしま', sub:'27室／大型団体', x:2925, y:660, w:170, h:62, mannedBadge:true},
+  {id:'f-fhgarden', type:'facility', typeExtra:'takamiya', title:'FHガーデン', sub:'8棟コテージ／髙宮直轄', x:2850, y:740, w:150, h:60, takamiyaBadge:true},
+  {id:'f-miyajima', type:'facility', title:'宮島VIEW', sub:'18室／無人', x:3200, y:660, w:110, h:54, person:'西'},
+  {id:'f-honkawa', type:'facility', title:'本川', sub:'市内／無人', x:3315, y:660, w:95, h:54, person:'西'},
+  {id:'f-misen', type:'facility', typeExtra:'manned', title:'弥山', sub:'21室／譲渡予定', x:3200, y:740, w:125, h:54, person:'マリエル', mannedBadge:true},
+  {id:'f-derune', type:'facility', typeExtra:'manned', title:'デルーネ', sub:'51室／譲渡予定', x:3330, y:740, w:135, h:54, mannedBadge:true},
+  {id:'f-yanai', type:'facility', typeExtra:'manned', title:'GR柳井', sub:'', x:3650, y:660, w:115, h:54, person:'中村夫妻', mannedBadge:true},
+  {id:'f-suooshima', type:'facility', typeExtra:'manned', title:'周防大島', sub:'開業前', x:3770, y:660, w:110, h:54, person:'中村（兼管）', mannedBadge:true},
+  {id:'f-otake', type:'facility', typeExtra:'monthly', title:'大竹', sub:'', x:4020, y:660, w:80, h:54},
+  {id:'f-tenjin', type:'facility', typeExtra:'monthly', title:'天神ハウス', sub:'', x:4110, y:660, w:110, h:54},
+  {id:'f-kuba', type:'facility', typeExtra:'monthly', title:'玖波', sub:'', x:4230, y:660, w:80, h:54},
+  {id:'f-takehara', type:'facility', typeExtra:'monthly', title:'竹原', sub:'', x:4020, y:720, w:80, h:54},
+  {id:'f-takaya', type:'facility', typeExtra:'monthly', title:'高屋', sub:'', x:4110, y:720, w:80, h:54},
+  {id:'f-saijo1', type:'facility', typeExtra:'monthly', title:'西条壱番館', sub:'', x:4200, y:720, w:110, h:54},
+  {id:'f-saijo2', type:'facility', typeExtra:'monthly', title:'西条弐番館', sub:'', x:4110, y:780, w:110, h:54},
+  {id:'si-mktpr', type:'func-sales', title:'集客・広報', sub:'マーケ提案・SNS含む全般', x:1300, y:830, w:170, h:90, person:'仲尾'},
+  {id:'si-plan', type:'func-sales', title:'市場分析・プラン企画', sub:'商品設計・分析', x:1490, y:830, w:170, h:90, person:'仲尾'},
+  {id:'si-web', type:'func-sales', title:'ウェブマーケ', sub:'Web広告・SEO', x:1680, y:830, w:150, h:90, person:'仁谷'},
+];
+const p1Edges = [
+  ['ceo','coo'], ['coo','admin'], ['coo','overseas'], ['coo','rc'], ['coo','hotel'],
+  ['admin','office'], ['admin','accounting'],
+  ['overseas','overseas-support'], ['overseas','overseas-onsite'],
+  ['rc','sales'], ['rc','reserve'],
+  ['sales','sales-group'], ['sales','sales-indiv'],
+  ['sales-indiv','si-mktpr'], ['sales-indiv','si-plan'], ['sales-indiv','si-web'],
+  ['reserve','r-ota'], ['reserve','r-price'], ['reserve','r-ops'],
+  ['hotel','area-akiota'], ['hotel','area-hatsukaichi'], ['hotel','area-yamaguchi'], ['hotel','area-monthly'],
+  ['area-akiota','f-nukui'], ['area-akiota','f-ikoi'], ['area-akiota','f-fhgarden'],
+  ['area-hatsukaichi','f-miyajima'], ['area-hatsukaichi','f-honkawa'],
+  ['area-hatsukaichi','f-misen'], ['area-hatsukaichi','f-derune'],
+  ['area-yamaguchi','f-yanai'], ['area-yamaguchi','f-suooshima'],
+  ['area-monthly','f-otake'], ['area-monthly','f-tenjin'], ['area-monthly','f-kuba'],
+  ['area-monthly','f-takehara'], ['area-monthly','f-takaya'],
+  ['area-monthly','f-saijo1'], ['area-monthly','f-saijo2'],
+];
+const p1MatrixEdges = [['reserve','hotel','bezier']];
+
+function renderPanel1() {
+  const canvas = document.querySelector('#panel-overview .panel-canvas');
+  const svg = document.querySelector('#panel-overview .panel-edges');
+  const map = {};
+  p1Nodes.forEach(n => map[n.id] = n);
+  p1Nodes.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'node ' + n.type + (n.typeExtra ? ' ' + n.typeExtra : '');
+    el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; el.style.width = n.w + 'px';
+    const personCls = n.personClass || (n.person && n.person.length > 12 ? 'small' : '');
+    let personHtml = '';
+    if (n.person) personHtml = `<div class="person ${personCls}">👤 ${n.person}</div>`;
+    else if (n.vacant) personHtml = `<div class="vacancy">👤 担当未定</div>`;
+    const mannedHtml = n.mannedBadge ? '<span class="manned-badge">有人</span>' : '';
+    const takamiyaHtml = n.takamiyaBadge ? '<span class="takamiya-badge">髙宮直轄</span>' : '';
+    el.innerHTML = `<div class="title">${n.title}${mannedHtml}${takamiyaHtml}</div>${n.sub?`<div class="sub">${n.sub}</div>`:''}${personHtml}`;
+    canvas.appendChild(el);
+  });
+  function pathBetween(a, b) {
+    const x1=a.x+a.w/2, y1=a.y+a.h, x2=b.x+b.w/2, y2=b.y, cy=(y1+y2)/2;
+    return `<path d="M ${x1} ${y1} C ${x1} ${cy} ${x2} ${cy} ${x2} ${y2}" stroke="#7A8B99" stroke-width="1.4" fill="none" opacity="0.65" />`;
+  }
+  function horizontalDashedPath(a, b) {
+    const x1=a.x+a.w, y1=a.y+a.h/2, x2=b.x, y2=b.y+b.h/2;
+    return `<path d="M ${x1} ${y1} C ${x1+80} ${y1} ${x2-80} ${y2} ${x2} ${y2}" stroke="#F96167" stroke-width="2.5" fill="none" stroke-dasharray="10 6" opacity="0.85" />`;
+  }
+  let svgContent = '';
+  p1Edges.forEach(([a,b]) => svgContent += pathBetween(map[a], map[b]));
+  p1MatrixEdges.forEach(([a,b,type]) => { if (type === 'bezier') svgContent += horizontalDashedPath(map[a], map[b]); });
+  svg.innerHTML = svgContent;
+
+  const frame = document.createElement('div');
+  frame.className = 'group-frame';
+  frame.style.left = '1240px'; frame.style.top = '430px';
+  frame.style.width = '1290px'; frame.style.height = '520px';
+  frame.innerHTML = '<div class="group-title">総合予約センター内の2系統</div>';
+  canvas.appendChild(frame);
+
+  const ml = document.createElement('div');
+  ml.className = 'matrix-label';
+  ml.style.left = '2650px'; ml.style.top = '370px'; ml.style.maxWidth = '480px';
+  ml.innerHTML = '↔ <b>マトリクス連携</b>：予約運用部が本部で予約・価格を回し、施設運営部門は現場で接客・設備を運営';
+  canvas.appendChild(ml);
+
+  const memo = document.createElement('div');
+  memo.className = 'memo';
+  memo.style.left = '80px'; memo.style.top = '1050px'; memo.style.width = '380px';
+  memo.innerHTML = `
+    <div class="h">📝 担当者配置メモ（v6）</div>
+    ・<b>下坂</b> ＝ 全体統括（COO相当）<br>
+    ・<b>井上</b> ＝ 経理・事務兼任（判断領域の明確化が課題／施設管理も本来必要）<br>
+    ・<b>フエン</b> ＝ 海外部門・特定技能者管理（登録支援機関の内製化）<br>
+    ・<b>マリエル</b> ＝ 弥山リーダー／将来の全体統括層候補（特定技能「宿泊」取得中）<br>
+    ・<b>ジャム</b> ＝ 現場外国人支援（専門的サポート）<br>
+    ・<b>髙宮</b> ＝ 団体・法人営業＋安芸太田EM＋FHガーデン直轄<br>
+    ・<b>西</b> ＝ 廿日市エリアリーダー／宮島VIEW・本川担当<br>
+    ・<b>中村（夫妻）</b> ＝ GR柳井常駐＋山口エリア担当（周防大島兼管）<br>
+    ・<b>原田</b> ＝ 周防大島の料理（業務委託・衛生管理担当）<br>
+    ・<b>仲尾</b> ＝ 集客・広報／市場分析・プラン企画／OTA（〜7月）<br>
+    ・<b>白井</b> ＝ OTA操作メイン（5月〜正社員、8月〜フル引継）<br>
+    ・<b>ギルバート</b> ＝ OTAピンチ時専門家<br>
+    ・<b>仁谷</b> ＝ ウェブマーケ<br>
+    <span style="color:#B03A40;">・価格・在庫管理、現場連携・分析 ＝ 担当未定</span>`;
+  canvas.appendChild(memo);
+
+  const note2 = document.createElement('div');
+  note2.className = 'sidebox';
+  note2.style.left = '500px'; note2.style.top = '1050px'; note2.style.width = '340px';
+  note2.innerHTML = `
+    <div class="h">📌 一棟貸し・マンスリーの運用方針</div>
+    ・FHガーデンは<b>髙宮直轄</b>として安芸太田エリアから枝分かれ<br>
+    ・その他7施設（大竹・天神ハウス・玖波・竹原・高屋・西条壱弐）は<b>トップ不在・ルール化で回す方針</b><br>
+    ・予約運用部（OTA／白井）と清掃部隊が実運用を担う<br>
+    ・<span style="color:#D32F2F;">千代田は実在しないため削除</span>`;
+  canvas.appendChild(note2);
+}
+
+// ===== Panel 2 Data =====
+const p2Facilities = [
+  { id:'nukui', status:'active', title:'GR温井', meta:'31室 ／ 温泉・団体 ／ 安芸太田エリア',
+    manager:'支配人（未確定）', managerNote:'＋ 髙宮EM補佐／責任の所在としての役割',
+    posts:[
+      { name:'フロント・予約', badge:'leader', note:'リーダー指名予定' },
+      { name:'客室・清掃', badge:'leader' },
+      { name:'料飲（厨房／食堂）', badge:'chef' },
+      { name:'温泉・設備管理', badge:null, note:'温泉施設の維持' },
+    ],
+    note:'★最重点。団体営業は本部一括（髙宮）なので現場ポスト不要。', x:100, y:90 },
+  { id:'ikoi', status:'active', title:'いこいの村ひろしま', meta:'27室 ／ 大型団体 ／ 安芸太田エリア',
+    manager:'支配人（未確定）', managerNote:'責任の所在／外国人スタッフ（4名）の育成責務',
+    posts:[
+      { name:'フロント・予約', badge:'leader', note:'リーダー指名→その下にA/Bローテ' },
+      { name:'客室・清掃', badge:'leader' },
+      { name:'料飲（厨房／食堂）', badge:'chef', note:'阿部さん退職により2名体制（要補充判断）' },
+      { name:'設備・多目的施設管理', badge:null, note:'体育館／グラウンド／ホール120名を統合' },
+    ],
+    note:'★最重点。団体営業は本部一括。オールラウンダー運用でリーダー制導入へ。', x:560, y:90 },
+  { id:'misen', status:'transfer', title:'弥山', meta:'21室 ／ ⚠譲渡予定 ／ 廿日市エリア',
+    manager:'マリエル（リーダー）', managerNote:'特定技能「宿泊」取得中／将来の全体統括層候補',
+    posts:[
+      { name:'フロント・予約', badge:null },
+      { name:'客室・清掃', badge:'cross' },
+      { name:'料飲／在庫・衛生管理', badge:'recruiting', note:'要募集：3時間/日、60〜70代可、飲食経験者' },
+      { name:'設備管理', badge:null },
+    ],
+    note:'デルーネの料理も弥山で一括調理。<b>現場で在庫・衛生管理できる人が急募</b>。', x:1020, y:90 },
+  { id:'derune', status:'transfer', title:'デルーネ', meta:'51室 ／ ⚠譲渡予定 ／ 廿日市エリア',
+    manager:'支配人（未確定）', managerNote:'料理は弥山で作って運搬',
+    posts:[
+      { name:'フロント・予約', badge:null },
+      { name:'客室・清掃', badge:'cross' },
+      { name:'料飲', badge:'chef', note:'弥山から配送' },
+      { name:'設備管理', badge:null },
+    ],
+    note:'リブマックスへ譲渡予定。料理は弥山と一体運用。', x:100, y:800 },
+  { id:'yanai', status:'active', title:'GR柳井', meta:'中村夫妻常駐 ／ 山口エリア',
+    manager:'中村夫妻（常勤）', managerNote:'夫妻で多役兼任／山口エリア全体を担当',
+    posts:[
+      { name:'フロント・予約', badge:null },
+      { name:'客室・清掃', badge:null, note:'自施設内で完結' },
+      { name:'料飲', badge:'chef' },
+      { name:'設備管理', badge:null },
+    ],
+    note:'夫妻常駐で比較的安定。山口エリア全体（周防大島含む）を中村さんが担当。', x:560, y:800 },
+  { id:'suooshima', status:'pre-open', title:'周防大島', meta:'⚠開業前 ／ 山口エリア',
+    manager:'中村（エリア兼管）', managerNote:'GR柳井の中村さんが兼管',
+    posts:[
+      { name:'フロント・予約', badge:'vacant' },
+      { name:'客室・清掃', badge:null, note:'自施設で完結予定' },
+      { name:'料飲（在庫・衛生管理含む）', badge:'chef', person:'原田', note:'業務委託・衛生管理面を担当' },
+      { name:'設備管理', badge:'vacant' },
+    ],
+    note:'旅館業許可を柳井保健所へ申請中。料理＝原田さん確定。PR TIMES掲載計画中。', x:1020, y:800 },
+];
+
+function renderPanel2() {
+  const canvas = document.querySelector('#panel-facility .panel-canvas');
+  p2Facilities.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'card' + (f.status === 'transfer' ? ' transfer' : f.status === 'pre-open' ? ' pre-open' : '');
+    card.style.left = f.x + 'px'; card.style.top = f.y + 'px'; card.style.width = '420px';
+    let postsHtml = '';
+    f.posts.forEach(p => {
+      let badgeHtml = '';
+      if (p.badge === 'cross') badgeHtml = '<span class="badge cross">横断</span>';
+      else if (p.badge === 'chef') badgeHtml = '<span class="badge chef">総料理長</span>';
+      else if (p.badge === 'vacant') badgeHtml = '<span class="badge vacant">未配置</span>';
+      else if (p.badge === 'leader') badgeHtml = '<span class="badge leader">リーダー制</span>';
+      else if (p.badge === 'recruiting') badgeHtml = '<span class="badge recruiting">要募集</span>';
+      const personHtml = p.person ? `<span class="role-person">👤 ${p.person}</span>` : '';
+      postsHtml += `<div class="role-row"><div class="role-icon">●</div><div class="role-name">${p.name}${badgeHtml}${personHtml}${p.note ? `<div style="font-size:10px;color:#888;margin-top:2px;">${p.note}</div>`:''}</div></div>`;
+    });
+    card.innerHTML = `
+      <div class="card-header"><div class="card-title">${f.title}</div><div class="card-meta">${f.meta}</div></div>
+      <div class="card-body">
+        <div class="role-row">
+          <div class="role-icon" style="background:#E3F2FD;color:#1565C0;">★</div>
+          <div class="role-name" style="font-weight:700;">${f.manager}${f.managerNote ? `<div style="font-size:10px;color:#666;margin-top:2px;font-weight:normal;">${f.managerNote}</div>`:''}</div>
+          <span class="badge manager">支配人</span>
+        </div>
+        <div class="card-title-heading">ポスト構成</div>
+        ${postsHtml}
+        ${f.note ? `<div class="card-note">💡 ${f.note}</div>` : ''}
+      </div>`;
+    canvas.appendChild(card);
+  });
+
+  const overall = document.createElement('div');
+  overall.className = 'memo';
+  overall.style.left = '1500px'; overall.style.top = '90px'; overall.style.width = '380px';
+  overall.innerHTML = `
+    <div class="h">📝 支配人とリーダー制の方針（新）</div>
+    <b>支配人の役割再定義：</b><br>
+    ・通常業務への常駐は<b>不要</b>（采配がメイン）<br>
+    ・責任の所在（クレーム・トラブル対応・改善采配）<br>
+    ・外国人スタッフの<b>成長責務</b>が主業務<br>
+    ・評価・懲戒の段階化を会社方針として明示<br>
+    <br>
+    <b>リーダー制（導入予定）：</b><br>
+    ・フロント／清掃／料飲 など<b>各ポストにリーダー</b><br>
+    ・その下に他スタッフが A/B ローテで入る<br>
+    ・責任持ってやる＝本人の成長機会に`;
+  canvas.appendChild(overall);
+
+  const summary = document.createElement('div');
+  summary.className = 'sidebox';
+  summary.style.left = '1500px'; summary.style.top = '380px'; summary.style.width = '380px';
+  summary.innerHTML = `
+    <div class="h">🔎 施設別の現状ポイント</div>
+    <b>GR温井・いこいの村</b>：安芸太田の最重点。阿部さん退職で料理2名体制、要判断。<br><br>
+    <b>弥山・デルーネ</b>：譲渡予定。<b>料理/在庫/衛生管理の担当急募</b>（3時間/日でOK）。<br><br>
+    <b>GR柳井・周防大島</b>：中村さんが山口エリア全体担当。<br><br>
+    <b>周防大島</b>：料理＝<b>原田さん</b>（業務委託）確定。PR TIMES掲載を計画。`;
+  canvas.appendChild(summary);
+}
+
+// ===== Panel 3 Data =====
+const p3Manned = [
+  { id:'nukui', title:'GR温井', sub:'31室／安芸太田', status:'active', cleanInHouse:true },
+  { id:'ikoi',  title:'いこいの村ひろしま', sub:'27室／安芸太田', status:'active', cleanInHouse:true, chefNote:'阿部さん退職・要判断' },
+  { id:'misen', title:'弥山', sub:'21室／⚠譲渡予定', status:'transfer', chef:'募集中' },
+  { id:'derune',title:'デルーネ', sub:'51室／⚠譲渡予定', status:'transfer', chefNote:'弥山から配送' },
+  { id:'yanai', title:'GR柳井', sub:'中村夫妻常駐', status:'active', cleanInHouse:true },
+  { id:'suooshima', title:'周防大島', sub:'⚠開業前', status:'pre-open', chef:'原田', cleanInHouse:true },
+];
+const p3Unmanned = [
+  { id:'miyajima', title:'宮島VIEW', sub:'18室' },
+  { id:'honkawa', title:'本川', sub:'広島市内' },
+  { id:'otake', title:'大竹', sub:'マンスリー' },
+  { id:'tenjin', title:'天神ハウス', sub:'マンスリー' },
+  { id:'kuba', title:'玖波', sub:'マンスリー' },
+  { id:'fhgarden', title:'FHガーデン', sub:'8棟／髙宮直轄' },
+  { id:'takehara', title:'竹原', sub:'マンスリー' },
+  { id:'takaya', title:'高屋', sub:'マンスリー' },
+  { id:'saijo1', title:'西条壱番館', sub:'マンスリー' },
+  { id:'saijo2', title:'西条弐番館', sub:'マンスリー' },
+];
+
+function renderPanel3() {
+  const canvas = document.querySelector('#panel-crossfunc .panel-canvas');
+  const svg = document.querySelector('#panel-crossfunc .panel-edges');
+
+  const s1 = document.createElement('div');
+  s1.className = 'section chef';
+  s1.style.left = '60px'; s1.style.top = '60px'; s1.style.width = '2680px'; s1.style.height = '620px';
+  s1.innerHTML = `<div class="section-title">🍳 料理部門（総料理長監修）</div><div class="section-desc">総料理長がレシピ・メニューを設計し、各有人施設の料理人が実行。有人6施設のみ提供。在庫・廃棄データも総料理長へ集約。</div>`;
+  canvas.appendChild(s1);
+
+  const chefHub = document.createElement('div');
+  chefHub.className = 'hub chef';
+  chefHub.style.left = '1240px'; chefHub.style.top = '180px'; chefHub.style.width = '260px';
+  chefHub.innerHTML = `<div class="hub-title">🍳 総料理長</div><div class="hub-sub">メニュー設計・品質監修・レシピ<br>在庫/廃棄データ集約・采配</div><div class="hub-person vacant">👤 本採用要検討</div>`;
+  canvas.appendChild(chefHub);
+  const chefHubBox = { x:1240, y:180, w:260, h:140 };
+
+  const chefPos = [
+    { id:'nukui', x:150, y:460 }, { id:'ikoi', x:560, y:460 },
+    { id:'misen', x:1010, y:460 }, { id:'derune', x:1350, y:460 },
+    { id:'yanai', x:1780, y:460 }, { id:'suooshima', x:2150, y:460 },
+  ];
+  chefPos.forEach(p => {
+    const f = p3Manned.find(m => m.id === p.id);
+    const chip = document.createElement('div');
+    let cls = f.status === 'transfer' ? 'transfer' : (f.status === 'pre-open' ? 'pre-open' : '');
+    if (f.chef === '募集中') cls += ' recruiting';
+    chip.className = 'facility-chip ' + cls;
+    chip.style.left = p.x + 'px'; chip.style.top = p.y + 'px'; chip.style.width = '200px';
+    let roleText, roleCls = 'fc-role';
+    if (f.chef === '募集中') { roleText = '料理人：要募集'; roleCls = 'fc-role recruit'; }
+    else if (f.chef) roleText = `料理人：${f.chef}`;
+    else if (f.chefNote) roleText = f.chefNote;
+    else if (f.status === 'transfer') roleText = '料理人（譲渡まで）';
+    else if (f.status === 'pre-open') roleText = '料理人（開業後配置）';
+    else roleText = '料理人（未確定）';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div><div class="fc-sub">${f.sub}</div><div class="${roleCls}">${roleText}</div>`;
+    canvas.appendChild(chip);
+    p.node = { x:p.x, y:p.y, w:200, h:90 };
+  });
+
+  const s2 = document.createElement('div');
+  s2.className = 'section clean';
+  s2.style.left = '60px'; s2.style.top = '720px'; s2.style.width = '2680px'; s2.style.height = '1020px';
+  s2.innerHTML = `<div class="section-title">🧹 清掃部隊（横断）</div><div class="section-desc">一つの清掃チームが複数施設を巡回。安芸太田・GR柳井・周防大島は自施設で完結するため対象外。現状は再構築中（髙宮・青山がリーダー格）。</div>`;
+  canvas.appendChild(s2);
+
+  const cleanHub = document.createElement('div');
+  cleanHub.className = 'hub clean';
+  cleanHub.style.left = '1240px'; cleanHub.style.top = '820px'; cleanHub.style.width = '260px';
+  cleanHub.innerHTML = `<div class="hub-title">🧹 清掃部隊</div><div class="hub-sub">廿日市〜三原・竹原＋FHを巡回<br>リーダー再構築中</div><div class="hub-person vacant">👤 青山リーダー格・要改善</div>`;
+  canvas.appendChild(cleanHub);
+  const cleanHubBox = { x:1240, y:820, w:260, h:130 };
+
+  const grp1 = document.createElement('div');
+  grp1.className = 'group-label';
+  grp1.style.left = '100px'; grp1.style.top = '1020px';
+  grp1.textContent = '清掃部隊対象（有人2：弥山／デルーネ）';
+  canvas.appendChild(grp1);
+
+  const cleanManned = [
+    { id:'misen', x:100, y:1060 }, { id:'derune', x:300, y:1060 },
+  ];
+  cleanManned.forEach(p => {
+    const f = p3Manned.find(m => m.id === p.id);
+    const chip = document.createElement('div');
+    const cls = f.status === 'transfer' ? 'transfer' : (f.status === 'pre-open' ? 'pre-open' : '');
+    chip.className = 'facility-chip ' + cls;
+    chip.style.left = p.x + 'px'; chip.style.top = p.y + 'px'; chip.style.width = '180px';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div><div class="fc-sub">${f.sub}</div>`;
+    canvas.appendChild(chip);
+    p.node = { x:p.x, y:p.y, w:180, h:58 };
+  });
+
+  const grp2 = document.createElement('div');
+  grp2.className = 'group-label';
+  grp2.style.left = '540px'; grp2.style.top = '1020px';
+  grp2.textContent = '清掃部隊対象（無人10／マンスリー含む）';
+  canvas.appendChild(grp2);
+
+  const cleanUnmanned = [
+    { id:'miyajima', x:540, y:1060 }, { id:'honkawa', x:720, y:1060 },
+    { id:'otake', x:890, y:1060 }, { id:'tenjin', x:1060, y:1060 },
+    { id:'kuba', x:1230, y:1060 }, { id:'fhgarden', x:1400, y:1060 },
+    { id:'takehara', x:1580, y:1060 }, { id:'takaya', x:1750, y:1060 },
+    { id:'saijo1', x:1920, y:1060 }, { id:'saijo2', x:2100, y:1060 },
+  ];
+  cleanUnmanned.forEach(p => {
+    const f = p3Unmanned.find(m => m.id === p.id);
+    const chip = document.createElement('div');
+    chip.className = 'facility-chip unmanned';
+    chip.style.left = p.x + 'px'; chip.style.top = p.y + 'px'; chip.style.width = '160px';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div>${f.sub ? `<div class="fc-sub">${f.sub}</div>` : ''}`;
+    canvas.appendChild(chip);
+    p.node = { x:p.x, y:p.y, w:160, h:f.sub ? 50 : 32 };
+  });
+
+  const grp3 = document.createElement('div');
+  grp3.className = 'group-label';
+  grp3.style.left = '100px'; grp3.style.top = '1200px';
+  grp3.textContent = '対象外（自施設で完結）';
+  canvas.appendChild(grp3);
+
+  const selfClean = [
+    { title:'GR温井', sub:'安芸太田', x:100, y:1240 },
+    { title:'いこいの村', sub:'安芸太田', x:280, y:1240 },
+    { title:'GR柳井', sub:'山口', x:460, y:1240 },
+    { title:'周防大島', sub:'山口', x:640, y:1240 },
+  ];
+  selfClean.forEach(f => {
+    const chip = document.createElement('div');
+    chip.className = 'facility-chip';
+    chip.style.left = f.x + 'px'; chip.style.top = f.y + 'px'; chip.style.width = '160px';
+    chip.style.opacity = '0.6';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div><div class="fc-sub">${f.sub}</div>`;
+    canvas.appendChild(chip);
+  });
+
+  function edgePath(from, to, color) {
+    const x1=from.x+from.w/2, y1=from.y+from.h, x2=to.x+to.w/2, y2=to.y, cy=(y1+y2)/2;
+    return `<path d="M ${x1} ${y1} C ${x1} ${cy} ${x2} ${cy} ${x2} ${y2}" stroke="${color}" stroke-width="1.5" fill="none" opacity="0.6" />`;
+  }
+
+  let svgContent = '';
+  chefPos.forEach(p => svgContent += edgePath(chefHubBox, p.node, '#E65100'));
+  cleanManned.forEach(p => svgContent += edgePath(cleanHubBox, p.node, '#C62828'));
+  cleanUnmanned.forEach(p => svgContent += edgePath(cleanHubBox, p.node, '#C62828'));
+  svg.innerHTML = svgContent;
+
+  const memo = document.createElement('div');
+  memo.className = 'memo';
+  memo.style.left = '2230px'; memo.style.top = '820px'; memo.style.width = '490px';
+  memo.innerHTML = `
+    <div class="h">📝 横断機能の現状と課題（会話から反映）</div>
+    <b>料理部門：</b><br>
+    ・阿部さん（海外賞入賞）退職 → いこいの村2名体制<br>
+    ・チンさん（憩いの村）の配置モチベ確認が先<br>
+    ・<b>弥山の料理/在庫/衛生管理担当を急募</b>（3時間/日、60〜70代可）<br>
+    ・周防大島＝原田さん（業務委託）で確定<br>
+    ・廃棄コストの把握と采配が目下の課題<br>
+    <br>
+    <b>清掃部隊：</b><br>
+    ・対象は廿日市〜三原・竹原＋FH（12施設）<br>
+    ・安芸太田・GR柳井・周防大島は自施設で完結<br>
+    ・FHガーデン：一人リーダー不在で止まる → 髙宮に再構築指示中<br>
+    ・青山がリーダー格として構築中だが、スピード感不足<br>
+    ・最終形：運転手さえいれば回るルール化`;
+  canvas.appendChild(memo);
+}
+
+// ===== Panel 4 Data =====
+const p4Categories = [
+  {
+    title:'🚨 緊急（現場運営に直接影響）', type:'high',
+    x:60, y:60, w:700,
+    items:[
+      { title:'弥山／デルーネの料理・在庫・衛生管理担当を募集', owner:'下坂・仲尾', detail:'3時間/日、衛生管理・発注・在庫把握。調理力は必須ではない。60〜70代可、飲食経験者歓迎。市街地のクマさんのお店経由で条件整理中。' },
+      { title:'FHガーデン清掃体制の再構築', owner:'髙宮（下坂監督）', detail:'「一人のリーダーがいないと誰も清掃できない」状態を解消。清掃部隊が回れる形へ。現在進行中だがスピード感不足。' },
+      { title:'阿部さん退職に伴う料理人補充判断', owner:'下坂', detail:'いこいの村3→2名に。チンさんの配置拡大かどうか、本人モチベの確認が先。' },
+    ]
+  },
+  {
+    title:'📋 重要（体制構築の根幹）', type:'medium',
+    x:790, y:60, w:700,
+    items:[
+      { title:'マリエルさん育成ロードマップ策定', owner:'下坂・仲尾', detail:'特定技能「宿泊」取得（現在は外食）→ 弥山リーダー継続しつつ、将来の全体統括層候補として青山さんのサポート下で段階的育成。' },
+      { title:'海外部門（特定技能者管理）立ち上げ', owner:'下坂', detail:'フエンさん（ビエン君の奥さん）を登録支援機関担当に。現在レジデンス外部委託（月1人分給料）を内製化。ビザ更新等も内製。' },
+      { title:'憩いの村にリーダー制導入', owner:'下坂', detail:'フロント／清掃／料飲にリーダー指名。その下に外国人スタッフがA/Bローテで入る形。責任ある立場を作り、成長機会に。' },
+      { title:'支配人の役割を会社方針として明文化', owner:'下坂', detail:'通常業務への常駐不要。責任の所在（クレーム対応・改善采配・外国人スタッフ育成）が本来の役割。評価・懲戒の段階化とセット。' },
+    ]
+  },
+  {
+    title:'🏗️ 中期（体制強化・育成）', type:'low',
+    x:1520, y:60, w:700,
+    items:[
+      { title:'経営管理部門の増員検討', owner:'下坂', detail:'井上さんの判断負荷軽減。施設管理担当（消防対応等）が本来必要。当面はツール化で楽にする方向。' },
+      { title:'総料理長の本採用と役割明確化', owner:'下坂', detail:'現場在庫・廃棄データを集約して采配する中核機能。レシピ展開も担う。廃棄コストの可視化が最初の一歩。' },
+      { title:'清掃部隊リーダー体制の確立', owner:'下坂・青山', detail:'運転手さえいれば回るルール化を目指す。高宮さん経由の拾い方の課題（「みんな行きたくない」ではなく方針として動く）を改善。' },
+      { title:'白井さんのOTA完全移管', owner:'仲尾→白井', detail:'5月〜正社員化、夏目標で完全移管。カレンダー作成は当面仲尾が支援。仲尾は「部活OB」として手伝い継続。' },
+    ]
+  },
+  {
+    title:'📢 集客・広報強化（仲尾主導）', type:'info',
+    x:60, y:880, w:700,
+    items:[
+      { title:'PR TIMES活用拡大', owner:'仲尾', detail:'前回掲載成功を受け、周防大島オープン企画、温井ダム放流連動プラン等で連続投稿。中国デジタル新聞・産経新聞等への波及効果を狙う。' },
+      { title:'集客・広報を一本化し SNS / Web / チャットボット連動', owner:'仲尾・仁谷', detail:'仁谷さんとの連携不足を改善（過去に別々に動いて齟齬発生）。プラン連発よりホテル品質と口コミベースの集客を優先。' },
+      { title:'広報集客の重要性を社内合意形成', owner:'仲尾（社長と合意済）', detail:'「プランがない」論に対し、宮島は十分なプランはあると整理。ベース（ホテル品質・集客）の骨組みを強化、小手先のプランは誤差と位置づけ。' },
+    ]
+  },
+  {
+    title:'🔄 情報待ち・次回反映', type:'future',
+    x:790, y:880, w:700,
+    items:[
+      { title:'各施設の支配人ポスト確定', owner:'下坂', detail:'髙宮以外（GR温井・いこいの村・周防大島）の本人任命を進める。' },
+      { title:'憩いの村のリーダー指名を反映', owner:'仲尾（反映）', detail:'フロント／清掃／料飲リーダーが決まり次第、②に人名を追加。' },
+      { title:'弥山の料理担当が決まったら反映', owner:'仲尾（反映）', detail:'募集成功後、①②③に追加。' },
+      { title:'特定技能者管理の体制詳細', owner:'下坂', detail:'マリエル／ジャム／フエンの役割分担を明文化次第、海外部門の中身を詳細化。' },
+      { title:'清掃部隊メンバー構成', owner:'下坂', detail:'青山さん以下のメンバー・巡回スケジュールが確定次第、③に追記。' },
+    ]
+  },
+  {
+    title:'💡 ツール化で軽減する業務（参考）', type:'info',
+    x:1520, y:880, w:700,
+    items:[
+      { title:'経理・事務の判断ルール化', owner:'下坂・仲尾', detail:'井上さんの「どこまで独断可／要相談」の境界を明示。社労士からの連絡の一次判断をマニュアル化。' },
+      { title:'在庫・廃棄管理ツール導入', owner:'総料理長（将来）', detail:'現場の報告を集約し、廃棄コストの可視化。発注の過多を抑制。' },
+      { title:'チャットボットによる集客自動化', owner:'仲尾・仁谷', detail:'既に取り組み中。無人施設の予約フロー最適化へ。' },
+    ]
+  },
+];
+
+function renderPanel4() {
+  const canvas = document.querySelector('#panel-actions .panel-canvas');
+  p4Categories.forEach(cat => {
+    const col = document.createElement('div');
+    col.className = 'action-col';
+    col.style.left = cat.x + 'px'; col.style.top = cat.y + 'px'; col.style.width = cat.w + 'px';
+    const card = document.createElement('div');
+    card.className = 'action-card ' + cat.type;
+    let itemsHtml = '';
+    cat.items.forEach(it => {
+      itemsHtml += `
+        <div class="action-item">
+          <div class="action-item-title">● ${it.title}</div>
+          <div class="action-item-owner">担当: ${it.owner}</div>
+          <div class="action-item-detail">${it.detail}</div>
+        </div>`;
+    });
+    card.innerHTML = `<div class="action-card-header">${cat.title}（${cat.items.length}件）</div>${itemsHtml}`;
+    col.appendChild(card);
+    canvas.appendChild(col);
+  });
+
+  const summary = document.createElement('div');
+  summary.className = 'memo';
+  summary.style.left = '60px'; summary.style.top = '1770px'; summary.style.width = '2160px';
+  summary.innerHTML = `
+    <div class="h">🗂 今日の話の要点（下坂・仲尾MTGより）</div>
+    <b>1. マリエルさんを将来の幹部候補に</b>：特定技能の「宿泊」取得を経て、弥山リーダー＋将来の全体統括層として育成。青山さんが専門的サポート。<br>
+    <b>2. 一棟貸し・マンスリーは「トップ不要」</b>：無人運用でルール化で回す。FHガーデンだけは髙宮直轄として安芸太田エリアから派生。千代田は存在しないので削除。<br>
+    <b>3. 広報・集客は仲尾主導で一本化強化</b>：PR TIMES成功を受けてフォロワー順調増。周防大島・温井ダム放流等で連続投稿。ホテル品質と口コミベースを優先。<br>
+    <b>4. 経営管理は井上さん単独では厳しい</b>：判断領域の明確化＋将来的増員。まずツール化で軽減。<br>
+    <b>5. 支配人は「常駐」から「責任者」へ役割転換</b>：通常業務はリーダー制で回し、支配人は采配と育成に集中。外国人スタッフの成長責務を明示。<br>
+    <b>6. 料理部門の課題</b>：阿部さん退職、弥山の在庫・衛生管理担当急募、総料理長への集約データフロー整備。廃棄コスト可視化がスタート地点。<br>
+    <b>7. 清掃部隊の再構築</b>：FHガーデン含む巡回体制へ。髙宮さんのスピード感が課題、青山さんリーダー格で構築中。運転手さえいれば回るルール化を目指す。
+  `;
+  canvas.appendChild(summary);
+}
+
+// ===== Render =====
+renderPanel1();
+renderPanel2();
+renderPanel3();
+renderPanel4();
+
+// ===== Pan / Zoom =====
+function setupPanel(panelId) {
+  const panel = document.getElementById(panelId);
+  const viewport = panel.querySelector('.panel-viewport');
+  const canvas = panel.querySelector('.panel-canvas');
+  const cw = parseInt(panel.dataset.canvasW);
+  const ch = parseInt(panel.dataset.canvasH);
+  const zoomLevelEl = panel.querySelector('.zoom-level');
+  let scale = 0.5, tx = 40, ty = 60;
+  let dragging = false, startX, startY, startTx, startTy;
+  function update() {
+    canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+  viewport.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    startTx = tx; startTy = ty;
+    viewport.classList.add('grabbing');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    tx = startTx + (e.clientX - startX);
+    ty = startTy + (e.clientY - startY);
+    update();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('grabbing'); });
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
+    const newScale = Math.min(Math.max(scale * factor, 0.15), 2);
+    tx = mx - (mx - tx) * (newScale / scale);
+    ty = my - (my - ty) * (newScale / scale);
+    scale = newScale;
+    update();
+  }, { passive: false });
+  viewport.addEventListener('gesturestart', e => e.preventDefault());
+  panel.querySelector('.zoom-in').onclick = () => { scale = Math.min(scale*1.2, 2); update(); };
+  panel.querySelector('.zoom-out').onclick = () => { scale = Math.max(scale/1.2, 0.15); update(); };
+  function reset() {
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    scale = Math.min(vw/cw, vh/ch) * 0.92;
+    tx = (vw - cw*scale)/2;
+    ty = (vh - ch*scale)/2;
+    update();
+  }
+  panel.querySelector('.reset').onclick = reset;
+  return { reset };
+}
+
+const panelSetups = {
+  overview: setupPanel('panel-overview'),
+  facility: setupPanel('panel-facility'),
+  crossfunc: setupPanel('panel-crossfunc'),
+  actions: setupPanel('panel-actions'),
+};
+let activeTab = 'overview';
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    const tabName = btn.dataset.tab;
+    if (tabName === activeTab) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + tabName).classList.add('active');
+    activeTab = tabName;
+    setTimeout(() => panelSetups[tabName].reset(), 50);
+  };
+});
+setTimeout(() => panelSetups.overview.reset(), 100);
+</script>
+</body>
+</html>
