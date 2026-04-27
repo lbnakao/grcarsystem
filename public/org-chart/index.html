@@ -880,6 +880,11 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     if (!patch) return;
     if (typeof patch.x === 'number') el.style.left = patch.x + 'px';
     if (typeof patch.y === 'number') el.style.top = patch.y + 'px';
+    // 色種別の変更（凡例タイプ）— 既存の .node のみ対応
+    if (patch.type && el.classList.contains('node')) {
+      // ハンドル等の子要素クラスは消えないが、el の className のみ書き換え
+      el.className = 'node ' + patch.type;
+    }
     if (patch.title != null) {
       const t = el.querySelector('.title, .hub-title, .fc-title, .card-title');
       if (t) t.textContent = patch.title;
@@ -931,8 +936,10 @@ setTimeout(() => panelSetups.overview.reset(), 100);
         if (!moved && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) moved = true;
         el.style.left = (startLeft + dx) + 'px';
         el.style.top  = (startTop  + dy) + 'px';
-        // ノード移動時、それに繋がっている線も追従させる
-        if (el.dataset.nodeId) refreshLinesAnchoredTo(panelOf(el), el.dataset.nodeId);
+        // ノード/枠の移動時、それに繋がっている線も追従させる
+        const pn = panelOf(el);
+        if (el.dataset.nodeId)  refreshLinesAnchoredTo(pn, 'node',  el.dataset.nodeId);
+        if (el.dataset.frameId) refreshLinesAnchoredTo(pn, 'frame', el.dataset.frameId);
       }
       function onUp() {
         window.removeEventListener('mousemove', onMove);
@@ -1002,6 +1009,67 @@ setTimeout(() => panelSetups.overview.reset(), 100);
       }
       function onKeydown(ev) { if (ev.key === 'Escape') ev.target.blur(); }
     });
+
+    // 色ピッカー（凡例どおり）— 全社俯瞰図の .node のみ対応
+    if (panel === 'overview' && el.classList.contains('node')) {
+      const handle = document.createElement('button');
+      handle.className = 'node-style-handle edit-handle';
+      handle.textContent = '🎨';
+      handle.title = '色を変更';
+      handle.addEventListener('mousedown', ev => ev.stopPropagation());
+      handle.addEventListener('click', ev => {
+        ev.stopPropagation();
+        showNodeColorPicker(el, handle);
+      });
+      el.appendChild(handle);
+    }
+  }
+
+  // ----- ノード色ピッカー（凡例の9種） -----
+  const NODE_TYPES = [
+    { type: 'ceo',                label: '経営トップ',         color: '#1E2761', solid: true },
+    { type: 'coo',                label: '全体統括(COO)',      color: '#3B4695', solid: true },
+    { type: 'dept-admin',         label: '経営管理部門',       color: '#028090' },
+    { type: 'dept-overseas',      label: '海外部門',           color: '#7B1FA2' },
+    { type: 'dept-rc',            label: '総合予約センター',   color: '#F96167' },
+    { type: 'dept-hotel',         label: '施設運営部門',       color: '#2C5F2D' },
+    { type: 'facility manned',    label: '有人施設',           color: '#4A8B43' },
+    { type: 'facility takamiya',  label: '髙宮直轄',           color: '#FF6B35' },
+    { type: 'facility monthly',   label: '一棟貸し',           color: '#8E6FC4' },
+  ];
+  function showNodeColorPicker(el, anchorEl) {
+    document.querySelectorAll('.color-picker-popup').forEach(p => p.remove());
+    const popup = document.createElement('div');
+    popup.className = 'color-picker-popup';
+    NODE_TYPES.forEach(t => {
+      const sw = document.createElement('button');
+      sw.className = 'swatch';
+      const dotStyle = t.solid
+        ? `border-color:${t.color};background:${t.color};`
+        : `border-color:${t.color};`;
+      sw.innerHTML = `<span class="dot" style="${dotStyle}"></span>${t.label}`;
+      sw.addEventListener('click', () => {
+        el.className = 'node ' + t.type;
+        const panel = panelOf(el), nodeId = el.dataset.nodeId;
+        const p = getPatch(panel, nodeId);
+        p.type = t.type;
+        saveNodePatch(panel, nodeId);
+        popup.remove();
+      });
+      popup.appendChild(sw);
+    });
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.left = Math.min(rect.right + 4, window.innerWidth - 240) + 'px';
+    popup.style.top  = Math.min(rect.top, window.innerHeight - 320) + 'px';
+    document.body.appendChild(popup);
+    setTimeout(() => {
+      document.addEventListener('mousedown', function close(ev) {
+        if (!popup.contains(ev.target)) {
+          popup.remove();
+          document.removeEventListener('mousedown', close);
+        }
+      });
+    }, 0);
   }
 
   // ----- Stickies -----
@@ -1077,25 +1145,38 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     }
     return svg;
   }
-  function nodeAtPoint(panel, x, y) {
-    const nodes = document.querySelectorAll('[data-panel="' + panel + '"][data-node-id]');
-    for (const n of nodes) {
-      const nx = parseFloat(n.style.left) || 0;
-      const ny = parseFloat(n.style.top)  || 0;
-      const nw = n.offsetWidth, nh = n.offsetHeight;
-      if (x >= nx && x <= nx+nw && y >= ny && y <= ny+nh) {
-        const d = { top: y-ny, bottom: ny+nh-y, left: x-nx, right: nx+nw-x };
-        let side = 'top', min = d.top;
-        for (const k of ['bottom','left','right']) if (d[k] < min) { side = k; min = d[k]; }
-        return { nodeId: n.dataset.nodeId, side };
+  // ノード or 枠 を当たり判定する（先にヒットしたものを返す）
+  function targetAtPoint(panel, x, y) {
+    // 重なっている場合、枠より上に描画されるノードを優先
+    const candidates = document.querySelectorAll(
+      '[data-panel="' + panel + '"][data-node-id], .user-frame[data-panel="' + panel + '"]'
+    );
+    // ノード優先のため2回ループ
+    for (const pass of ['node', 'frame']) {
+      for (const el of candidates) {
+        const isNode = !!el.dataset.nodeId;
+        if (pass === 'node' && !isNode) continue;
+        if (pass === 'frame' && isNode) continue;
+        const nx = parseFloat(el.style.left) || 0;
+        const ny = parseFloat(el.style.top)  || 0;
+        const nw = el.offsetWidth, nh = el.offsetHeight;
+        if (x >= nx && x <= nx+nw && y >= ny && y <= ny+nh) {
+          const d = { top: y-ny, bottom: ny+nh-y, left: x-nx, right: nx+nw-x };
+          let side = 'top', min = d.top;
+          for (const k of ['bottom','left','right']) if (d[k] < min) { side = k; min = d[k]; }
+          if (isNode) return { type: 'node',  nodeId:  el.dataset.nodeId,  side };
+          return         { type: 'frame', frameId: el.dataset.frameId, side };
+        }
       }
     }
     return null;
   }
   function anchorPoint(panel, ref) {
     if (!ref) return { x: 0, y: 0 };
-    if (ref.type === 'free' || !ref.nodeId) return { x: ref.x || 0, y: ref.y || 0 };
-    const el = document.querySelector('[data-panel="' + panel + '"][data-node-id="' + ref.nodeId + '"]');
+    if (ref.type === 'free' || (!ref.nodeId && !ref.frameId)) return { x: ref.x || 0, y: ref.y || 0 };
+    let el = null;
+    if (ref.nodeId)       el = document.querySelector('[data-panel="' + panel + '"][data-node-id="'  + ref.nodeId  + '"]');
+    else if (ref.frameId) el = document.querySelector('[data-panel="' + panel + '"][data-frame-id="' + ref.frameId + '"]');
     if (!el) return { x: ref.x || 0, y: ref.y || 0 };
     const x = parseFloat(el.style.left) || 0;
     const y = parseFloat(el.style.top)  || 0;
@@ -1108,28 +1189,46 @@ setTimeout(() => panelSetups.overview.reset(), 100);
       default:       return { x: x + w/2, y: y + h/2 };
     }
   }
-  function refreshLinesAnchoredTo(panel, nodeId) {
+  // type: 'node' | 'frame', id: nodeId or frameId
+  function refreshLinesAnchoredTo(panel, type, id) {
     if (!panel || !panelLines[panel]) return;
+    const key = type === 'frame' ? 'frameId' : 'nodeId';
     panelLines[panel].forEach(L => {
       const f = L.line.from, t = L.line.to;
-      if ((f && f.nodeId === nodeId) || (t && t.nodeId === nodeId)) L.refresh();
+      if ((f && f[key] === id) || (t && t[key] === id)) L.refresh();
     });
   }
   function createLineEl(panel, line) {
     const canvas = panelSetups[panel].getCanvas();
     const svg = getOrCreateUserSvg(canvas);
-    const lineEl = document.createElementNS(SVG_NS, 'line');
+    const isCurved = line.style === 'curved';
+    const lineEl = document.createElementNS(SVG_NS, isCurved ? 'path' : 'line');
     lineEl.setAttribute('class', 'user-line');
     lineEl.dataset.lineId = line.id;
     lineEl.setAttribute('stroke', line.color || '#1E2761');
     lineEl.setAttribute('stroke-width', line.width || 2.5);
+    lineEl.setAttribute('fill', 'none');
     if (line.dashed) lineEl.setAttribute('stroke-dasharray', '8 4');
     lineEl.setAttribute('stroke-linecap', 'round');
     function refresh() {
       const a = anchorPoint(panel, line.from);
       const b = anchorPoint(panel, line.to);
-      lineEl.setAttribute('x1', a.x); lineEl.setAttribute('y1', a.y);
-      lineEl.setAttribute('x2', b.x); lineEl.setAttribute('y2', b.y);
+      if (isCurved) {
+        // 既存 pathBetween と同じ縦方向ベジェ。横並びの場合は横向き制御点に切替
+        const dx = b.x - a.x, dy = b.y - a.y;
+        let d;
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          const cy = (a.y + b.y) / 2;
+          d = `M ${a.x} ${a.y} C ${a.x} ${cy} ${b.x} ${cy} ${b.x} ${b.y}`;
+        } else {
+          const cx = (a.x + b.x) / 2;
+          d = `M ${a.x} ${a.y} C ${cx} ${a.y} ${cx} ${b.y} ${b.x} ${b.y}`;
+        }
+        lineEl.setAttribute('d', d);
+      } else {
+        lineEl.setAttribute('x1', a.x); lineEl.setAttribute('y1', a.y);
+        lineEl.setAttribute('x2', b.x); lineEl.setAttribute('y2', b.y);
+      }
     }
     refresh();
     lineEl.addEventListener('click', e => {
@@ -1167,6 +1266,12 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     label.contentEditable = document.body.classList.contains('edit-mode') ? 'true' : 'false';
     el.appendChild(label);
 
+    const body = document.createElement('div');
+    body.className = 'frame-body';
+    body.textContent = frame.body || '';
+    body.contentEditable = document.body.classList.contains('edit-mode') ? 'true' : 'false';
+    el.appendChild(body);
+
     const del = document.createElement('button');
     del.className = 'frame-del edit-handle';
     del.textContent = '×';
@@ -1186,7 +1291,8 @@ setTimeout(() => panelSetups.overview.reset(), 100);
           y: Math.round(parseFloat(el.style.top))  || 0,
           w: Math.round(parseFloat(el.style.width)) || 200,
           h: Math.round(parseFloat(el.style.height)) || 120,
-          label: label.textContent
+          label: label.textContent,
+          body: body.textContent
         };
         api('PUT', '/frame/' + frame.id, { data })
           .then(() => setStatus('保存しました'))
@@ -1195,6 +1301,7 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     }
     wireDraggable(el, save);
     label.addEventListener('input', save);
+    body.addEventListener('input', save);
 
     canvas.appendChild(el);
     return el;
@@ -1204,6 +1311,13 @@ setTimeout(() => panelSetups.overview.reset(), 100);
   // tool: 'none' | 'sticky' | 'line' | 'frame'
   let tool = 'none';
   let linePending = null; // { panel, from }
+  let lineStyle = 'curved';  // 'straight' | 'curved' — 線描画スタイル（既定: 曲線）
+  function refreshLineStyleButton() {
+    const b = document.getElementById('line-style-toggle');
+    if (!b) return;
+    b.style.display = (tool === 'line') ? '' : 'none';
+    b.textContent = lineStyle === 'curved' ? '〜 曲線' : '／ 直線';
+  }
   function refreshToolButtons() {
     document.querySelectorAll('#edit-toolbar button[data-tool]').forEach(b => {
       const isActive = b.dataset.tool === tool;
@@ -1212,6 +1326,7 @@ setTimeout(() => panelSetups.overview.reset(), 100);
                                : (b.dataset.label || b.textContent);
     });
     document.body.classList.toggle('tool-armed', tool !== 'none');
+    refreshLineStyleButton();
   }
   function setTool(t) {
     if (tool === t) t = 'none'; // toggle
@@ -1224,7 +1339,7 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     else                     setStatus('');
   }
   function refreshFrameEditability(on) {
-    document.querySelectorAll('.frame-label').forEach(l => l.contentEditable = on ? 'true' : 'false');
+    document.querySelectorAll('.frame-label, .frame-body').forEach(l => l.contentEditable = on ? 'true' : 'false');
   }
   function setupCanvasInteractions() {
     document.querySelectorAll('.panel-canvas').forEach(canvas => {
@@ -1250,17 +1365,24 @@ setTimeout(() => panelSetups.overview.reset(), 100);
             setStatus('付箋を追加');
           } catch { setStatus('追加失敗', true); }
         } else if (tool === 'line') {
-          const snap = nodeAtPoint(panel, x, y);
-          const ref = snap ? { type: 'node', nodeId: snap.nodeId, side: snap.side }
+          const snap = targetAtPoint(panel, x, y);
+          const ref = snap ? Object.assign({ type: snap.type, side: snap.side },
+                                          snap.nodeId  ? { nodeId:  snap.nodeId  } : {},
+                                          snap.frameId ? { frameId: snap.frameId } : {})
                            : { type: 'free', x: Math.round(x), y: Math.round(y) };
           if (!linePending) {
             linePending = { panel, from: ref };
-            setStatus('終点をクリック' + (snap ? '（始点: ' + snap.nodeId + '）' : ''));
+            const label = snap ? '（始点: ' + (snap.nodeId || '枠') + '）' : '';
+            setStatus('終点をクリック' + label);
           } else if (linePending.panel !== panel) {
             setStatus('同じパネル内で2点指定', true);
             linePending = null;
           } else {
-            const data = { from: linePending.from, to: ref, color: '#1E2761', width: 2.5 };
+            const data = {
+              from: linePending.from, to: ref,
+              color: '#1E2761', width: 2.5,
+              style: lineStyle  // 'straight' | 'curved'
+            };
             linePending = null;
             try {
               const r = await api('POST', '/line', { panel, data });
@@ -1354,14 +1476,24 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     .user-frame { position: absolute; border: 2px dashed rgba(30,39,97,0.45); border-radius: 12px; background: rgba(30,39,97,0.04); z-index: 0; pointer-events: auto; }
     .user-frame.frame-preview { background: rgba(30,39,97,0.1); pointer-events: none; }
     .frame-label { position: absolute; top: -12px; left: 14px; background: white; padding: 1px 10px; font-size: 11px; font-weight: 700; color: #1E2761; border: 1px solid rgba(30,39,97,0.5); border-radius: 6px; outline: none; min-width: 16px; }
+    .frame-body { position: absolute; top: 8px; left: 12px; right: 12px; bottom: 8px; font-size: 11.5px; line-height: 1.55; color: #1E2761; outline: none; word-break: break-word; white-space: pre-wrap; overflow: auto; }
+    body.edit-mode .frame-body { background: rgba(255,255,255,0.55); border-radius: 6px; padding: 4px 6px; }
     body.edit-mode .user-frame { cursor: move; }
-    .frame-del { position: absolute; top: -10px; right: 6px; background: white; border: 1px solid #ddd; font-size: 14px; line-height: 1; color: #888; cursor: pointer; padding: 1px 6px; display: none; border-radius: 6px; font-family: inherit; }
+    .frame-del { position: absolute; top: -10px; right: 6px; background: white; border: 1px solid #ddd; font-size: 14px; line-height: 1; color: #888; cursor: pointer; padding: 1px 6px; display: none; border-radius: 6px; font-family: inherit; z-index: 2; }
     body.edit-mode .user-frame:hover .frame-del { display: block; }
     body.edit-mode .frame-del:hover { color: #c00; border-color: #c00; }
 
-    svg.user-edges line { transition: stroke-width 0.1s; }
-    body.edit-mode svg.user-edges line { pointer-events: stroke; cursor: pointer; }
-    body.edit-mode svg.user-edges line:hover { stroke-width: 5 !important; }
+    svg.user-edges line, svg.user-edges path { transition: stroke-width 0.1s; }
+    body.edit-mode svg.user-edges line, body.edit-mode svg.user-edges path { pointer-events: stroke; cursor: pointer; }
+    body.edit-mode svg.user-edges line:hover, body.edit-mode svg.user-edges path:hover { stroke-width: 5 !important; }
+
+    .node-style-handle { position: absolute; top: -10px; right: -10px; background: white; border: 1px solid #ddd; border-radius: 50%; width: 22px; height: 22px; line-height: 18px; font-size: 13px; cursor: pointer; padding: 0; display: none; font-family: inherit; z-index: 2; }
+    body.edit-mode [data-node-id]:hover > .node-style-handle { display: block; }
+    .node-style-handle:hover { border-color: #1E2761; }
+    .color-picker-popup { position: fixed; background: white; border: 1px solid #ccc; border-radius: 8px; padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.15); z-index: 9999; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 220px; }
+    .color-picker-popup .swatch { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #eee; border-radius: 6px; cursor: pointer; font-size: 11px; background: white; font-family: inherit; text-align: left; }
+    .color-picker-popup .swatch:hover { background: #f5f5f5; border-color: #1E2761; }
+    .color-picker-popup .swatch .dot { width: 14px; height: 14px; border-radius: 3px; border: 2px solid; flex-shrink: 0; }
 
     body.tool-armed .panel-viewport { cursor: crosshair; }
     body.tool-armed .panel-canvas { cursor: crosshair; }
@@ -1380,12 +1512,17 @@ setTimeout(() => panelSetups.overview.reset(), 100);
   toolbar.innerHTML = '<button id="edit-toggle">✎ 編集モード</button>'
     + '<button data-tool="sticky" data-label="＋付箋" data-active-label="付箋: 配置場所をクリック…" style="display:none">＋付箋</button>'
     + '<button data-tool="line"   data-label="／線"   data-active-label="線: 2点をクリック…"     style="display:none">／線</button>'
+    + '<button id="line-style-toggle" style="display:none">〜 曲線</button>'
     + '<button data-tool="frame"  data-label="▢枠"   data-active-label="枠: ドラッグで描画…"     style="display:none">▢枠</button>'
     + '<span id="edit-status"></span>';
   document.getElementById('tab-bar').appendChild(toolbar);
   document.getElementById('edit-toggle').addEventListener('click', toggleEditMode);
   document.querySelectorAll('#edit-toolbar button[data-tool]').forEach(b => {
     b.addEventListener('click', () => setTool(b.dataset.tool));
+  });
+  document.getElementById('line-style-toggle').addEventListener('click', () => {
+    lineStyle = lineStyle === 'curved' ? 'straight' : 'curved';
+    refreshLineStyleButton();
   });
   setupCanvasInteractions();
 
