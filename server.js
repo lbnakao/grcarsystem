@@ -99,6 +99,12 @@ app.get('/keiri/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'keiri', 'index.html'));
 });
 
+// 組織体制図ハブ（静的ファイル）
+app.get('/org-chart', (req, res) => res.redirect('/org-chart/'));
+app.get('/org-chart/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'org-chart', 'index.html'));
+});
+
 // ヘルスチェック
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

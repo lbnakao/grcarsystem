@@ -554,4 +554,282 @@ function renderPanel3() {
   const cleanHubBox = { x:1240, y:820, w:260, h:130 };
 
   const grp1 = document.createElement('div');
-  grp1.class
+  grp1.className = 'group-label';
+  grp1.style.left = '100px'; grp1.style.top = '1020px';
+  grp1.textContent = '清掃部隊対象（有人2：弥山／デルーネ）';
+  canvas.appendChild(grp1);
+
+  const cleanManned = [
+    { id:'misen', x:100, y:1060 }, { id:'derune', x:300, y:1060 },
+  ];
+  cleanManned.forEach(p => {
+    const f = p3Manned.find(m => m.id === p.id);
+    const chip = document.createElement('div');
+    const cls = f.status === 'transfer' ? 'transfer' : (f.status === 'pre-open' ? 'pre-open' : '');
+    chip.className = 'facility-chip ' + cls;
+    chip.style.left = p.x + 'px'; chip.style.top = p.y + 'px'; chip.style.width = '180px';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div><div class="fc-sub">${f.sub}</div>`;
+    canvas.appendChild(chip);
+    p.node = { x:p.x, y:p.y, w:180, h:58 };
+  });
+
+  const grp2 = document.createElement('div');
+  grp2.className = 'group-label';
+  grp2.style.left = '540px'; grp2.style.top = '1020px';
+  grp2.textContent = '清掃部隊対象（無人10／マンスリー含む）';
+  canvas.appendChild(grp2);
+
+  const cleanUnmanned = [
+    { id:'miyajima', x:540, y:1060 }, { id:'honkawa', x:720, y:1060 },
+    { id:'otake', x:890, y:1060 }, { id:'tenjin', x:1060, y:1060 },
+    { id:'kuba', x:1230, y:1060 }, { id:'fhgarden', x:1400, y:1060 },
+    { id:'takehara', x:1580, y:1060 }, { id:'takaya', x:1750, y:1060 },
+    { id:'saijo1', x:1920, y:1060 }, { id:'saijo2', x:2100, y:1060 },
+  ];
+  cleanUnmanned.forEach(p => {
+    const f = p3Unmanned.find(m => m.id === p.id);
+    const chip = document.createElement('div');
+    chip.className = 'facility-chip unmanned';
+    chip.style.left = p.x + 'px'; chip.style.top = p.y + 'px'; chip.style.width = '160px';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div>${f.sub ? `<div class="fc-sub">${f.sub}</div>` : ''}`;
+    canvas.appendChild(chip);
+    p.node = { x:p.x, y:p.y, w:160, h:f.sub ? 50 : 32 };
+  });
+
+  const grp3 = document.createElement('div');
+  grp3.className = 'group-label';
+  grp3.style.left = '100px'; grp3.style.top = '1200px';
+  grp3.textContent = '対象外（自施設で完結）';
+  canvas.appendChild(grp3);
+
+  const selfClean = [
+    { title:'GR温井', sub:'安芸太田', x:100, y:1240 },
+    { title:'いこいの村', sub:'安芸太田', x:280, y:1240 },
+    { title:'GR柳井', sub:'山口', x:460, y:1240 },
+    { title:'周防大島', sub:'山口', x:640, y:1240 },
+  ];
+  selfClean.forEach(f => {
+    const chip = document.createElement('div');
+    chip.className = 'facility-chip';
+    chip.style.left = f.x + 'px'; chip.style.top = f.y + 'px'; chip.style.width = '160px';
+    chip.style.opacity = '0.6';
+    chip.innerHTML = `<div class="fc-title">${f.title}</div><div class="fc-sub">${f.sub}</div>`;
+    canvas.appendChild(chip);
+  });
+
+  function edgePath(from, to, color) {
+    const x1=from.x+from.w/2, y1=from.y+from.h, x2=to.x+to.w/2, y2=to.y, cy=(y1+y2)/2;
+    return `<path d="M ${x1} ${y1} C ${x1} ${cy} ${x2} ${cy} ${x2} ${y2}" stroke="${color}" stroke-width="1.5" fill="none" opacity="0.6" />`;
+  }
+
+  let svgContent = '';
+  chefPos.forEach(p => svgContent += edgePath(chefHubBox, p.node, '#E65100'));
+  cleanManned.forEach(p => svgContent += edgePath(cleanHubBox, p.node, '#C62828'));
+  cleanUnmanned.forEach(p => svgContent += edgePath(cleanHubBox, p.node, '#C62828'));
+  svg.innerHTML = svgContent;
+
+  const memo = document.createElement('div');
+  memo.className = 'memo';
+  memo.style.left = '2230px'; memo.style.top = '820px'; memo.style.width = '490px';
+  memo.innerHTML = `
+    <div class="h">📝 横断機能の現状と課題（会話から反映）</div>
+    <b>料理部門：</b><br>
+    ・阿部さん（海外賞入賞）退職 → いこいの村2名体制<br>
+    ・チンさん（憩いの村）の配置モチベ確認が先<br>
+    ・<b>弥山の料理/在庫/衛生管理担当を急募</b>（3時間/日、60〜70代可）<br>
+    ・周防大島＝原田さん（業務委託）で確定<br>
+    ・廃棄コストの把握と采配が目下の課題<br>
+    <br>
+    <b>清掃部隊：</b><br>
+    ・対象は廿日市〜三原・竹原＋FH（12施設）<br>
+    ・安芸太田・GR柳井・周防大島は自施設で完結<br>
+    ・FHガーデン：一人リーダー不在で止まる → 髙宮に再構築指示中<br>
+    ・青山がリーダー格として構築中だが、スピード感不足<br>
+    ・最終形：運転手さえいれば回るルール化`;
+  canvas.appendChild(memo);
+}
+
+// ===== Panel 4 Data =====
+const p4Categories = [
+  {
+    title:'🚨 緊急（現場運営に直接影響）', type:'high',
+    x:60, y:60, w:700,
+    items:[
+      { title:'弥山／デルーネの料理・在庫・衛生管理担当を募集', owner:'下坂・仲尾', detail:'3時間/日、衛生管理・発注・在庫把握。調理力は必須ではない。60〜70代可、飲食経験者歓迎。市街地のクマさんのお店経由で条件整理中。' },
+      { title:'FHガーデン清掃体制の再構築', owner:'髙宮（下坂監督）', detail:'「一人のリーダーがいないと誰も清掃できない」状態を解消。清掃部隊が回れる形へ。現在進行中だがスピード感不足。' },
+      { title:'阿部さん退職に伴う料理人補充判断', owner:'下坂', detail:'いこいの村3→2名に。チンさんの配置拡大かどうか、本人モチベの確認が先。' },
+    ]
+  },
+  {
+    title:'📋 重要（体制構築の根幹）', type:'medium',
+    x:790, y:60, w:700,
+    items:[
+      { title:'マリエルさん育成ロードマップ策定', owner:'下坂・仲尾', detail:'特定技能「宿泊」取得（現在は外食）→ 弥山リーダー継続しつつ、将来の全体統括層候補として青山さんのサポート下で段階的育成。' },
+      { title:'海外部門（特定技能者管理）立ち上げ', owner:'下坂', detail:'フエンさん（ビエン君の奥さん）を登録支援機関担当に。現在レジデンス外部委託（月1人分給料）を内製化。ビザ更新等も内製。' },
+      { title:'憩いの村にリーダー制導入', owner:'下坂', detail:'フロント／清掃／料飲にリーダー指名。その下に外国人スタッフがA/Bローテで入る形。責任ある立場を作り、成長機会に。' },
+      { title:'支配人の役割を会社方針として明文化', owner:'下坂', detail:'通常業務への常駐不要。責任の所在（クレーム対応・改善采配・外国人スタッフ育成）が本来の役割。評価・懲戒の段階化とセット。' },
+    ]
+  },
+  {
+    title:'🏗️ 中期（体制強化・育成）', type:'low',
+    x:1520, y:60, w:700,
+    items:[
+      { title:'経営管理部門の増員検討', owner:'下坂', detail:'井上さんの判断負荷軽減。施設管理担当（消防対応等）が本来必要。当面はツール化で楽にする方向。' },
+      { title:'総料理長の本採用と役割明確化', owner:'下坂', detail:'現場在庫・廃棄データを集約して采配する中核機能。レシピ展開も担う。廃棄コストの可視化が最初の一歩。' },
+      { title:'清掃部隊リーダー体制の確立', owner:'下坂・青山', detail:'運転手さえいれば回るルール化を目指す。高宮さん経由の拾い方の課題（「みんな行きたくない」ではなく方針として動く）を改善。' },
+      { title:'白井さんのOTA完全移管', owner:'仲尾→白井', detail:'5月〜正社員化、夏目標で完全移管。カレンダー作成は当面仲尾が支援。仲尾は「部活OB」として手伝い継続。' },
+    ]
+  },
+  {
+    title:'📢 集客・広報強化（仲尾主導）', type:'info',
+    x:60, y:880, w:700,
+    items:[
+      { title:'PR TIMES活用拡大', owner:'仲尾', detail:'前回掲載成功を受け、周防大島オープン企画、温井ダム放流連動プラン等で連続投稿。中国デジタル新聞・産経新聞等への波及効果を狙う。' },
+      { title:'集客・広報を一本化し SNS / Web / チャットボット連動', owner:'仲尾・仁谷', detail:'仁谷さんとの連携不足を改善（過去に別々に動いて齟齬発生）。プラン連発よりホテル品質と口コミベースの集客を優先。' },
+      { title:'広報集客の重要性を社内合意形成', owner:'仲尾（社長と合意済）', detail:'「プランがない」論に対し、宮島は十分なプランはあると整理。ベース（ホテル品質・集客）の骨組みを強化、小手先のプランは誤差と位置づけ。' },
+    ]
+  },
+  {
+    title:'🔄 情報待ち・次回反映', type:'future',
+    x:790, y:880, w:700,
+    items:[
+      { title:'各施設の支配人ポスト確定', owner:'下坂', detail:'髙宮以外（GR温井・いこいの村・周防大島）の本人任命を進める。' },
+      { title:'憩いの村のリーダー指名を反映', owner:'仲尾（反映）', detail:'フロント／清掃／料飲リーダーが決まり次第、②に人名を追加。' },
+      { title:'弥山の料理担当が決まったら反映', owner:'仲尾（反映）', detail:'募集成功後、①②③に追加。' },
+      { title:'特定技能者管理の体制詳細', owner:'下坂', detail:'マリエル／ジャム／フエンの役割分担を明文化次第、海外部門の中身を詳細化。' },
+      { title:'清掃部隊メンバー構成', owner:'下坂', detail:'青山さん以下のメンバー・巡回スケジュールが確定次第、③に追記。' },
+    ]
+  },
+  {
+    title:'💡 ツール化で軽減する業務（参考）', type:'info',
+    x:1520, y:880, w:700,
+    items:[
+      { title:'経理・事務の判断ルール化', owner:'下坂・仲尾', detail:'井上さんの「どこまで独断可／要相談」の境界を明示。社労士からの連絡の一次判断をマニュアル化。' },
+      { title:'在庫・廃棄管理ツール導入', owner:'総料理長（将来）', detail:'現場の報告を集約し、廃棄コストの可視化。発注の過多を抑制。' },
+      { title:'チャットボットによる集客自動化', owner:'仲尾・仁谷', detail:'既に取り組み中。無人施設の予約フロー最適化へ。' },
+    ]
+  },
+];
+
+function renderPanel4() {
+  const canvas = document.querySelector('#panel-actions .panel-canvas');
+  p4Categories.forEach(cat => {
+    const col = document.createElement('div');
+    col.className = 'action-col';
+    col.style.left = cat.x + 'px'; col.style.top = cat.y + 'px'; col.style.width = cat.w + 'px';
+    const card = document.createElement('div');
+    card.className = 'action-card ' + cat.type;
+    let itemsHtml = '';
+    cat.items.forEach(it => {
+      itemsHtml += `
+        <div class="action-item">
+          <div class="action-item-title">● ${it.title}</div>
+          <div class="action-item-owner">担当: ${it.owner}</div>
+          <div class="action-item-detail">${it.detail}</div>
+        </div>`;
+    });
+    card.innerHTML = `<div class="action-card-header">${cat.title}（${cat.items.length}件）</div>${itemsHtml}`;
+    col.appendChild(card);
+    canvas.appendChild(col);
+  });
+
+  const summary = document.createElement('div');
+  summary.className = 'memo';
+  summary.style.left = '60px'; summary.style.top = '1770px'; summary.style.width = '2160px';
+  summary.innerHTML = `
+    <div class="h">🗂 今日の話の要点（下坂・仲尾MTGより）</div>
+    <b>1. マリエルさんを将来の幹部候補に</b>：特定技能の「宿泊」取得を経て、弥山リーダー＋将来の全体統括層として育成。青山さんが専門的サポート。<br>
+    <b>2. 一棟貸し・マンスリーは「トップ不要」</b>：無人運用でルール化で回す。FHガーデンだけは髙宮直轄として安芸太田エリアから派生。千代田は存在しないので削除。<br>
+    <b>3. 広報・集客は仲尾主導で一本化強化</b>：PR TIMES成功を受けてフォロワー順調増。周防大島・温井ダム放流等で連続投稿。ホテル品質と口コミベースを優先。<br>
+    <b>4. 経営管理は井上さん単独では厳しい</b>：判断領域の明確化＋将来的増員。まずツール化で軽減。<br>
+    <b>5. 支配人は「常駐」から「責任者」へ役割転換</b>：通常業務はリーダー制で回し、支配人は采配と育成に集中。外国人スタッフの成長責務を明示。<br>
+    <b>6. 料理部門の課題</b>：阿部さん退職、弥山の在庫・衛生管理担当急募、総料理長への集約データフロー整備。廃棄コスト可視化がスタート地点。<br>
+    <b>7. 清掃部隊の再構築</b>：FHガーデン含む巡回体制へ。髙宮さんのスピード感が課題、青山さんリーダー格で構築中。運転手さえいれば回るルール化を目指す。
+  `;
+  canvas.appendChild(summary);
+}
+
+// ===== Render =====
+renderPanel1();
+renderPanel2();
+renderPanel3();
+renderPanel4();
+
+// ===== Pan / Zoom =====
+function setupPanel(panelId) {
+  const panel = document.getElementById(panelId);
+  const viewport = panel.querySelector('.panel-viewport');
+  const canvas = panel.querySelector('.panel-canvas');
+  const cw = parseInt(panel.dataset.canvasW);
+  const ch = parseInt(panel.dataset.canvasH);
+  const zoomLevelEl = panel.querySelector('.zoom-level');
+  let scale = 0.5, tx = 40, ty = 60;
+  let dragging = false, startX, startY, startTx, startTy;
+  function update() {
+    canvas.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+  viewport.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    startTx = tx; startTy = ty;
+    viewport.classList.add('grabbing');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    tx = startTx + (e.clientX - startX);
+    ty = startTy + (e.clientY - startY);
+    update();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('grabbing'); });
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
+    const newScale = Math.min(Math.max(scale * factor, 0.15), 2);
+    tx = mx - (mx - tx) * (newScale / scale);
+    ty = my - (my - ty) * (newScale / scale);
+    scale = newScale;
+    update();
+  }, { passive: false });
+  viewport.addEventListener('gesturestart', e => e.preventDefault());
+  panel.querySelector('.zoom-in').onclick = () => { scale = Math.min(scale*1.2, 2); update(); };
+  panel.querySelector('.zoom-out').onclick = () => { scale = Math.max(scale/1.2, 0.15); update(); };
+  function reset() {
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    scale = Math.min(vw/cw, vh/ch) * 0.92;
+    tx = (vw - cw*scale)/2;
+    ty = (vh - ch*scale)/2;
+    update();
+  }
+  panel.querySelector('.reset').onclick = reset;
+  return { reset };
+}
+
+const panelSetups = {
+  overview: setupPanel('panel-overview'),
+  facility: setupPanel('panel-facility'),
+  crossfunc: setupPanel('panel-crossfunc'),
+  actions: setupPanel('panel-actions'),
+};
+let activeTab = 'overview';
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    const tabName = btn.dataset.tab;
+    if (tabName === activeTab) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-' + tabName).classList.add('active');
+    activeTab = tabName;
+    setTimeout(() => panelSetups[tabName].reset(), 50);
+  };
+});
+setTimeout(() => panelSetups.overview.reset(), 100);
+</script>
+</body>
+</html>
