@@ -32,8 +32,14 @@ app.use(session({
   }
 }));
 
-// 静的ファイル
-app.use(express.static(path.join(__dirname, 'public')));
+// 静的ファイル（HTMLはキャッシュさせない）
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // 認証ミドルウェア
 function requireAuth(req, res, next) {
