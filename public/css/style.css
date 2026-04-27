@@ -64,6 +64,12 @@ body {
   display: block;
 }
 
+img.login-icon {
+  width: 120px;
+  height: auto;
+  margin: 0 auto 12px;
+}
+
 .login-header h1 {
   font-size: 22px;
   font-weight: 700;
