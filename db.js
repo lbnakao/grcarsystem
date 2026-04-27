@@ -277,6 +277,30 @@ async function migrateSchema() {
 
   // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
   await createKeiriTables();
+
+  // 組織体制図ハブの編集差分テーブル
+  await createOrgChartTables();
+}
+
+// ===== 組織体制図ハブ用テーブル =====
+async function createOrgChartTables() {
+  const autoIncPK = (mode === 'pg') ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const nowDefault = (mode === 'pg') ? 'TIMESTAMP DEFAULT NOW()' : "TEXT DEFAULT (datetime('now','localtime'))";
+
+  // ノード差分（既存ハードコードノードへの上書きパッチ）と付箋（新規フリーテキスト）を1テーブルで管理
+  // kind='node'  : node_id 必須、data は {x?, y?, title?, sub?, person?} の部分上書き
+  // kind='sticky': node_id NULL、data は {x, y, w?, text, color?}
+  await run(`
+    CREATE TABLE IF NOT EXISTS org_chart_edits (
+      id ${autoIncPK},
+      panel TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      node_id TEXT,
+      data TEXT NOT NULL,
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
 }
 
 // ===== 経理モジュール用テーブル =====

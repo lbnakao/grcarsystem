@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const carsRoutes = require('./routes/cars');
 const reservationsRoutes = require('./routes/reservations');
 const keiriRoutes = require('./routes/keiri');
+const orgChartRoutes = require('./routes/org-chart');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,6 +75,9 @@ app.use('/api/admin/cars', requireAuth, requireAdmin, carsRoutes);
 
 // 経理モジュールAPI（井上さん201 or 管理者のみ）
 app.use('/api/keiri', requireAuth, requireKeiriAccess, keiriRoutes);
+
+// 組織体制図ハブの編集差分API（認証なし: 既存の/keiri/と同じ静的扱い方針）
+app.use('/api/org-chart', orgChartRoutes);
 
 // ページルーティング
 app.get('/login', (req, res) => {
