@@ -425,7 +425,7 @@ function renderPanel2() {
     card.dataset.panel = 'facility'; card.dataset.nodeId = f.id;
     card.style.left = f.x + 'px'; card.style.top = f.y + 'px'; card.style.width = '420px';
     let postsHtml = '';
-    f.posts.forEach(p => {
+    f.posts.forEach((p, idx) => {
       let badgeHtml = '';
       if (p.badge === 'cross') badgeHtml = '<span class="badge cross">横断</span>';
       else if (p.badge === 'chef') badgeHtml = '<span class="badge chef">総料理長</span>';
@@ -433,27 +433,29 @@ function renderPanel2() {
       else if (p.badge === 'leader') badgeHtml = '<span class="badge leader">リーダー制</span>';
       else if (p.badge === 'recruiting') badgeHtml = '<span class="badge recruiting">要募集</span>';
       const personHtml = p.person ? `<span class="role-person">👤 ${p.person}</span>` : '';
-      postsHtml += `<div class="role-row"><div class="role-icon">●</div><div class="role-name">${p.name}${badgeHtml}${personHtml}${p.note ? `<div style="font-size:10px;color:#888;margin-top:2px;">${p.note}</div>`:''}</div></div>`;
+      const noteHtml = p.note ? `<div data-rich-key="post-${idx}-note" style="font-size:10px;color:#888;margin-top:2px;">${p.note}</div>` : '';
+      postsHtml += `<div class="role-row"><div class="role-icon">●</div><div class="role-name"><span data-rich-key="post-${idx}-name">${p.name}</span>${badgeHtml}${personHtml}${noteHtml}</div></div>`;
     });
     card.innerHTML = `
-      <div class="card-header"><div class="card-title">${f.title}</div><div class="card-meta">${f.meta}</div></div>
+      <div class="card-header"><div class="card-title" data-rich-key="card-title">${f.title}</div><div class="card-meta" data-rich-key="card-meta">${f.meta}</div></div>
       <div class="card-body">
         <div class="role-row">
           <div class="role-icon" style="background:#E3F2FD;color:#1565C0;">★</div>
-          <div class="role-name" style="font-weight:700;">${f.manager}${f.managerNote ? `<div style="font-size:10px;color:#666;margin-top:2px;font-weight:normal;">${f.managerNote}</div>`:''}</div>
+          <div class="role-name" style="font-weight:700;"><span data-rich-key="manager-name">${f.manager}</span>${f.managerNote ? `<div data-rich-key="manager-note" style="font-size:10px;color:#666;margin-top:2px;font-weight:normal;">${f.managerNote}</div>`:''}</div>
           <span class="badge manager">支配人</span>
         </div>
-        <div class="card-title-heading">ポスト構成</div>
+        <div class="card-title-heading" data-rich-key="card-title-heading">ポスト構成</div>
         ${postsHtml}
-        ${f.note ? `<div class="card-note">💡 ${f.note}</div>` : ''}
+        ${f.note ? `<div class="card-note" data-rich-key="card-note">💡 ${f.note}</div>` : ''}
       </div>`;
     canvas.appendChild(card);
   });
 
   const overall = document.createElement('div');
   overall.className = 'memo';
+  overall.dataset.panel = 'facility'; overall.dataset.nodeId = 'memo-overall';
   overall.style.left = '1500px'; overall.style.top = '90px'; overall.style.width = '380px';
-  overall.innerHTML = `
+  overall.innerHTML = `<div data-rich-key="content">
     <div class="h">📝 支配人とリーダー制の方針（新）</div>
     <b>支配人の役割再定義：</b><br>
     ・通常業務への常駐は<b>不要</b>（采配がメイン）<br>
@@ -464,18 +466,21 @@ function renderPanel2() {
     <b>リーダー制（導入予定）：</b><br>
     ・フロント／清掃／料飲 など<b>各ポストにリーダー</b><br>
     ・その下に他スタッフが A/B ローテで入る<br>
-    ・責任持ってやる＝本人の成長機会に`;
+    ・責任持ってやる＝本人の成長機会に
+  </div>`;
   canvas.appendChild(overall);
 
   const summary = document.createElement('div');
   summary.className = 'sidebox';
+  summary.dataset.panel = 'facility'; summary.dataset.nodeId = 'memo-summary';
   summary.style.left = '1500px'; summary.style.top = '380px'; summary.style.width = '380px';
-  summary.innerHTML = `
+  summary.innerHTML = `<div data-rich-key="content">
     <div class="h">🔎 施設別の現状ポイント</div>
     <b>GR温井・いこいの村</b>：安芸太田の最重点。阿部さん退職で料理2名体制、要判断。<br><br>
     <b>弥山・デルーネ</b>：譲渡予定。<b>料理/在庫/衛生管理の担当急募</b>（3時間/日でOK）。<br><br>
     <b>GR柳井・周防大島</b>：中村さんが山口エリア全体担当。<br><br>
-    <b>周防大島</b>：料理＝<b>原田さん</b>（業務委託）確定。PR TIMES掲載を計画。`;
+    <b>周防大島</b>：料理＝<b>原田さん</b>（業務委託）確定。PR TIMES掲載を計画。
+  </div>`;
   canvas.appendChild(summary);
 }
 
@@ -906,6 +911,12 @@ setTimeout(() => panelSetups.overview.reset(), 100);
         p.textContent = patch.person;
       }
     }
+    if (patch.richTexts && typeof patch.richTexts === 'object') {
+      for (const [key, html] of Object.entries(patch.richTexts)) {
+        const child = el.querySelector('[data-rich-key="' + CSS.escape(key) + '"]');
+        if (child) child.innerHTML = html;
+      }
+    }
   }
   function saveNodePatch(panel, nodeId) {
     debounce('node:' + panel + ':' + nodeId, () => {
@@ -913,6 +924,44 @@ setTimeout(() => panelSetups.overview.reset(), 100);
         .then(() => setStatus('保存しました'))
         .catch(() => setStatus('保存失敗', true));
     }, 350);
+  }
+
+  // ----- リッチテキスト編集 -----
+  function enterRichEdit(child, panel, nodeId) {
+    if (child.classList.contains('editing-text')) return;
+    child.contentEditable = 'true';
+    child.classList.add('editing-text');
+    child.focus();
+    const r = document.createRange(); r.selectNodeContents(child);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    function finish() {
+      child.contentEditable = 'false';
+      child.classList.remove('editing-text');
+      child.removeEventListener('blur', onBlur);
+      child.removeEventListener('keydown', onKeydown);
+      child.removeEventListener('input', onInput);
+      const p = getPatch(panel, nodeId);
+      if (!p.richTexts) p.richTexts = {};
+      p.richTexts[child.dataset.richKey] = child.innerHTML;
+      saveNodePatch(panel, nodeId);
+    }
+    function onBlur() {
+      // 書式ツールバー操作中はフォーカスが戻る場合があるので少し遅延
+      setTimeout(() => {
+        if (document.activeElement !== child) finish();
+      }, 50);
+    }
+    function onKeydown(ev) { if (ev.key === 'Escape') ev.target.blur(); }
+    function onInput() {
+      // 入力ごとに保存（debounceで負荷分散）
+      const p = getPatch(panel, nodeId);
+      if (!p.richTexts) p.richTexts = {};
+      p.richTexts[child.dataset.richKey] = child.innerHTML;
+      saveNodePatch(panel, nodeId);
+    }
+    child.addEventListener('blur', onBlur);
+    child.addEventListener('keydown', onKeydown);
+    child.addEventListener('input', onInput);
   }
 
   // ----- Generic drag wiring -----
@@ -965,6 +1014,8 @@ setTimeout(() => panelSetups.overview.reset(), 100);
 
     el.addEventListener('dblclick', e => {
       if (!document.body.classList.contains('edit-mode')) return;
+      // リッチテキスト編集対応ノードでは旧 textContent ベースの編集を無効化
+      if (el.querySelector('[data-rich-key]')) return;
       e.stopPropagation();
       const titleEl  = el.querySelector('.title, .hub-title, .fc-title, .card-title');
       const subEl    = el.querySelector('.sub, .hub-sub, .fc-sub, .card-meta');
@@ -1008,6 +1059,15 @@ setTimeout(() => panelSetups.overview.reset(), 100);
         saveNodePatch(panel, nodeId);
       }
       function onKeydown(ev) { if (ev.key === 'Escape') ev.target.blur(); }
+    });
+
+    // リッチテキスト編集（[data-rich-key] 子要素）
+    el.querySelectorAll('[data-rich-key]').forEach(child => {
+      child.addEventListener('dblclick', ev => {
+        if (!document.body.classList.contains('edit-mode')) return;
+        ev.stopPropagation();
+        enterRichEdit(child, panel, nodeId);
+      });
     });
 
     // 色ピッカー（凡例どおり）— 全社俯瞰図の .node のみ対応
@@ -1503,6 +1563,22 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     #edit-toolbar button:hover { background: #e9ecef; }
     #edit-toolbar button.active { background: #1E2761; color: white; border-color: #1E2761; }
     #edit-status { font-size: 11px; min-width: 110px; text-align: right; }
+
+    /* ─── リッチテキスト編集 ─── */
+    [data-rich-key] { outline: none; }
+    body.edit-mode [data-rich-key] { cursor: text; border-radius: 3px; transition: background 0.1s; }
+    body.edit-mode [data-rich-key]:hover { background: rgba(255, 235, 59, 0.18); }
+    [data-rich-key].editing-text { background: rgba(255, 236, 179, 0.55) !important; box-shadow: 0 0 0 2px #FFC107 inset; }
+
+    /* ─── 書式ツールバー ─── */
+    #format-toolbar { position: fixed; top: 70px; right: 14px; background: white; border: 1px solid #ccc; border-radius: 8px; padding: 6px 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); display: none; gap: 4px; align-items: center; z-index: 9998; flex-wrap: wrap; max-width: 360px; font-family: inherit; }
+    body.edit-mode #format-toolbar { display: flex; }
+    #format-toolbar button { border: 1px solid #ddd; background: #f8f9fa; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; font-family: inherit; min-width: 26px; line-height: 1.2; }
+    #format-toolbar button:hover { background: #e9ecef; border-color: #1E2761; }
+    #format-toolbar .ft-color { width: 22px; height: 22px; padding: 0; border-radius: 4px; border-width: 2px; }
+    #format-toolbar .ft-divider { width: 1px; height: 18px; background: #ddd; margin: 0 2px; }
+    #format-toolbar .ft-label { font-size: 10px; color: #888; margin: 0 2px; }
+    #format-toolbar .ft-hint { font-size: 10px; color: #888; flex-basis: 100%; margin-top: 2px; text-align: center; }
   `;
   document.head.appendChild(style);
 
@@ -1525,6 +1601,84 @@ setTimeout(() => panelSetups.overview.reset(), 100);
     refreshLineStyleButton();
   });
   setupCanvasInteractions();
+
+  // ----- 書式ツールバー（編集モード時に表示） -----
+  const fmtToolbar = document.createElement('div');
+  fmtToolbar.id = 'format-toolbar';
+  fmtToolbar.innerHTML = ''
+    + '<button data-fmt="bold" title="太字"><b>B</b></button>'
+    + '<span class="ft-divider"></span>'
+    + '<span class="ft-label">サイズ</span>'
+    + '<button data-fmt="size" data-size="11px" title="小">小</button>'
+    + '<button data-fmt="size" data-size="14px" title="標準">中</button>'
+    + '<button data-fmt="size" data-size="18px" title="大">大</button>'
+    + '<span class="ft-divider"></span>'
+    + '<span class="ft-label">色</span>'
+    + '<button data-fmt="color" data-color="#000000" class="ft-color" style="background:#000;border-color:#000" title="黒"></button>'
+    + '<button data-fmt="color" data-color="#1976D2" class="ft-color" style="background:#1976D2;border-color:#1976D2" title="青"></button>'
+    + '<button data-fmt="color" data-color="#2C5F2D" class="ft-color" style="background:#2C5F2D;border-color:#2C5F2D" title="緑"></button>'
+    + '<button data-fmt="color" data-color="#E65100" class="ft-color" style="background:#E65100;border-color:#E65100" title="橙"></button>'
+    + '<button data-fmt="color" data-color="#C62828" class="ft-color" style="background:#C62828;border-color:#C62828" title="赤"></button>'
+    + '<span class="ft-divider"></span>'
+    + '<button data-fmt="clear" title="書式クリア">×書式</button>'
+    + '<div class="ft-hint">テキストをドラッグで選択 → ボタンで書式適用（カードはダブルクリックで編集開始）</div>';
+  document.body.appendChild(fmtToolbar);
+  // フォーカスを奪わないようにする
+  fmtToolbar.addEventListener('mousedown', e => e.preventDefault());
+
+  function wrapSelectionStyle(styleProp, value) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+    // 編集対象（contenteditable）の範囲内であることを確認
+    const container = range.commonAncestorContainer;
+    const editable = container.nodeType === 1
+      ? container.closest('[contenteditable="true"]')
+      : (container.parentElement && container.parentElement.closest('[contenteditable="true"]'));
+    if (!editable) return;
+    const span = document.createElement('span');
+    span.style[styleProp] = value;
+    try {
+      span.appendChild(range.extractContents());
+      range.insertNode(span);
+      // 選択範囲を新spanの内容に再設定
+      const r2 = document.createRange();
+      r2.selectNodeContents(span);
+      sel.removeAllRanges();
+      sel.addRange(r2);
+      // input イベントを発火させて保存をトリガー
+      editable.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) { /* ignore */ }
+  }
+
+  fmtToolbar.querySelectorAll('button[data-fmt]').forEach(btn => {
+    btn.addEventListener('click', ev => {
+      ev.preventDefault();
+      const fmt = btn.dataset.fmt;
+      const sel = window.getSelection();
+      const editable = sel && sel.anchorNode
+        ? (sel.anchorNode.nodeType === 1
+            ? sel.anchorNode.closest('[contenteditable="true"]')
+            : (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest('[contenteditable="true"]')))
+        : null;
+      if (!editable) {
+        setStatus('編集中のテキストを選択してください', true);
+        return;
+      }
+      if (fmt === 'bold') {
+        document.execCommand('bold');
+      } else if (fmt === 'size') {
+        wrapSelectionStyle('fontSize', btn.dataset.size);
+      } else if (fmt === 'color') {
+        document.execCommand('foreColor', false, btn.dataset.color);
+      } else if (fmt === 'clear') {
+        document.execCommand('removeFormat');
+      }
+      // 入力イベントを発火（保存トリガー）
+      editable.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
 
   // ----- 既存ノードを wire -----
   document.querySelectorAll('[data-node-id]').forEach(wireNode);
