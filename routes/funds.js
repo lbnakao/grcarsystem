@@ -317,6 +317,48 @@ router.get('/summary', async (req, res) => {
   res.json({ income, payout, cardRecovery, dailyNet, usable, ym });
 });
 
+// 日次キャッシュフロー（引継ぎ書3.4・6.3）
+//   列: 日付 / 入金 / 支出 / 日次差引 / 累計差引 / カード枠回復 / 使用可能額 / 備考(曜日)
+//   月またぎ連動: 同会社の対象月初より前の入金・支出・カード回復で累計を初期化
+router.get('/daily-cashflow', async (req, res) => {
+  const { companyId, year, month } = req.query;
+  if (!companyId || !year || !month) return res.status(400).json({ error: 'companyId, year, month は必須です' });
+  const cid = toInt(companyId);
+  const y = toInt(year);
+  const m = toInt(month);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+
+  // 前月末までの累計（純現金残高 = 入金 - 支出 - カード回復、累計カード回復 = カード回復合計）
+  const prevInc = await query("SELECT COALESCE(SUM(amount),0) AS t FROM funds_income_entries WHERE company_id = ? AND entry_date < ?", [cid, monthStart]);
+  const prevPay = await query("SELECT COALESCE(SUM(plan_amount),0) AS t FROM funds_payable_entries WHERE company_id = ? AND plan_date < ?", [cid, monthStart]);
+  const prevRec = await query("SELECT COALESCE(SUM(amount),0) AS t FROM funds_card_recoveries WHERE company_id = ? AND pay_date < ?", [cid, monthStart]);
+  let cumNet = toInt(prevInc[0]?.t) - toInt(prevPay[0]?.t) - toInt(prevRec[0]?.t);
+  let cumCard = toInt(prevRec[0]?.t);
+  const prevCumNet = cumNet;
+  const prevCumCard = cumCard;
+
+  // 当月日別集計を1クエリずつ（件数31なので許容）
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const inc = await query("SELECT COALESCE(SUM(amount),0) AS t FROM funds_income_entries WHERE company_id = ? AND entry_date = ?", [cid, date]);
+    const pay = await query("SELECT COALESCE(SUM(plan_amount),0) AS t FROM funds_payable_entries WHERE company_id = ? AND plan_date = ?", [cid, date]);
+    const rec = await query("SELECT COALESCE(SUM(amount),0) AS t FROM funds_card_recoveries WHERE company_id = ? AND pay_date = ?", [cid, date]);
+    const income = toInt(inc[0]?.t);
+    const payout = toInt(pay[0]?.t);
+    const cardRecovery = toInt(rec[0]?.t);
+    const dailyNet = income - payout - cardRecovery;
+    cumNet += dailyNet;
+    cumCard += cardRecovery;
+    const usable = cumNet + cumCard;
+    const dow = new Date(`${date}T00:00:00`).getDay(); // 0=日, 6=土
+    days.push({ date, dow, income, payout, cardRecovery, dailyNet, cumNet, cumCard, usable });
+  }
+
+  res.json({ days, prevCumNet, prevCumCard, daysInMonth });
+});
+
 // 全社合算サマリー（会社×月のマトリクス）
 router.get('/summary-matrix', async (req, res) => {
   const { year } = req.query;

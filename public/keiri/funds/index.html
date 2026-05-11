@@ -70,6 +70,16 @@
   tr:hover td { background: #f8fbff; }
   tr.cleared td { background: #f5f5f5; color: #999; text-decoration: line-through; }
   tr.cancelled td { background: #ffe6e6; color: #999; text-decoration: line-through; }
+  /* 日次CF専用 */
+  tr.sat td { background: #eaf3ff !important; }
+  tr.sun td { background: #ffeaea !important; }
+  tr.today td { box-shadow: inset 3px 0 0 #f39c12; font-weight: 600; }
+  tr.carryover td { background: #f5f5f5; font-style: italic; color: #636e72; }
+  tr.month-total td { background: #1F4E79; color: #fff; font-weight: 700; }
+  tr.month-total td.num { color: #fff; }
+  td.dow-sat { color: #0984e3; }
+  td.dow-sun { color: #d63031; }
+  td.zero { color: #b2bec3; }
   tr.priority-high td { background: #ffe9e9; }
   tr.priority-mid td  { background: #fff4e0; }
   tr.priority-low td  { background: #e9f7ec; }
@@ -113,6 +123,7 @@
   <!-- サブタブ -->
   <div class="sub-tabs">
     <button class="sub-tab active" data-pane="dashboard">📊 ダッシュボード</button>
+    <button class="sub-tab" data-pane="daily">📅 日次CF</button>
     <button class="sub-tab" data-pane="income">💰 入金入力</button>
     <button class="sub-tab" data-pane="payable">📋 未払一覧</button>
     <button class="sub-tab" data-pane="card">💳 カード枠回復</button>
@@ -141,6 +152,38 @@
       <div class="panel-header"><h2>📈 当月の概況</h2></div>
       <div style="padding: 16px;">
         <div id="summaryDetail" style="font-size:13px; line-height:1.8;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 日次CF -->
+  <div id="pane-daily" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>📅 日次キャッシュフロー：</strong>
+      入金・支出・カード枠回復を日別に集計し、累計差引・使用可能額を計算します。
+      Excel v8 では <strong>会社×月で24シート</strong>に分かれていたこの表が、月選択1つに集約されています。
+      月初行は前月末からの繰越（月またぎ連動）です。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="dailyTitle">📅 日次キャッシュフロー</h2>
+        <div class="panel-spacer"></div>
+        <span class="count" id="dailyHint">土＝薄青／日＝薄赤／今日＝オレンジ枠</span>
+      </div>
+      <div class="table-wrap" style="max-height:75vh">
+        <table id="dailyTable">
+          <thead><tr>
+            <th>日付</th><th>曜</th>
+            <th style="text-align:right">入金</th>
+            <th style="text-align:right">支出</th>
+            <th style="text-align:right">カード回復</th>
+            <th style="text-align:right">日次差引</th>
+            <th style="text-align:right">累計差引<br><span style="font-size:9px;font-weight:400">(純現金)</span></th>
+            <th style="text-align:right">累計カード枠</th>
+            <th style="text-align:right">使用可能額<br><span style="font-size:9px;font-weight:400">(差引+カード)</span></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -484,6 +527,7 @@ async function refresh() {
   ind.textContent = '読込中…';
   try {
     if (state.pane === 'dashboard') await loadSummary();
+    if (state.pane === 'daily')     await loadDaily();
     if (state.pane === 'income')    await loadIncome();
     if (state.pane === 'payable')   await loadPayable();
     if (state.pane === 'card')      await loadCard();
@@ -525,6 +569,82 @@ async function loadSummary() {
       DB集計で動的生成しています。51シート分の集計表は不要になります。
     </p>
   `;
+}
+
+// ─── 日次CF ───
+async function loadDaily() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const data = await (await fetch('/api/funds/daily-cashflow?' + q)).json();
+  const company = state.masters.companies.find(c => c.id === state.companyId);
+  document.getElementById('dailyTitle').textContent = `📅 ${company?.name || ''}　${state.year}年${state.month}月 日次キャッシュフロー`;
+  const tb = document.querySelector('#dailyTable tbody');
+  tb.innerHTML = '';
+  const dowName = ['日','月','火','水','木','金','土'];
+
+  // 月初繰越行
+  if (data.prevCumNet !== 0 || data.prevCumCard !== 0) {
+    const tr = document.createElement('tr');
+    tr.className = 'carryover';
+    tr.innerHTML = `
+      <td colspan="2">前月末繰越</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num">${yen(data.prevCumNet)}</td>
+      <td class="num">${yen(data.prevCumCard)}</td>
+      <td class="num">${yen(data.prevCumNet + data.prevCumCard)}</td>`;
+    tb.appendChild(tr);
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  let sumInc = 0, sumPay = 0, sumRec = 0;
+
+  for (const d of data.days) {
+    const tr = document.createElement('tr');
+    const dow = d.dow;
+    let cls = '';
+    if (dow === 0) cls = 'sun';
+    else if (dow === 6) cls = 'sat';
+    const dateObj = new Date(d.date + 'T00:00:00');
+    if (dateObj.getTime() === today.getTime()) cls += ' today';
+    if (cls) tr.className = cls.trim();
+    const dowCls = dow === 0 ? 'dow-sun' : dow === 6 ? 'dow-sat' : '';
+    const dayLabel = parseInt(d.date.split('-')[2], 10);
+    sumInc += d.income; sumPay += d.payout; sumRec += d.cardRecovery;
+    tr.innerHTML = `
+      <td>${dayLabel}日</td>
+      <td class="${dowCls}">${dowName[dow]}</td>
+      <td class="num ${d.income ? '' : 'zero'}">${d.income ? yen(d.income) : '—'}</td>
+      <td class="num ${d.payout ? '' : 'zero'}">${d.payout ? yen(d.payout) : '—'}</td>
+      <td class="num ${d.cardRecovery ? '' : 'zero'}">${d.cardRecovery ? yen(d.cardRecovery) : '—'}</td>
+      <td class="num ${d.dailyNet === 0 ? 'zero' : ''}" style="${d.dailyNet < 0 ? 'color:#d63031' : ''}">${d.dailyNet === 0 ? '—' : yen(d.dailyNet)}</td>
+      <td class="num" style="${d.cumNet < 0 ? 'color:#d63031;font-weight:600' : ''}">${yen(d.cumNet)}</td>
+      <td class="num">${yen(d.cumCard)}</td>
+      <td class="num" style="font-weight:600">${yen(d.usable)}</td>`;
+    tb.appendChild(tr);
+  }
+
+  // 月合計行
+  const last = data.days[data.days.length - 1] || { cumNet: data.prevCumNet, cumCard: data.prevCumCard, usable: data.prevCumNet + data.prevCumCard };
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'month-total';
+  totalRow.innerHTML = `
+    <td colspan="2">${state.month}月合計</td>
+    <td class="num">${yen(sumInc)}</td>
+    <td class="num">${yen(sumPay)}</td>
+    <td class="num">${yen(sumRec)}</td>
+    <td class="num">${yen(sumInc - sumPay - sumRec)}</td>
+    <td class="num">${yen(last.cumNet)}</td>
+    <td class="num">${yen(last.cumCard)}</td>
+    <td class="num">${yen(last.usable)}</td>`;
+  tb.appendChild(totalRow);
+}
+
+function yen(n) {
+  if (n === 0) return '¥0';
+  const sign = n < 0 ? '-' : '';
+  return sign + '¥' + Math.abs(n).toLocaleString();
 }
 
 // ─── 入金 ───
