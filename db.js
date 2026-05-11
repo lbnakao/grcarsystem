@@ -278,8 +278,220 @@ async function migrateSchema() {
   // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
   await createKeiriTables();
 
+  // 資金管理（社長Excel v8 のアプリ化）用テーブル群
+  await createFundsTables();
+
   // 組織体制図ハブの編集差分テーブル
   await createOrgChartTables();
+}
+
+// ===== 資金管理モジュール用テーブル =====
+async function createFundsTables() {
+  const autoIncPK = (mode === 'pg') ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const nowDefault = (mode === 'pg') ? 'TIMESTAMP DEFAULT NOW()' : "TEXT DEFAULT (datetime('now','localtime'))";
+
+  // 会社マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_companies (
+      id ${autoIncPK},
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      is_funds_target INTEGER DEFAULT 1,
+      color TEXT DEFAULT '#1F4E79',
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 物件マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_properties (
+      id ${autoIncPK},
+      name TEXT NOT NULL,
+      company_id INTEGER NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 資金繰り項目マスタ（収入/支出/財務）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_fund_items (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 勘定科目マスタ（→ 資金繰り項目にマッピング）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_account_categories (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      fund_item_id INTEGER,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 入金記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_income_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      entry_date TEXT NOT NULL,
+      item TEXT,
+      fund_item_id INTEGER,
+      amount INTEGER DEFAULT 0,
+      status TEXT DEFAULT '予測',
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // 未払／支出記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_payable_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      property_id INTEGER,
+      kind TEXT DEFAULT '月次予定',
+      summary TEXT,
+      account_category_id INTEGER,
+      due_date TEXT,
+      billto TEXT DEFAULT '',
+      current_amount INTEGER DEFAULT 0,
+      carry_1m INTEGER DEFAULT 0,
+      carry_2m INTEGER DEFAULT 0,
+      carry_3m_plus INTEGER DEFAULT 0,
+      priority TEXT DEFAULT '月次',
+      plan_date TEXT,
+      plan_amount INTEGER DEFAULT 0,
+      pay_status TEXT DEFAULT '',
+      invoice_path TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // カード枠回復記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_card_recoveries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      pay_date TEXT NOT NULL,
+      card_name TEXT DEFAULT '',
+      amount INTEGER DEFAULT 0,
+      kind TEXT DEFAULT '通常',
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 初期シード
+  await seedFundsMasters();
+}
+
+async function seedFundsMasters() {
+  // 会社（引継ぎ書2.3）
+  const companies = [
+    { code: 'residence', name: 'レジデンス', is_funds_target: 1, color: '#1F4E79', sort_order: 1 },
+    { code: 'resort',    name: 'リゾート',   is_funds_target: 1, color: '#0984e3', sort_order: 2 },
+    { code: 'motel',     name: 'モーテル',   is_funds_target: 1, color: '#00b894', sort_order: 3 },
+    { code: 'zack',      name: 'ザック',     is_funds_target: 1, color: '#e17055', sort_order: 4 },
+    { code: 'world_ray', name: 'ワールド・レイ',   is_funds_target: 0, color: '#6c5ce7', sort_order: 5 },
+    { code: 'coco_uni',  name: 'ココ・ユニバース', is_funds_target: 0, color: '#d63031', sort_order: 6 },
+  ];
+  const cCount = await query("SELECT COUNT(*) as c FROM funds_companies");
+  if (cCount[0].c === 0) {
+    for (const c of companies) {
+      await run("INSERT INTO funds_companies (code, name, is_funds_target, color, sort_order) VALUES (?, ?, ?, ?, ?)",
+        [c.code, c.name, c.is_funds_target, c.color, c.sort_order]);
+    }
+  }
+
+  // 物件（引継ぎ書2.4）— 既存マッピング
+  const pCount = await query("SELECT COUNT(*) as c FROM funds_properties");
+  if (pCount[0].c === 0) {
+    const compRows = await query("SELECT id, code FROM funds_companies");
+    const byCode = {};
+    compRows.forEach(r => { byCode[r.code] = r.id; });
+    const props = [
+      { name: 'リゾート',        code: 'resort',    sort_order: 1 },
+      { name: 'ほうらい',        code: 'resort',    sort_order: 2 },
+      { name: 'フォレスト',      code: 'resort',    sort_order: 3 },
+      { name: 'グリーンシャワー',code: 'resort',    sort_order: 4 },
+      { name: '周防大島',        code: 'resort',    sort_order: 5 },
+      { name: 'モーテル',        code: 'motel',     sort_order: 6 },
+      { name: 'レジデンス',      code: 'residence', sort_order: 7 },
+      { name: 'ココユニバース',  code: 'zack',      sort_order: 8 },
+    ];
+    for (const p of props) {
+      const cid = byCode[p.code];
+      if (cid) await run("INSERT INTO funds_properties (name, company_id, sort_order) VALUES (?, ?, ?)",
+        [p.name, cid, p.sort_order]);
+    }
+  }
+
+  // 資金繰り項目（引継ぎ書3.6・6.4：12ヶ月レイアウトの行構成）
+  const fiCount = await query("SELECT COUNT(*) as c FROM funds_fund_items");
+  if (fiCount[0].c === 0) {
+    const items = [
+      // 収入
+      { name: '現金売上',   kind: '収入', sort_order: 1 },
+      { name: '売掛金回収', kind: '収入', sort_order: 2 },
+      { name: '手形入金',   kind: '収入', sort_order: 3 },
+      { name: 'その他収入', kind: '収入', sort_order: 4 },
+      // 支出
+      { name: '買掛金支払', kind: '支出', sort_order: 11 },
+      { name: '人件費',     kind: '支出', sort_order: 12 },
+      { name: '地代家賃',   kind: '支出', sort_order: 13 },
+      { name: '水道光熱費', kind: '支出', sort_order: 14 },
+      { name: '租税公課',   kind: '支出', sort_order: 15 },
+      { name: '支払利息',   kind: '支出', sort_order: 16 },
+      { name: 'その他経費', kind: '支出', sort_order: 17 },
+      // 財務
+      { name: '借入金',     kind: '財務', sort_order: 21 },
+      { name: '設備売却',   kind: '財務', sort_order: 22 },
+    ];
+    for (const it of items) {
+      await run("INSERT INTO funds_fund_items (name, kind, sort_order) VALUES (?, ?, ?)",
+        [it.name, it.kind, it.sort_order]);
+    }
+  }
+
+  // 勘定科目マスタ（→ 資金繰り項目にマッピング）
+  const acCount = await query("SELECT COUNT(*) as c FROM funds_account_categories");
+  if (acCount[0].c === 0) {
+    const fiRows = await query("SELECT id, name FROM funds_fund_items");
+    const fiByName = {};
+    fiRows.forEach(r => { fiByName[r.name] = r.id; });
+    const accs = [
+      { name: '仕入',           fi: '買掛金支払', sort_order: 1 },
+      { name: '給料手当',       fi: '人件費',     sort_order: 2 },
+      { name: '法定福利費',     fi: '人件費',     sort_order: 3 },
+      { name: '地代家賃',       fi: '地代家賃',   sort_order: 4 },
+      { name: '水道光熱費',     fi: '水道光熱費', sort_order: 5 },
+      { name: '通信費',         fi: 'その他経費', sort_order: 6 },
+      { name: '消耗品費',       fi: 'その他経費', sort_order: 7 },
+      { name: '修繕費',         fi: 'その他経費', sort_order: 8 },
+      { name: '広告宣伝費',     fi: 'その他経費', sort_order: 9 },
+      { name: '交際費',         fi: 'その他経費', sort_order: 10 },
+      { name: '旅費交通費',     fi: 'その他経費', sort_order: 11 },
+      { name: '車両費',         fi: 'その他経費', sort_order: 12 },
+      { name: '租税公課',       fi: '租税公課',   sort_order: 13 },
+      { name: '支払手数料',     fi: 'その他経費', sort_order: 14 },
+      { name: '支払利息',       fi: '支払利息',   sort_order: 15 },
+      { name: '減価償却費',     fi: 'その他経費', sort_order: 16 },
+      { name: '保険料',         fi: 'その他経費', sort_order: 17 },
+      { name: '雑費',           fi: 'その他経費', sort_order: 18 },
+    ];
+    for (const a of accs) {
+      await run("INSERT INTO funds_account_categories (name, fund_item_id, sort_order) VALUES (?, ?, ?)",
+        [a.name, fiByName[a.fi] || null, a.sort_order]);
+    }
+  }
 }
 
 // ===== 組織体制図ハブ用テーブル =====
