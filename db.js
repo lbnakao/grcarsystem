@@ -391,6 +391,7 @@ async function createFundsTables() {
 
   // 初期シード
   await seedFundsMasters();
+  await seedFundsDemoData();
 }
 
 async function seedFundsMasters() {
@@ -491,6 +492,97 @@ async function seedFundsMasters() {
       await run("INSERT INTO funds_account_categories (name, fund_item_id, sort_order) VALUES (?, ?, ?)",
         [a.name, fiByName[a.fi] || null, a.sort_order]);
     }
+  }
+}
+
+// 5月のデモデータを投入（既にデータがあるときはスキップ）
+async function seedFundsDemoData() {
+  const incCount = await query("SELECT COUNT(*) as c FROM funds_income_entries");
+  const payCount = await query("SELECT COUNT(*) as c FROM funds_payable_entries");
+  const recCount = await query("SELECT COUNT(*) as c FROM funds_card_recoveries");
+  if (incCount[0].c > 0 || payCount[0].c > 0 || recCount[0].c > 0) return;
+
+  const comp = {};
+  (await query("SELECT id, code FROM funds_companies")).forEach(r => comp[r.code] = r.id);
+  const props = {};
+  (await query("SELECT p.id, p.name, c.code AS company_code FROM funds_properties p JOIN funds_companies c ON c.id = p.company_id"))
+    .forEach(r => props[r.name] = r.id);
+  const fi = {};
+  (await query("SELECT id, name FROM funds_fund_items")).forEach(r => fi[r.name] = r.id);
+  const ac = {};
+  (await query("SELECT id, name FROM funds_account_categories")).forEach(r => ac[r.name] = r.id);
+
+  // ─── 入金 ───
+  const incomeSeed = [
+    // レジデンス
+    { company: 'residence', entry_date: '2026-05-01', item: '5月分家賃（テナントA）', fi: '売掛金回収', amount: 1800000, status: '確認済' },
+    { company: 'residence', entry_date: '2026-05-10', item: '5月分家賃（テナントB）', fi: '売掛金回収', amount: 1200000, status: '確認済' },
+    { company: 'residence', entry_date: '2026-05-25', item: '駐車場収入',           fi: '現金売上',   amount:  350000, status: '確認済' },
+    // リゾート
+    { company: 'resort',    entry_date: '2026-05-03', item: '宿泊売上（GW）',       fi: '現金売上',   amount: 4200000, status: '確認済' },
+    { company: 'resort',    entry_date: '2026-05-18', item: '宿泊売上（中旬）',     fi: '現金売上',   amount: 1850000, status: '確認済' },
+    { company: 'resort',    entry_date: '2026-05-28', item: '法人団体予約入金',     fi: '売掛金回収', amount:  780000, status: '未確認' },
+    // モーテル
+    { company: 'motel',     entry_date: '2026-05-05', item: '宿泊売上（前半）',     fi: '現金売上',   amount: 1600000, status: '確認済' },
+    { company: 'motel',     entry_date: '2026-05-22', item: '宿泊売上（後半）',     fi: '現金売上',   amount: 1400000, status: '確認済' },
+    // ザック
+    { company: 'zack',      entry_date: '2026-05-12', item: '管理委託料',           fi: '売掛金回収', amount:  500000, status: '確認済' },
+    { company: 'zack',      entry_date: '2026-05-30', item: '清掃業務収入',         fi: 'その他収入', amount:  280000, status: '予測' },
+  ];
+  for (const s of incomeSeed) {
+    await run(`INSERT INTO funds_income_entries (company_id, entry_date, item, fund_item_id, amount, status, memo)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [comp[s.company], s.entry_date, s.item, fi[s.fi] || null, s.amount, s.status, '']);
+  }
+
+  // ─── 未払／支出 ───
+  const payableSeed = [
+    // レジデンス
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '○○ガス（5月分）',        ac: '水道光熱費', due: '2026-05-31', plan: '2026-05-28', amount: 180000, priority: '月次' },
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '清掃委託料（5月分）',    ac: '雑費',       due: '2026-05-31', plan: '2026-05-31', amount: 320000, priority: '月次' },
+    { company: 'residence', property: 'レジデンス', kind: '未払繰越', summary: '修繕費（漏水対応）',     ac: '修繕費',     due: '2026-04-30', plan: '2026-05-15', amount: 450000, priority: '低', carry_1m: 450000 },
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '建物管理委託費',         ac: '雑費',       due: '2026-05-25', plan: '2026-05-25', amount: 280000, priority: '月次' },
+    // リゾート
+    { company: 'resort',    property: 'リゾート',         kind: '月次予定', summary: '食材仕入（A社）',         ac: '仕入',       due: '2026-05-20', plan: '2026-05-20', amount: 1200000, priority: '月次' },
+    { company: 'resort',    property: 'リゾート',         kind: '月次予定', summary: 'リネン業者',             ac: '雑費',       due: '2026-05-25', plan: '2026-05-25', amount:  450000, priority: '月次' },
+    { company: 'resort',    property: 'ほうらい',         kind: '未払繰越', summary: '燃料費（前々月分）',     ac: '水道光熱費', due: '2026-03-31', plan: '2026-05-10', amount:  220000, priority: '中', carry_2m: 220000 },
+    { company: 'resort',    property: 'フォレスト',       kind: '月次予定', summary: 'パート給与（5月分）',     ac: '給料手当',   due: '2026-05-25', plan: '2026-05-25', amount: 1800000, priority: '月次' },
+    { company: 'resort',    property: 'グリーンシャワー', kind: '月次予定', summary: '電気代（中国電力）',     ac: '水道光熱費', due: '2026-05-31', plan: '2026-05-31', amount:  680000, priority: '月次' },
+    // モーテル
+    { company: 'motel',     property: 'モーテル', kind: '月次予定', summary: '備品仕入',                 ac: '消耗品費',   due: '2026-05-15', plan: '2026-05-15', amount: 180000, priority: '月次' },
+    { company: 'motel',     property: 'モーテル', kind: '月次予定', summary: '清掃用洗剤',               ac: '消耗品費',   due: '2026-05-20', plan: '2026-05-20', amount:  85000, priority: '月次' },
+    { company: 'motel',     property: 'モーテル', kind: '未払繰越', summary: '看板修理代（滞留）',       ac: '修繕費',     due: '2026-02-28', plan: '2026-05-30', amount: 350000, priority: '高', carry_3m_plus: 350000 },
+    // ザック
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: '清掃用品仕入',         ac: '消耗品費',   due: '2026-05-15', plan: '2026-05-15', amount: 120000, priority: '月次' },
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: 'スタッフ給与',         ac: '給料手当',   due: '2026-05-25', plan: '2026-05-25', amount: 850000, priority: '月次' },
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: '社用車リース',         ac: '車両費',     due: '2026-05-27', plan: '2026-05-27', amount:  95000, priority: '月次' },
+  ];
+  for (const s of payableSeed) {
+    const total = (s.current_amount || 0) + (s.carry_1m || 0) + (s.carry_2m || 0) + (s.carry_3m_plus || 0);
+    const current = total === 0 ? s.amount : (s.current_amount || 0);
+    await run(`INSERT INTO funds_payable_entries
+      (company_id, property_id, kind, summary, account_category_id, due_date, billto,
+       current_amount, carry_1m, carry_2m, carry_3m_plus, priority, plan_date, plan_amount, pay_status, invoice_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        comp[s.company], props[s.property] || null, s.kind, s.summary, ac[s.ac] || null,
+        s.due, '', current, s.carry_1m || 0, s.carry_2m || 0, s.carry_3m_plus || 0,
+        s.priority, s.plan, s.amount, '', ''
+      ]);
+  }
+
+  // ─── カード枠回復 ───
+  const cardSeed = [
+    { company: 'residence', pay_date: '2026-05-01', card_name: 'JCB',       amount: 280000, kind: '通常', memo: '5月分カード支払' },
+    { company: 'residence', pay_date: '2026-05-10', card_name: '楽天カード', amount: 150000, kind: '通常', memo: '' },
+    { company: 'resort',    pay_date: '2026-05-03', card_name: 'JCB',       amount: 850000, kind: '通常', memo: 'GW期間支払分' },
+    { company: 'resort',    pay_date: '2026-05-18', card_name: 'AMEX',      amount: 320000, kind: '通常', memo: '' },
+    { company: 'motel',     pay_date: '2026-05-05', card_name: '楽天カード', amount: 180000, kind: '通常', memo: '' },
+    { company: 'zack',      pay_date: '2026-05-12', card_name: 'JCB',       amount: 120000, kind: '通常', memo: '' },
+  ];
+  for (const s of cardSeed) {
+    await run("INSERT INTO funds_card_recoveries (company_id, pay_date, card_name, amount, kind, memo) VALUES (?, ?, ?, ?, ?, ?)",
+      [comp[s.company], s.pay_date, s.card_name, s.amount, s.kind, s.memo]);
   }
 }
 
