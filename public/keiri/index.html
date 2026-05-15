@@ -646,6 +646,11 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 <div class="modal-overlay" id="invoice-upload-modal">
   <div class="modal large">
     <h3>📂 請求書Excelアップロード</h3>
+    <div style="margin-bottom:8px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #00b894;border-radius:4px;font-size:12px;color:#2d3436;">
+      <strong>✓ 重複検知あり：</strong>
+      請求元 / 月 / 年 / 請求先（施設） / 金額（今月/前月繰越/前々月/前々々月）がすべて一致する行は<strong>自動でスキップ</strong>されます。
+      同じExcelを2回アップロードしても二重登録されません。
+    </div>
     <div class="summary-cards" id="invoice-upload-stats"></div>
     <div id="invoice-upload-estimate" style="margin:8px 0;padding:10px 14px;background:#fff3cd;border:1px solid #ffe69c;border-radius:6px;font-size:13px;color:#664d03;font-weight:600;display:none;"></div>
     <div class="table-wrap" style="max-height:50vh;">
@@ -2031,7 +2036,11 @@ document.getElementById('invoice-upload-confirm').addEventListener('click', asyn
     });
     if (res.error) { showToast(res.error, 'error'); return; }
     const took = formatSeconds((Date.now() - t0) / 1000);
-    showToast(`✓ ${res.inserted}件の請求書を保存しました（${took}）`, 'success');
+    const skipMsg = (res.skipped && res.skipped > 0) ? ` / 重複スキップ ${res.skipped}件` : '';
+    showToast(`✓ 保存:${res.inserted}件${skipMsg}（${took}）`, 'success');
+    if (res.inserted === 0 && res.skipped > 0) {
+      alert(`同じ請求書がすべて既に登録されていたため、${res.skipped}件すべてスキップしました。\n（請求元/月/年/施設/金額が一致する行は重複とみなして二重登録を防いでいます）`);
+    }
     document.getElementById('invoice-upload-modal').classList.remove('show');
     pendingInvoiceUpload = null;
     await loadInvoices();

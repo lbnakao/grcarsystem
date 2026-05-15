@@ -943,17 +943,38 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
 });
 
 router.post('/invoices/upload/confirm', async (req, res) => {
-  const { invoices: items } = req.body;
+  const { invoices: items, skip_duplicates = true } = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: 'invoices array required' });
-  let inserted = 0;
+  let inserted = 0, skipped = 0;
   try {
     for (const inv of items) {
+      // 重複判定：エンティティ + 業者 + 月 + 年 + 当月金額 + 各繰越金額 がすべて一致する行
+      if (skip_duplicates) {
+        const dup = await query(
+          `SELECT id FROM keiri_invoices
+           WHERE COALESCE(entity,'') = ?
+             AND COALESCE(vendor,'') = ?
+             AND COALESCE(month,'') = ?
+             AND COALESCE(year, 0) = ?
+             AND COALESCE(facility,'') = ?
+             AND COALESCE(amount, 0) = ?
+             AND COALESCE(carry_1, 0) = ?
+             AND COALESCE(carry_2, 0) = ?
+             AND COALESCE(carry_3, 0) = ?`,
+          [
+            inv.entity || '', inv.vendor || '', inv.month || '',
+            inv.year || 0, inv.facility || '',
+            inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0
+          ]
+        );
+        if (dup.length > 0) { skipped++; continue; }
+      }
       await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
         [inv.vendor || '', inv.category || '', inv.payment_method || '', inv.due_date || '', inv.facility || '', inv.entity || '',
          inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.month || '', inv.year || null, inv.note || '']);
       inserted++;
     }
-    res.json({ ok: true, inserted });
+    res.json({ ok: true, inserted, skipped });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
