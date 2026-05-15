@@ -389,9 +389,69 @@ async function createFundsTables() {
     )
   `);
 
-  // 初期シード
+  // ===== v10 で追加：施設／OTA／売上／入金予測 =====
+
+  // 施設マスタ（売上計上単位・17施設）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_facilities (
+      id ${autoIncPK},
+      name TEXT NOT NULL,
+      dept TEXT DEFAULT '',
+      company_id INTEGER NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // OTA／決済サイクルマスタ（売上計上月に対する入金タイミング）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_ota_channels (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      cur_ratio INTEGER DEFAULT 0,
+      nxt_ratio INTEGER DEFAULT 0,
+      nxt2_ratio INTEGER DEFAULT 0,
+      pay_day_cur INTEGER,
+      pay_day_nxt INTEGER,
+      pay_day_nxt2 INTEGER,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 売上入力（OTA別／施設別／月別）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_sales_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      facility_id INTEGER NOT NULL,
+      ota_channel_id INTEGER NOT NULL,
+      year_month TEXT NOT NULL,
+      amount INTEGER DEFAULT 0,
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // 入金予測（売上1行→最大3行展開／日次CFの入金へ加算）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_predicted_incomes (
+      id ${autoIncPK},
+      sales_entry_id INTEGER NOT NULL,
+      company_id INTEGER NOT NULL,
+      facility_id INTEGER NOT NULL,
+      ota_channel_id INTEGER NOT NULL,
+      expected_date TEXT,
+      amount INTEGER DEFAULT 0,
+      period TEXT,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 初期シード（マスタのみ。デモデータは投入しない）
   await seedFundsMasters();
-  await seedFundsDemoData();
+  // await seedFundsDemoData();  // 正式データ移行のため無効化
+  await seedFundsV10();
 }
 
 async function seedFundsMasters() {
@@ -584,6 +644,167 @@ async function seedFundsDemoData() {
     await run("INSERT INTO funds_card_recoveries (company_id, pay_date, card_name, amount, kind, memo) VALUES (?, ?, ?, ?, ?, ?)",
       [comp[s.company], s.pay_date, s.card_name, s.amount, s.kind, s.memo]);
   }
+}
+
+// ===== v10 追加分のシード（17施設・16OTA・売上&入金予測サンプル） =====
+async function seedFundsV10() {
+  const comp = {};
+  (await query("SELECT id, code FROM funds_companies")).forEach(r => comp[r.code] = r.id);
+
+  // 施設（売上計上単位・引継ぎ書2.4）
+  const facCount = await query("SELECT COUNT(*) as c FROM funds_facilities");
+  if (facCount[0].c === 0) {
+    const facilities = [
+      // リゾート（ホテル）
+      { name: 'de Lune',           dept: 'ホテル',   code: 'resort',    sort_order: 1 },
+      { name: 'VIEW',              dept: 'ホテル',   code: 'resort',    sort_order: 2 },
+      { name: '本川',              dept: 'ホテル',   code: 'resort',    sort_order: 3 },
+      { name: '天神',              dept: 'ホテル',   code: 'resort',    sort_order: 4 },
+      { name: '玖波',              dept: 'ホテル',   code: 'resort',    sort_order: 5 },
+      { name: '温井',              dept: 'ホテル',   code: 'resort',    sort_order: 6 },
+      { name: 'いこいの村',        dept: 'ホテル',   code: 'resort',    sort_order: 7 },
+      // モーテル（ホテル）
+      { name: '弥山',              dept: 'ホテル',   code: 'motel',     sort_order: 8 },
+      // リゾート（マンスリー）
+      { name: 'TAKAYA',            dept: 'マンスリー', code: 'resort', sort_order: 9 },
+      { name: '壱番館',            dept: 'マンスリー', code: 'resort', sort_order: 10 },
+      { name: '弐番館',            dept: 'マンスリー', code: 'resort', sort_order: 11 },
+      { name: 'Otake',             dept: 'マンスリー', code: 'resort', sort_order: 12 },
+      // リゾート（指定管理）
+      { name: '竹原（レストラン含む）', dept: '指定管理', code: 'resort', sort_order: 13 },
+      { name: 'フォレストヒルズガーデン', dept: '指定管理', code: 'resort', sort_order: 14 },
+      { name: 'グリーンシャワー',  dept: '指定管理', code: 'resort', sort_order: 15 },
+      // サウナ
+      { name: 'MAKI de SAUNA',     dept: 'サウナ',   code: 'zack',      sort_order: 16 },
+      { name: '周防大島',          dept: 'サウナ',   code: 'resort',    sort_order: 17 },
+    ];
+    for (const f of facilities) {
+      const cid = comp[f.code];
+      if (cid) await run("INSERT INTO funds_facilities (name, dept, company_id, sort_order) VALUES (?, ?, ?, ?)",
+        [f.name, f.dept, cid, f.sort_order]);
+    }
+  }
+
+  // OTA／決済（引継ぎ書5.2）
+  const otaCount = await query("SELECT COUNT(*) as c FROM funds_ota_channels");
+  if (otaCount[0].c === 0) {
+    const otas = [
+      { name: 'Booking',     cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 15, d_nxt2: null, sort: 1 },
+      { name: '楽天',        cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 2 },
+      { name: 'じゃらん',    cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 3 },
+      { name: '一休',        cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 28, d_nxt2: null, sort: 4 },
+      { name: 'Expedia',     cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 5 },
+      { name: 'Agoda',       cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 6 },
+      { name: 'スマレジ',    cur: 100, nxt: 0,   nxt2: 0,   d_cur: 31,   d_nxt: null, d_nxt2: null, sort: 7 },
+      { name: 'JCB',         cur: 0,   nxt: 50,  nxt2: 50,  d_cur: null, d_nxt: 25, d_nxt2: 25,   sort: 8 },
+      { name: 'GMO',         cur: 50,  nxt: 50,  nxt2: 0,   d_cur: 31,   d_nxt: 15, d_nxt2: null, sort: 9 },
+      { name: 'JMS',         cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 15, d_nxt2: null, sort: 10 },
+      { name: 'PayPay',      cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 11 },
+      { name: 'カード',      cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 12 },
+      { name: '現金売上',    cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 13 },
+      { name: 'ホテル売上',  cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 14 },
+      { name: '竹原市',      cur: 0,   nxt: 0,   nxt2: 100, d_cur: null, d_nxt: null, d_nxt2: 28,   sort: 15 },
+      { name: '売上',        cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 16 },
+    ];
+    for (const o of otas) {
+      await run(`INSERT INTO funds_ota_channels (name, cur_ratio, nxt_ratio, nxt2_ratio, pay_day_cur, pay_day_nxt, pay_day_nxt2, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [o.name, o.cur, o.nxt, o.nxt2, o.d_cur, o.d_nxt, o.d_nxt2, o.sort]);
+    }
+  }
+
+  // 売上＋入金予測 サンプル（4-5月分） — 正式データ移行のため無効化
+  const salesCount = await query("SELECT COUNT(*) as c FROM funds_sales_entries");
+  if (false && salesCount[0].c === 0) {
+    const fac = {};
+    (await query("SELECT id, name FROM funds_facilities")).forEach(r => fac[r.name] = r.id);
+    const ota = {};
+    (await query("SELECT * FROM funds_ota_channels")).forEach(r => ota[r.name] = r);
+
+    // Excel v10「売上入力」より4-5月の代表データ（ホテル売上中心）
+    const salesSeed = [
+      // 4月計上
+      { ym: '2026-04', company: 'zack',     fac: 'MAKI de SAUNA', ota: '売上',       amount:  121831 },
+      { ym: '2026-04', company: 'resort',   fac: 'VIEW',          ota: 'ホテル売上', amount: 2904045 },
+      { ym: '2026-04', company: 'resort',   fac: 'de Lune',       ota: 'ホテル売上', amount: 8310821 },
+      { ym: '2026-04', company: 'resort',   fac: 'いこいの村',    ota: 'ホテル売上', amount: 6092392 },
+      { ym: '2026-04', company: 'resort',   fac: '本川',          ota: 'ホテル売上', amount: 1955058 },
+      { ym: '2026-04', company: 'resort',   fac: '温井',          ota: 'ホテル売上', amount: 2330934 },
+      { ym: '2026-04', company: 'resort',   fac: '玖波',          ota: 'ホテル売上', amount:  331500 },
+      { ym: '2026-04', company: 'motel',    fac: '弥山',          ota: 'ホテル売上', amount: 4004248 },
+      { ym: '2026-04', company: 'resort',   fac: 'TAKAYA',        ota: '売上',       amount:  455000 },
+      { ym: '2026-04', company: 'resort',   fac: '壱番館',        ota: '売上',       amount:  101400 },
+      { ym: '2026-04', company: 'resort',   fac: '弐番館',        ota: '売上',       amount:   90000 },
+      { ym: '2026-04', company: 'resort',   fac: 'Otake',         ota: '売上',       amount:  105000 },
+      { ym: '2026-04', company: 'resort',   fac: 'グリーンシャワー',           ota: '売上',  amount:  626997 },
+      { ym: '2026-04', company: 'resort',   fac: 'フォレストヒルズガーデン',   ota: '売上',  amount: 5535949 },
+      { ym: '2026-04', company: 'resort',   fac: '竹原（レストラン含む）',     ota: '竹原市', amount: 840500 },
+      // 5月計上
+      { ym: '2026-05', company: 'zack',     fac: 'MAKI de SAUNA', ota: '売上',       amount:   36276 },
+      { ym: '2026-05', company: 'resort',   fac: 'VIEW',          ota: 'ホテル売上', amount: 2287142 },
+      { ym: '2026-05', company: 'resort',   fac: 'de Lune',       ota: 'ホテル売上', amount: 6833097 },
+      { ym: '2026-05', company: 'resort',   fac: 'いこいの村',    ota: 'ホテル売上', amount: 4468786 },
+      { ym: '2026-05', company: 'motel',    fac: '弥山',          ota: 'ホテル売上', amount: 1161868 },
+      { ym: '2026-05', company: 'resort',   fac: 'VIEW',          ota: 'Booking',    amount: 1200000 },
+      { ym: '2026-05', company: 'resort',   fac: 'de Lune',       ota: '楽天',       amount:  850000 },
+      { ym: '2026-05', company: 'resort',   fac: 'いこいの村',    ota: 'じゃらん',   amount:  650000 },
+      { ym: '2026-05', company: 'resort',   fac: 'TAKAYA',        ota: '売上',       amount:  455000 },
+    ];
+    for (const s of salesSeed) {
+      const cid = comp[s.company];
+      const fid = fac[s.fac];
+      const o = ota[s.ota];
+      if (!cid || !fid || !o) continue;
+      const sid = await runInsert(`
+        INSERT INTO funds_sales_entries (company_id, facility_id, ota_channel_id, year_month, amount, memo)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [cid, fid, o.id, s.ym, s.amount, '']);
+      // 予測入金を3行展開
+      const predictions = buildPredictedIncomes(s.ym, s.amount, o);
+      for (const p of predictions) {
+        await run(`
+          INSERT INTO funds_predicted_incomes
+            (sales_entry_id, company_id, facility_id, ota_channel_id, expected_date, amount, period)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [sid, cid, fid, o.id, p.date, p.amount, p.period]);
+      }
+    }
+  }
+}
+
+// 売上1件→（当月／翌月／翌々月）の予測入金を計算
+function buildPredictedIncomes(yearMonth, amount, ota) {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const out = [];
+  function clampDay(year, mo, day) {
+    if (!day) return null;
+    const last = new Date(year, mo, 0).getDate();
+    return Math.min(day, last);
+  }
+  function addMonths(year, mo, delta) {
+    let nm = mo + delta;
+    let ny = year;
+    while (nm > 12) { nm -= 12; ny += 1; }
+    while (nm < 1)  { nm += 12; ny -= 1; }
+    return { y: ny, m: nm };
+  }
+  const periods = [
+    { ratio: ota.cur_ratio,  day: ota.pay_day_cur,  shift: 0, label: '当月分'  },
+    { ratio: ota.nxt_ratio,  day: ota.pay_day_nxt,  shift: 1, label: '翌月分'  },
+    { ratio: ota.nxt2_ratio, day: ota.pay_day_nxt2, shift: 2, label: '翌々月分' },
+  ];
+  for (const p of periods) {
+    const r = p.ratio || 0;
+    const amt = Math.round(amount * r / 100);
+    let date = null;
+    if (r > 0 && p.day) {
+      const { y: yy, m: mm } = addMonths(y, m, p.shift);
+      const d = clampDay(yy, mm, p.day);
+      if (d) date = `${yy}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    out.push({ date, amount: amt, period: p.label });
+  }
+  return out;
 }
 
 // ===== 組織体制図ハブ用テーブル =====
@@ -855,4 +1076,4 @@ async function seedData() {
   }
 }
 
-module.exports = { initDatabase, query, run, runInsert };
+module.exports = { initDatabase, query, run, runInsert, buildPredictedIncomes };

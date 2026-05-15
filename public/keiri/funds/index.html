@@ -17,7 +17,7 @@
   .nav-link:hover { background: rgba(255,255,255,0.25); }
   .demo-badge { background: #f39c12; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
 
-  .main { max-width: 1600px; margin: 0 auto; padding: 16px; }
+  .main { max-width: none; margin: 0; padding: 16px 24px; }
 
   /* 会社タブ */
   .company-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -64,9 +64,9 @@
   .panel-header .count { font-size: 11px; color: #636e72; }
   .panel-spacer { flex: 1; }
   .table-wrap { overflow: auto; max-height: 65vh; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { background: #f5f7fa; color: #2d3436; padding: 8px 10px; text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 5; font-size: 11px; border-bottom: 2px solid #ddd; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f5f7fa; color: #2d3436; padding: 10px 12px; text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 5; font-size: 12px; border-bottom: 2px solid #ddd; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eee; }
   tr:hover td { background: #f8fbff; }
   tr.cleared td { background: #f5f5f5; color: #999; text-decoration: line-through; }
   tr.cancelled td { background: #ffe6e6; color: #999; text-decoration: line-through; }
@@ -111,7 +111,7 @@
 <nav class="nav">
   <div class="nav-title">💴 GR 資金管理</div>
   <span class="demo-badge">DEMO</span>
-  <div class="nav-sub">Excel v8（51シート）の統合プロトタイプ</div>
+  <div class="nav-sub">Excel v10（20シート）の統合プロトタイプ — OTAサイクル＆入金予測対応</div>
   <div class="nav-spacer"></div>
   <a class="nav-link" href="/keiri/">← 経理トップに戻る</a>
 </nav>
@@ -125,8 +125,11 @@
     <button class="sub-tab active" data-pane="dashboard">📊 ダッシュボード</button>
     <button class="sub-tab" data-pane="daily">📅 日次CF</button>
     <button class="sub-tab" data-pane="income">💰 入金入力</button>
+    <button class="sub-tab" data-pane="sales">🏨 売上入力</button>
+    <button class="sub-tab" data-pane="predicted">🔮 入金予測</button>
     <button class="sub-tab" data-pane="payable">📋 未払一覧</button>
     <button class="sub-tab" data-pane="card">💳 カード枠回復</button>
+    <button class="sub-tab" data-pane="ota">⚙️ OTA設定</button>
   </div>
 
   <!-- ツールバー（月選択） -->
@@ -142,10 +145,11 @@
   <!-- ダッシュボード -->
   <div id="pane-dashboard" class="pane">
     <div class="info-box">
-      <strong>💡 カード枠回復ルール（引継ぎ書5.1）：</strong>
-      入金があった日に、その入金分を先にカード枠回復に充てて、即日回復後に支出支払いに回す運用。
+      <strong>💡 v10 ハイライト：</strong>
+      売上入力 × OTAサイクル（マスター_OTA）から<strong>入金予測</strong>を自動生成し、日次CFの入金へ自動加算します。
       <br>
-      <strong>使用可能額</strong> = 累計差引（純現金残高） + 累計カード枠回復額（=現金 + 回復済カード枠）
+      <strong>カード枠回復ルール：</strong>入金 → カード債務返済 → 即日カード枠回復 → その枠で支出。
+      <strong>使用可能額</strong> = 累計差引（純現金） + 累計カード枠回復額。
     </div>
     <div class="summary-cards" id="summaryCards"></div>
     <div class="panel">
@@ -174,7 +178,8 @@
         <table id="dailyTable">
           <thead><tr>
             <th>日付</th><th>曜</th>
-            <th style="text-align:right">入金</th>
+            <th style="text-align:right">入金<br><span style="font-size:9px;font-weight:400">(手動+予測)</span></th>
+            <th style="text-align:right">内：予測</th>
             <th style="text-align:right">支出</th>
             <th style="text-align:right">カード回復</th>
             <th style="text-align:right">日次差引</th>
@@ -223,6 +228,81 @@
             <th>種別</th><th>物件</th><th>概要</th><th>勘定科目</th><th>期日</th>
             <th>請求先</th><th>累積未払</th><th>優先度</th>
             <th>支払予定日</th><th>支払予定額</th><th>状況</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 売上入力 -->
+  <div id="pane-sales" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>🏨 売上入力：</strong>計上月・施設・OTA/決済・売上額を入力 → マスター_OTAの分配比率で
+      <strong>入金予測</strong>へ自動展開（当月／翌月／翌々月の最大3行）。
+      日次CFの「入金」へも自動加算されます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🏨 売上一覧（OTA別×施設別×月別）</h2>
+        <span class="count" id="salesCount">0件</span>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="openSalesModal()">+ 新規売上</button>
+      </div>
+      <div class="table-wrap">
+        <table id="salesTable">
+          <thead><tr>
+            <th>計上月</th><th>施設</th><th>部門</th><th>OTA／決済</th>
+            <th>分配（当/翌/翌々）</th><th>売上額</th><th>備考</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 入金予測 -->
+  <div id="pane-predicted" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>🔮 入金予測：</strong>売上入力 × マスター_OTA から自動生成された予測入金（読み取り専用）。
+      <br>
+      入金日が「翌月15日」「翌月25日」等は計上月＋OTA設定の入金日で計算。月末日は当該月の最終日に丸めます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🔮 予測入金一覧（当月分のみ表示）</h2>
+        <span class="count" id="predictedCount">0件</span>
+      </div>
+      <div class="table-wrap">
+        <table id="predictedTable">
+          <thead><tr>
+            <th>予測入金日</th><th>施設</th><th>OTA／決済</th><th>期</th><th>予測入金額</th><th>売上計上月</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- OTA設定 -->
+  <div id="pane-ota" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>⚙️ OTA／決済サイクル マスタ：</strong>
+      売上計上月に対し、当月・翌月・翌々月への入金分配比率（合計100%）と入金日を設定します。
+      値を変更すると「保存」で全予測入金が再計算されます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>⚙️ マスター_OTA</h2>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="saveAllOta()">変更を保存して予測再計算</button>
+      </div>
+      <div class="table-wrap">
+        <table id="otaTable">
+          <thead><tr>
+            <th>OTA／決済</th>
+            <th>当月比率(%)</th><th>翌月比率(%)</th><th>翌々月比率(%)</th>
+            <th>当月入金日</th><th>翌月入金日</th><th>翌々月入金日</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -379,6 +459,43 @@
   </div>
 </div>
 
+<!-- 売上モーダル -->
+<div class="modal-backdrop" id="salesModal">
+  <div class="modal">
+    <h3 id="salesModalTitle">売上の登録</h3>
+    <input type="hidden" id="salesId">
+    <div class="form-grid">
+      <div>
+        <label>計上月 *</label>
+        <input type="month" id="salesYearMonth" required>
+      </div>
+      <div>
+        <label>売上額（円） *</label>
+        <input type="number" id="salesAmount" required>
+      </div>
+      <div class="full">
+        <label>施設 *</label>
+        <select id="salesFacility" required></select>
+      </div>
+      <div class="full">
+        <label>OTA／決済 *</label>
+        <select id="salesOta" required></select>
+      </div>
+      <div class="full">
+        <label>備考</label>
+        <input type="text" id="salesMemo" placeholder="例：GW期間／法人団体予約 など">
+      </div>
+      <div class="full" id="salesPreviewBox" style="background:#e6f4ff;padding:8px 12px;border-radius:5px;font-size:11px;color:#34495e;display:none">
+        <strong>📊 入金予測プレビュー：</strong><span id="salesPreview"></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('salesModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSales()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- カードモーダル -->
 <div class="modal-backdrop" id="cardModal">
   <div class="modal">
@@ -529,8 +646,11 @@ async function refresh() {
     if (state.pane === 'dashboard') await loadSummary();
     if (state.pane === 'daily')     await loadDaily();
     if (state.pane === 'income')    await loadIncome();
+    if (state.pane === 'sales')     await loadSales();
+    if (state.pane === 'predicted') await loadPredicted();
     if (state.pane === 'payable')   await loadPayable();
     if (state.pane === 'card')      await loadCard();
+    if (state.pane === 'ota')       await loadOta();
   } finally {
     ind.textContent = '';
   }
@@ -544,7 +664,8 @@ async function loadSummary() {
   const cards = document.getElementById('summaryCards');
   cards.innerHTML = '';
   const items = [
-    { label: '入金合計', value: s.income, klass: 'green' },
+    { label: '入金合計', value: s.income, klass: 'green', hint: '= 手動入金 + 入金予測' },
+    { label: '内：入金予測', value: s.incomePredicted, klass: 'blue', hint: '売上×OTAサイクル' },
     { label: '支出予定合計', value: s.payout, klass: 'red' },
     { label: 'カード枠回復', value: s.cardRecovery, klass: 'orange' },
     { label: '日次差引合計（純現金）', value: s.dailyNet, klass: 'blue', hint: '= 入金 − 支出 − カード枠回復' },
@@ -565,8 +686,9 @@ async function loadSummary() {
     <p><strong>カード枠回復のルーティング：</strong> 入金 → カード債務返済 → カード枠回復 → その枠で支出。
        支出列にはカード枠回復額を<strong>含めません</strong>（引継ぎ書5.1）。</p>
     <p style="color:#636e72; font-size:12px;">
-      この画面は Excel v8 の <strong>「全社合算サマリー」「全社月次サマリー」「日次キャッシュフロー」</strong>を
-      DB集計で動的生成しています。51シート分の集計表は不要になります。
+      この画面は Excel v10 の <strong>「全社合算サマリー」「全社月次サマリー」「日次_社名」</strong>を
+      DB集計で動的生成しています。20シートの集計表は不要になります。<br>
+      入金合計 = <strong>手動入金</strong>（入金入力タブ）＋ <strong>入金予測</strong>（売上入力タブ × OTAサイクル）。
     </p>
   `;
 }
@@ -591,6 +713,7 @@ async function loadDaily() {
       <td class="num zero">—</td>
       <td class="num zero">—</td>
       <td class="num zero">—</td>
+      <td class="num zero">—</td>
       <td class="num">${yen(data.prevCumNet)}</td>
       <td class="num">${yen(data.prevCumCard)}</td>
       <td class="num">${yen(data.prevCumNet + data.prevCumCard)}</td>`;
@@ -598,7 +721,7 @@ async function loadDaily() {
   }
 
   const today = new Date(); today.setHours(0,0,0,0);
-  let sumInc = 0, sumPay = 0, sumRec = 0;
+  let sumInc = 0, sumPred = 0, sumPay = 0, sumRec = 0;
 
   for (const d of data.days) {
     const tr = document.createElement('tr');
@@ -611,11 +734,12 @@ async function loadDaily() {
     if (cls) tr.className = cls.trim();
     const dowCls = dow === 0 ? 'dow-sun' : dow === 6 ? 'dow-sat' : '';
     const dayLabel = parseInt(d.date.split('-')[2], 10);
-    sumInc += d.income; sumPay += d.payout; sumRec += d.cardRecovery;
+    sumInc += d.income; sumPred += (d.incomePredicted||0); sumPay += d.payout; sumRec += d.cardRecovery;
     tr.innerHTML = `
       <td>${dayLabel}日</td>
       <td class="${dowCls}">${dowName[dow]}</td>
       <td class="num ${d.income ? '' : 'zero'}">${d.income ? yen(d.income) : '—'}</td>
+      <td class="num ${d.incomePredicted ? '' : 'zero'}" style="color:#0984e3">${d.incomePredicted ? yen(d.incomePredicted) : '—'}</td>
       <td class="num ${d.payout ? '' : 'zero'}">${d.payout ? yen(d.payout) : '—'}</td>
       <td class="num ${d.cardRecovery ? '' : 'zero'}">${d.cardRecovery ? yen(d.cardRecovery) : '—'}</td>
       <td class="num ${d.dailyNet === 0 ? 'zero' : ''}" style="${d.dailyNet < 0 ? 'color:#d63031' : ''}">${d.dailyNet === 0 ? '—' : yen(d.dailyNet)}</td>
@@ -632,6 +756,7 @@ async function loadDaily() {
   totalRow.innerHTML = `
     <td colspan="2">${state.month}月合計</td>
     <td class="num">${yen(sumInc)}</td>
+    <td class="num">${yen(sumPred)}</td>
     <td class="num">${yen(sumPay)}</td>
     <td class="num">${yen(sumRec)}</td>
     <td class="num">${yen(sumInc - sumPay - sumRec)}</td>
@@ -911,6 +1036,250 @@ async function delCard(id) {
   if (!confirm('削除しますか？')) return;
   await fetch(`/api/funds/card-recoveries/${id}`, { method: 'DELETE' });
   loadCard();
+}
+
+// ─── 売上入力 ───
+async function loadSales() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/sales?' + q)).json();
+  document.getElementById('salesCount').textContent = `${rows.length}件`;
+  const tb = document.querySelector('#salesTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="8" class="empty">売上データはまだありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const ratio = `${r.cur_ratio||0}/${r.nxt_ratio||0}/${r.nxt2_ratio||0}`;
+    tr.innerHTML = `
+      <td>${r.year_month || ''}</td>
+      <td>${escapeHtml(r.facility_name || '')}</td>
+      <td><span style="background:#eee;padding:2px 8px;border-radius:8px;font-size:11px">${escapeHtml(r.facility_dept || '')}</span></td>
+      <td>${escapeHtml(r.ota_name || '')}</td>
+      <td><span style="font-size:11px;color:#636e72">${ratio}</span></td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${escapeHtml(r.memo || '')}</td>
+      <td class="actions">
+        <button class="icon-btn edit" onclick='editSales(${JSON.stringify(r)})'>✎</button>
+        <button class="icon-btn" onclick="delSales(${r.id})">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function fillSalesSelects() {
+  const fSel = document.getElementById('salesFacility');
+  fSel.innerHTML = '';
+  const facilities = (state.masters.facilities || []).filter(f => f.company_id === state.companyId);
+  if (facilities.length === 0) {
+    fSel.innerHTML = '<option value="">（この会社に施設なし）</option>';
+  } else {
+    for (const f of facilities) {
+      const o = document.createElement('option');
+      o.value = f.id; o.textContent = `${f.name}（${f.dept || ''}）`;
+      fSel.appendChild(o);
+    }
+  }
+  const oSel = document.getElementById('salesOta');
+  oSel.innerHTML = '';
+  for (const o of (state.masters.otaChannels || [])) {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = `${o.name}　[${o.cur_ratio}/${o.nxt_ratio}/${o.nxt2_ratio}]`;
+    oSel.appendChild(opt);
+  }
+}
+
+function openSalesModal() {
+  fillSalesSelects();
+  document.getElementById('salesId').value = '';
+  document.getElementById('salesModalTitle').textContent = '売上の登録';
+  document.getElementById('salesYearMonth').value = `${state.year}-${String(state.month).padStart(2,'0')}`;
+  document.getElementById('salesAmount').value = '';
+  document.getElementById('salesMemo').value = '';
+  document.getElementById('salesPreviewBox').style.display = 'none';
+  showModal('salesModal');
+  bindSalesPreview();
+}
+
+function editSales(r) {
+  fillSalesSelects();
+  document.getElementById('salesId').value = r.id;
+  document.getElementById('salesModalTitle').textContent = '売上の編集';
+  document.getElementById('salesYearMonth').value = r.year_month || '';
+  document.getElementById('salesAmount').value = r.amount || 0;
+  document.getElementById('salesFacility').value = r.facility_id || '';
+  document.getElementById('salesOta').value = r.ota_channel_id || '';
+  document.getElementById('salesMemo').value = r.memo || '';
+  showModal('salesModal');
+  bindSalesPreview();
+  updateSalesPreview();
+}
+
+function bindSalesPreview() {
+  ['salesAmount','salesOta','salesYearMonth'].forEach(id => {
+    const el = document.getElementById(id);
+    el.oninput = updateSalesPreview;
+    el.onchange = updateSalesPreview;
+  });
+}
+
+function updateSalesPreview() {
+  const amt = parseInt(document.getElementById('salesAmount').value || '0', 10);
+  const otaId = parseInt(document.getElementById('salesOta').value || '0', 10);
+  const ym = document.getElementById('salesYearMonth').value;
+  const box = document.getElementById('salesPreviewBox');
+  const out = document.getElementById('salesPreview');
+  if (!amt || !otaId || !ym) { box.style.display = 'none'; return; }
+  const ota = (state.masters.otaChannels || []).find(o => o.id === otaId);
+  if (!ota) { box.style.display = 'none'; return; }
+  const parts = previewPredictions(ym, amt, ota);
+  box.style.display = '';
+  out.innerHTML = parts.map(p =>
+    p.amount > 0
+      ? `${p.label}：<strong>${p.date || '—'}</strong> ¥${p.amount.toLocaleString()}`
+      : `${p.label}：—`
+  ).join('　／　');
+}
+
+function previewPredictions(ym, amount, ota) {
+  const [y, m] = ym.split('-').map(Number);
+  function clamp(year, mo, day) {
+    if (!day) return null;
+    const last = new Date(year, mo, 0).getDate();
+    return Math.min(day, last);
+  }
+  function shift(year, mo, delta) {
+    let nm = mo + delta, ny = year;
+    while (nm > 12) { nm -= 12; ny++; }
+    return { y: ny, m: nm };
+  }
+  const periods = [
+    { ratio: ota.cur_ratio,  day: ota.pay_day_cur,  shift: 0, label: '当月' },
+    { ratio: ota.nxt_ratio,  day: ota.pay_day_nxt,  shift: 1, label: '翌月' },
+    { ratio: ota.nxt2_ratio, day: ota.pay_day_nxt2, shift: 2, label: '翌々月' },
+  ];
+  return periods.map(p => {
+    const r = p.ratio || 0;
+    const amt = Math.round(amount * r / 100);
+    let date = null;
+    if (r > 0 && p.day) {
+      const { y: yy, m: mm } = shift(y, m, p.shift);
+      const d = clamp(yy, mm, p.day);
+      if (d) date = `${yy}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    return { label: p.label, date, amount: amt };
+  });
+}
+
+async function saveSales() {
+  const id = document.getElementById('salesId').value;
+  const body = {
+    company_id: state.companyId,
+    facility_id: document.getElementById('salesFacility').value,
+    ota_channel_id: document.getElementById('salesOta').value,
+    year_month: document.getElementById('salesYearMonth').value,
+    amount: document.getElementById('salesAmount').value,
+    memo: document.getElementById('salesMemo').value,
+  };
+  if (!body.facility_id || !body.ota_channel_id) {
+    alert('施設と OTA／決済 を選択してください');
+    return;
+  }
+  const url = id ? `/api/funds/sales/${id}` : '/api/funds/sales';
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeModal('salesModal');
+  loadSales();
+}
+
+async function delSales(id) {
+  if (!confirm('削除しますか？（紐づく入金予測も削除されます）')) return;
+  await fetch(`/api/funds/sales/${id}`, { method: 'DELETE' });
+  loadSales();
+}
+
+// ─── 入金予測（読み取り専用） ───
+async function loadPredicted() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/predicted-incomes?' + q)).json();
+  document.getElementById('predictedCount').textContent = `${rows.length}件 / 合計 ¥${rows.reduce((s,r)=>s+(r.amount||0),0).toLocaleString()}`;
+  const tb = document.querySelector('#predictedTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty">この月の予測入金はありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.expected_date || ''}</td>
+      <td>${escapeHtml(r.facility_name || '')}</td>
+      <td>${escapeHtml(r.ota_name || '')}</td>
+      <td><span style="font-size:11px;background:#eee;padding:2px 8px;border-radius:8px">${escapeHtml(r.period || '')}</span></td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${r.sales_entry_id ? '#' + r.sales_entry_id : ''}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ─── OTAマスタ（編集可） ───
+async function loadOta() {
+  const rows = await (await fetch('/api/funds/ota-channels')).json();
+  const tb = document.querySelector('#otaTable tbody');
+  tb.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td><input type="number" min="0" max="100" data-field="cur_ratio" value="${r.cur_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="0" max="100" data-field="nxt_ratio" value="${r.nxt_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="0" max="100" data-field="nxt2_ratio" value="${r.nxt2_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_cur" value="${r.pay_day_cur||''}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_nxt" value="${r.pay_day_nxt||''}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_nxt2" value="${r.pay_day_nxt2||''}" style="width:70px"></td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function saveAllOta() {
+  const rows = document.querySelectorAll('#otaTable tbody tr');
+  for (const tr of rows) {
+    const id = tr.dataset.id;
+    const body = {};
+    tr.querySelectorAll('input[data-field]').forEach(inp => { body[inp.dataset.field] = inp.value; });
+    await fetch(`/api/funds/ota-channels/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+  }
+  // 売上の予測再計算：全 sales を取得して PUT で再保存（簡易方式）
+  await regenerateAllPredictions();
+  // マスタ再ロード
+  await loadMasters();
+  alert('OTAマスタを保存し、入金予測を再計算しました');
+  loadOta();
+}
+
+async function regenerateAllPredictions() {
+  // 各会社の sales を全件 fetch → 同じ内容で PUT すれば predicted_incomes が再生成される
+  const allSales = [];
+  for (const c of state.masters.companies) {
+    const q = new URLSearchParams({ companyId: c.id });
+    const rows = await (await fetch('/api/funds/sales?' + q)).json();
+    rows.forEach(r => allSales.push(r));
+  }
+  for (const s of allSales) {
+    await fetch(`/api/funds/sales/${s.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: s.company_id, facility_id: s.facility_id,
+        ota_channel_id: s.ota_channel_id, year_month: s.year_month,
+        amount: s.amount, memo: s.memo || ''
+      })
+    });
+  }
 }
 
 // ─── ユーティリティ ───

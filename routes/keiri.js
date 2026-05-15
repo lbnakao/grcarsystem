@@ -152,15 +152,39 @@ function normalizeForMatch(s) {
     .toLowerCase();
 }
 function kanaNormalize(s) {
+  if (!s) return s;
   const h2f = {
-    'ｧ':'ア','ｨ':'イ','ｩ':'ウ','ｪ':'エ','ｫ':'オ','ｱ':'ア','ｲ':'イ','ｳ':'ウ','ｴ':'エ','ｵ':'オ',
+    'ｧ':'ァ','ｨ':'ィ','ｩ':'ゥ','ｪ':'ェ','ｫ':'ォ','ｱ':'ア','ｲ':'イ','ｳ':'ウ','ｴ':'エ','ｵ':'オ',
     'ｶ':'カ','ｷ':'キ','ｸ':'ク','ｹ':'ケ','ｺ':'コ','ｻ':'サ','ｼ':'シ','ｽ':'ス','ｾ':'セ','ｿ':'ソ',
     'ﾀ':'タ','ﾁ':'チ','ﾂ':'ツ','ﾃ':'テ','ﾄ':'ト','ﾅ':'ナ','ﾆ':'ニ','ﾇ':'ヌ','ﾈ':'ネ','ﾉ':'ノ',
     'ﾊ':'ハ','ﾋ':'ヒ','ﾌ':'フ','ﾍ':'ヘ','ﾎ':'ホ','ﾏ':'マ','ﾐ':'ミ','ﾑ':'ム','ﾒ':'メ','ﾓ':'モ',
-    'ﾔ':'ヤ','ﾕ':'ユ','ﾖ':'ヨ','ｬ':'ヤ','ｭ':'ユ','ｮ':'ヨ','ﾗ':'ラ','ﾘ':'リ','ﾙ':'ル','ﾚ':'レ','ﾛ':'ロ',
-    'ﾜ':'ワ','ｦ':'ヲ','ﾝ':'ン','ｯ':'ツ','ﾞ':'','ﾟ':'','ｰ':'ー',
+    'ﾔ':'ヤ','ﾕ':'ユ','ﾖ':'ヨ','ｬ':'ャ','ｭ':'ュ','ｮ':'ョ','ﾗ':'ラ','ﾘ':'リ','ﾙ':'ル','ﾚ':'レ','ﾛ':'ロ',
+    'ﾜ':'ワ','ｦ':'ヲ','ﾝ':'ン','ｯ':'ッ','ｰ':'ー',
   };
-  return s.split('').map(c => h2f[c] || c).join('');
+  // 濁点・半濁点の合成表
+  const dakuten = { 'カ':'ガ','キ':'ギ','ク':'グ','ケ':'ゲ','コ':'ゴ','サ':'ザ','シ':'ジ','ス':'ズ','セ':'ゼ','ソ':'ゾ','タ':'ダ','チ':'ヂ','ツ':'ヅ','テ':'デ','ト':'ド','ハ':'バ','ヒ':'ビ','フ':'ブ','ヘ':'ベ','ホ':'ボ','ウ':'ヴ' };
+  const handakuten = { 'ハ':'パ','ヒ':'ピ','フ':'プ','ヘ':'ペ','ホ':'ポ' };
+  // 全角・半角の濁点もどちらも対応
+  const isDakuten = (c) => (c === 'ﾞ' || c === '゛' || c === '゙');
+  const isHandakuten = (c) => (c === 'ﾟ' || c === '゜' || c === '゚');
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const conv = h2f[c] || c;
+    const next = s[i + 1];
+    if (next && isDakuten(next) && dakuten[conv]) {
+      out.push(dakuten[conv]);
+      i++;
+    } else if (next && isHandakuten(next) && handakuten[conv]) {
+      out.push(handakuten[conv]);
+      i++;
+    } else if (isDakuten(c) || isHandakuten(c)) {
+      // 単独で残っている濁点/半濁点は破棄
+    } else {
+      out.push(conv);
+    }
+  }
+  return out.join('');
 }
 function vendorSimilarity(a, b) {
   if (!a || !b) return 0;
@@ -177,6 +201,74 @@ function vendorSimilarity(a, b) {
     if (common >= 3) return 0.5 + (common / minLen) * 0.3;
   }
   return 0;
+}
+
+// ─── 摘要(半角カナ) → 会社名（請求書の vendor 表記に近い形）を推定 ───
+// 例:
+//   "EBﾌﾘｺﾐ ｶ)ｸﾞﾛ-ﾊﾞﾙﾘｿﾞ-ﾄ"      → "グローバルリゾート"
+//   "ｱﾏﾉﾏﾈｼﾞﾒﾝﾄｻ-ﾋﾞｽ(ｶ"          → "アマノマネジメントサービス"
+//   "ｶﾌﾞｼｷｶﾞｲｼﾔﾏｴｶﾜｼﾖｳｶｲ"        → "マエカワショウカイ" → "前川商会"系
+//   "中国電力(401)"                → "中国電力"
+//   "ｸﾚｼﾞﾂﾄ ｾｿﾞﾝ"                  → "セゾン"
+//   "電気料 51606..."              → "電気料金"
+// 取引固有の数字／末尾フラグメントは除去。
+const TX_PREFIX_PATTERNS = [
+  /^EB\s*ﾌﾘ[ｺｶ]ﾐ\s*/i,
+  /^EB\s*ﾌﾘｶｴ\s*/i,
+  /^ﾌﾘｺﾐ\s*/i,
+  /^ﾌﾘｶｴ\s*/i,
+  /^ﾌﾘｺﾐﾀﾞｲｺｳ\s*/,
+  /^ｸﾚｼﾞﾂﾄ\s*/,
+  /^ｼﾞﾄﾞｳｿｳｷﾝ\s*/,
+  /^ｼﾞﾄﾞｳｿｳｷ\s*/,
+  /^WCP\(/i,
+];
+const COMPANY_FORM_PATTERNS = [
+  /ｶﾌﾞｼｷｶﾞｲｼﾔ/g, /ﾕｳｹﾞﾝｶﾞｲｼﾔ/g, /ｺﾞｳﾄﾞｳｶﾞｲｼﾔ/g,
+  /株式会社/g, /\(株\)/g, /㈱/g, /有限会社/g, /\(有\)/g, /㈲/g, /合同会社/g, /\(同\)/g,
+  /\(ｶ\)/g, /\(ｶ$/g, /^ｶ\)/g, /\(ｶ/g, /ｶ\)/g,
+  /\(ﾕ\)/g, /\(ﾕ$/g, /^ﾕ\)/g, /\(ﾕ/g, /ﾕ\)/g,
+];
+// 末尾に付くアカウント番号や金融機関固有の符号
+function stripTrailingNoise(s) {
+  if (!s) return s;
+  let out = s.trim();
+  // 末尾の長い数字列（4桁以上）+ それ以降を除去
+  out = out.replace(/\s+\d{4,}.*$/, '').trim();
+  // 末尾の「(123)」「(SMCC)」「(SBPS)」などのカッコ識別子も除去（先頭が数字 or 英数字）
+  out = out.replace(/\s*\([A-Za-z0-9\.]+\)\s*$/, '').trim();
+  out = out.replace(/\s*\(\d+\)\s*$/, '').trim();
+  return out;
+}
+function inferVendorFromDescription(desc) {
+  if (!desc) return '';
+  let s = String(desc).trim();
+  // 1) 先頭の取引種別タグを除去
+  for (const re of TX_PREFIX_PATTERNS) s = s.replace(re, '');
+  s = s.trim();
+  // 2) 末尾ノイズ除去
+  s = stripTrailingNoise(s);
+  // 3) 法人格表記を除去
+  for (const re of COMPANY_FORM_PATTERNS) s = s.replace(re, '');
+  // 4) 半角カナ→全角カナ
+  s = kanaNormalize(s);
+  // 5) スペース正規化
+  s = s.replace(/\s+/g, ' ').trim();
+  // 6) ハイフン類を統一
+  s = s.replace(/[\-‐‑‒–—−]/g, 'ー');
+  // 短すぎる場合は信頼できないので空文字
+  if (s.length < 2) return '';
+  return s;
+}
+
+// 既存ルール（VENDOR_SEEDS含む）から候補を取得し、見つからなければ汎用抽出を fallback
+async function predictVendorName(description, account = '') {
+  if (!description) return '';
+  // まず学習済みルールにヒットすれば素直に使う（VENDOR_SEEDS 含む）
+  const auto = await categorizer.autoCategorize(description, account);
+  if (auto.vendor_name) return auto.vendor_name;
+  // ヒットしなければ汎用抽出
+  return inferVendorFromDescription(description);
 }
 
 // ─── 請求書ステータスを再計算 ───
@@ -955,6 +1047,120 @@ router.get('/summary/annual', async (req, res) => {
   if (account) { sql += ' AND account = ?'; params.push(account); }
   sql += ' GROUP BY month, category ORDER BY year, month, category';
   res.json(await query(sql, params));
+});
+
+// ============================================================================
+// 摘要 → 支払先（会社名）の一括推定
+//   - 既存のルール(VENDOR_SEEDS含む) + 汎用抽出ロジックで vendor_name を埋める
+//   - body: { only_empty: true (default) }  trueなら未設定のみ／falseなら全件上書き
+// ============================================================================
+router.post('/bank/auto-vendor', async (req, res) => {
+  const only_empty = req.body?.only_empty !== false;
+
+  // 必要なら VENDOR_SEEDS をDBに流し込んでおく（既存ルールには影響しない）
+  try {
+    // /rules/seed-vendors の処理を直接呼ぶのは難しいので、ここでは省略し
+    // ユーザーが事前に「よく使う会社名をまとめて登録」ボタンを押した想定 +
+    // それでも空のものを汎用抽出で埋める
+  } catch (e) { /* noop */ }
+
+  let target;
+  if (only_empty) {
+    target = await query(`SELECT id, description, account FROM keiri_bank_transactions
+                          WHERE (vendor_name = '' OR vendor_name IS NULL)
+                            AND description IS NOT NULL AND description != ''`);
+  } else {
+    target = await query(`SELECT id, description, account FROM keiri_bank_transactions
+                          WHERE description IS NOT NULL AND description != ''`);
+  }
+
+  let updated = 0, byRule = 0, byInfer = 0;
+  for (const r of target) {
+    const auto = await categorizer.autoCategorize(r.description, r.account || '');
+    let vendor = auto.vendor_name || '';
+    if (vendor) {
+      byRule++;
+    } else {
+      vendor = inferVendorFromDescription(r.description);
+      if (vendor) byInfer++;
+    }
+    if (!vendor) continue;
+    await run('UPDATE keiri_bank_transactions SET vendor_name = ? WHERE id = ?', [vendor, r.id]);
+    updated++;
+  }
+  res.json({ ok: true, scanned: target.length, updated, by_rule: byRule, by_infer: byInfer });
+});
+
+// ============================================================================
+// 完全一致を自動消込
+//   - vendor_name と vendor が「類似度0.8以上」 かつ 金額がいずれかと完全一致
+//     のものを自動的に消込（プレビュー無しで確定）
+//   - body: { dry_run: false } trueなら結果のみ返し更新しない
+// ============================================================================
+router.post('/match/auto-clear', async (req, res) => {
+  const dry_run = !!req.body?.dry_run;
+  const bankTxs = await query(`SELECT * FROM keiri_bank_transactions
+                               WHERE withdrawal > 0 AND matched_invoice_id IS NULL AND is_cleared != '済'
+                                 AND vendor_name != '' AND vendor_name IS NOT NULL`);
+  const pendingInvoices = await query(`SELECT * FROM keiri_invoices WHERE status != '済'`);
+
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  const cleared = [];
+  const usedInvoiceField = new Set(); // 同一請求の同一フィールドを二重消込しない
+
+  for (const tx of bankTxs) {
+    // 金額一致する未消込の請求を探す
+    const cands = [];
+    for (const inv of pendingInvoices) {
+      const pairs = [
+        ['amount', inv.amount, inv.amount_cleared],
+        ['carry_1', inv.carry_1, inv.carry_1_cleared],
+        ['carry_2', inv.carry_2, inv.carry_2_cleared],
+        ['carry_3', inv.carry_3, inv.carry_3_cleared],
+      ];
+      for (const [field, v, c] of pairs) {
+        if (v > 0 && !c && v === tx.withdrawal) {
+          const key = inv.id + '|' + field;
+          if (usedInvoiceField.has(key)) continue;
+          const sim = vendorSimilarity(tx.vendor_name, inv.vendor);
+          if (sim >= 0.8) {
+            cands.push({ inv, field, sim });
+          }
+        }
+      }
+    }
+    if (cands.length === 0) continue;
+    // 一番類似度の高いものを採用、同点なら同じ施設/カテゴリ優先
+    cands.sort((a, b) => {
+      if (b.sim !== a.sim) return b.sim - a.sim;
+      const aFac = (a.inv.facility === tx.facility) ? 1 : 0;
+      const bFac = (b.inv.facility === tx.facility) ? 1 : 0;
+      if (bFac !== aFac) return bFac - aFac;
+      const aCat = categoriesMatch(tx.category, a.inv.category) ? 1 : 0;
+      const bCat = categoriesMatch(tx.category, b.inv.category) ? 1 : 0;
+      return bCat - aCat;
+    });
+    const pick = cands[0];
+    usedInvoiceField.add(pick.inv.id + '|' + pick.field);
+
+    if (!dry_run) {
+      const flag = flagMap[pick.field];
+      await run(`UPDATE keiri_invoices SET ${flag} = 1, cleared_at = CURRENT_TIMESTAMP, matched_bank_tx_id = ? WHERE id = ?`,
+        [tx.id, pick.inv.id]);
+      await recalcInvoiceStatus(pick.inv.id);
+      await run(`UPDATE keiri_bank_transactions SET is_cleared = '済', matched_invoice_id = ? WHERE id = ?`,
+        [pick.inv.id, tx.id]);
+      await run(`INSERT INTO keiri_clear_history (invoice_id, clear_type, cleared_at) VALUES (?, ?, CURRENT_TIMESTAMP)`,
+        [pick.inv.id, pick.field]);
+    }
+    cleared.push({
+      bank_tx_id: tx.id, invoice_id: pick.inv.id,
+      tx_date: tx.tx_date, withdrawal: tx.withdrawal,
+      bank_vendor: tx.vendor_name, inv_vendor: pick.inv.vendor,
+      similarity: Math.round(pick.sim * 100), clear_type: pick.field,
+    });
+  }
+  res.json({ ok: true, dry_run, cleared: cleared.length, examples: cleared.slice(0, 50) });
 });
 
 // ============================================================================
