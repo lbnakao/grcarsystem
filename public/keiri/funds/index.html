@@ -590,7 +590,20 @@ function setupSubTabs() {
 
 async function loadMasters() {
   const res = await fetch('/api/funds/masters');
+  if (res.status === 401 || res.status === 403) {
+    if (confirm('ログインが必要です。ログイン画面へ移動しますか?')) {
+      window.location.href = '/login.html';
+    }
+    throw new Error('未ログイン');
+  }
+  if (!res.ok) {
+    alert('マスタの取得に失敗しました（HTTP ' + res.status + '）');
+    throw new Error('masters fetch failed');
+  }
   state.masters = await res.json();
+  if (!state.masters.companies || state.masters.companies.length === 0) {
+    alert('会社マスタが空です。DBの初期化を確認してください。');
+  }
 }
 
 function buildCompanyTabs() {

@@ -995,8 +995,20 @@ router.post('/invoices/clear', async (req, res) => {
 });
 
 router.post('/invoices/undo', async (req, res) => {
-  const { id } = req.body;
-  await run(`UPDATE keiri_invoices SET amount_cleared=0, carry_1_cleared=0, carry_2_cleared=0, carry_3_cleared=0, status='未', cleared_at=NULL WHERE id = ?`, [id]);
+  const { id, clear_type } = req.body;
+  // 単一フィールドだけ取り消す場合
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  if (clear_type && flagMap[clear_type]) {
+    const flag = flagMap[clear_type];
+    await run(`UPDATE keiri_invoices SET ${flag}=0, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
+    await recalcInvoiceStatus(id);
+    // 紐付いていた通帳側の済も外す（念のため、該当invoiceに紐付いたものを未済へ）
+    await run(`UPDATE keiri_bank_transactions SET is_cleared = '', matched_invoice_id = NULL WHERE matched_invoice_id = ?`, [id]);
+    return res.json({ ok: true });
+  }
+  // 全フィールドをまとめて取消
+  await run(`UPDATE keiri_invoices SET amount_cleared=0, carry_1_cleared=0, carry_2_cleared=0, carry_3_cleared=0, status='未', cleared_at=NULL, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
+  await run(`UPDATE keiri_bank_transactions SET is_cleared = '', matched_invoice_id = NULL WHERE matched_invoice_id = ?`, [id]);
   res.json({ ok: true });
 });
 
@@ -1034,7 +1046,9 @@ router.get('/summary/monthly', async (req, res) => {
     const cat = r.category || '不明', vendor = r.vendor || '(空)', fac = r.facility || '不明';
     if (!groups[cat]) groups[cat] = {};
     if (!groups[cat][vendor]) groups[cat][vendor] = {};
-    groups[cat][vendor][fac] = (groups[cat][vendor][fac] || 0) + (r.total || 0);
+    // SUM() が文字列で返ってきても確実に数値で加算する
+    const totalNum = Number(r.total) || 0;
+    groups[cat][vendor][fac] = (groups[cat][vendor][fac] || 0) + totalNum;
   }
   res.json({ facilities, groups });
 });
