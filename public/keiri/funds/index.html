@@ -141,6 +141,8 @@
     <button class="sub-tab" data-pane="predicted">🔮 入金予測</button>
     <button class="sub-tab" data-pane="payable">📋 未払一覧</button>
     <button class="sub-tab" data-pane="card">💳 カード枠回復</button>
+    <button class="sub-tab" data-pane="affordability">⚖️ 支払可能性分析</button>
+    <button class="sub-tab" data-pane="comparison">📈 2025-2026比較</button>
     <button class="sub-tab" data-pane="ota">⚙️ OTA設定</button>
   </div>
 
@@ -335,6 +337,90 @@
         <table id="cardTable">
           <thead><tr>
             <th>支払日</th><th>カード会社</th><th>回復額</th><th>区分</th><th>備考</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 支払可能性分析 -->
+  <div id="pane-affordability" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>⚖️ 支払可能性分析（要件定義書 F-07）：</strong>
+      月別×優先度（高/中/低/月次/カード枠回復）の未払い額を集計し、入金（実績+予測）と比較して資金充足を判定します。<br>
+      <strong style="color:#d63031;">赤字＝不足</strong>の月は、優先度の低いものから翌月繰越／延長交渉／ファクタリング検討を推奨。
+    </div>
+    <div class="toolbar">
+      <label>年フィルタ</label>
+      <select id="affYear">
+        <option value="">全て</option>
+        <option value="2025">2025年</option>
+        <option value="2026" selected>2026年</option>
+        <option value="2027">2027年</option>
+      </select>
+      <div class="toolbar-spacer"></div>
+      <button class="btn btn-primary" onclick="loadAffordability()">更新</button>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h2>📊 月別×優先度クロス</h2></div>
+      <div class="table-wrap">
+        <table id="affTable">
+          <thead><tr>
+            <th>月</th>
+            <th class="num">高</th>
+            <th class="num">中</th>
+            <th class="num">低</th>
+            <th class="num">月次</th>
+            <th class="num">支出合計<br>(カード枠回復除く)</th>
+            <th class="num">入金実績</th>
+            <th class="num">予測入金</th>
+            <th class="num">使用可能<br>(実績+予測)</th>
+            <th class="num">過不足</th>
+            <th>判定</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2025-2026比較 -->
+  <div id="pane-comparison" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>📈 2025-2026比較（売上ベース）：</strong>
+      売上入力データから前年同月の比較を行い、<strong>充足率（当年÷前年）</strong>を表示します。
+      <strong style="color:#d63031;">80%以下</strong>は要対策、<strong style="color:#00b894;">100%以上</strong>は前年並み以上。<br>
+      ハイブリッド予測：実績が薄い月は「2025年実績 × 80%」で代替推定する想定。
+    </div>
+    <div class="toolbar">
+      <label>比較する年</label>
+      <select id="cmpPrev">
+        <option value="2024">2024年</option>
+        <option value="2025" selected>2025年</option>
+      </select>
+      <label>vs</label>
+      <select id="cmpCurr">
+        <option value="2026" selected>2026年</option>
+        <option value="2027">2027年</option>
+      </select>
+      <div class="toolbar-spacer"></div>
+      <button class="btn btn-primary" onclick="loadComparison()">更新</button>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>📊 売上 月別比較</h2>
+        <span class="count" id="cmpOverallRatio"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="cmpTable">
+          <thead><tr>
+            <th>月</th>
+            <th class="num" id="cmpPrevHead">前年</th>
+            <th class="num" id="cmpCurrHead">当年</th>
+            <th class="num">差額</th>
+            <th class="num">充足率</th>
+            <th>状況</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -676,9 +762,115 @@ async function refresh() {
     if (state.pane === 'payable')   await loadPayable();
     if (state.pane === 'card')      await loadCard();
     if (state.pane === 'ota')       await loadOta();
+    if (state.pane === 'affordability') await loadAffordability();
+    if (state.pane === 'comparison')    await loadComparison();
   } finally {
     ind.textContent = '';
   }
+}
+
+// ─── 支払可能性分析 ───
+async function loadAffordability() {
+  const yearEl = document.getElementById('affYear');
+  const year = yearEl ? yearEl.value : '2026';
+  const q = new URLSearchParams();
+  if (year) q.set('year', year);
+  // 会社フィルタは現状全社合算（companyIdを送らない）。将来UIでトグル可
+  const res = await fetch('/api/funds/payment-affordability?' + q);
+  if (!res.ok) { alert('支払可能性分析の取得に失敗しました'); return; }
+  const data = await res.json();
+  const tbody = document.querySelector('#affTable tbody');
+  if (!tbody) return;
+  if (!data.rows || data.rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#b2bec3;padding:20px;">データがありません（未払予定一覧が空です）</td></tr>';
+    return;
+  }
+  const yen = n => (Number(n) || 0).toLocaleString();
+  const sumByPrio = { '高': 0, '中': 0, '低': 0, '月次': 0 };
+  let totalOutstanding = 0, totalIncome = 0, totalPredicted = 0;
+  tbody.innerHTML = data.rows.map(r => {
+    const high = r.cells['高']?.outstanding || 0;
+    const mid = r.cells['中']?.outstanding || 0;
+    const low = r.cells['低']?.outstanding || 0;
+    const monthly = r.cells['月次']?.outstanding || 0;
+    sumByPrio['高'] += high; sumByPrio['中'] += mid; sumByPrio['低'] += low; sumByPrio['月次'] += monthly;
+    totalOutstanding += r.total_outstanding;
+    totalIncome += r.income; totalPredicted += r.predicted;
+    const judge = r.affordable
+      ? '<span style="color:#00b894;font-weight:700;">✓ 充足</span>'
+      : '<span style="color:#d63031;font-weight:700;">⚠ 不足</span>';
+    const shortfallColor = r.shortfall <= 0 ? '#00b894' : '#d63031';
+    return `<tr>
+      <td><strong>${r.ym}</strong></td>
+      <td class="num">${high ? yen(high) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num">${mid ? yen(mid) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num">${low ? yen(low) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num">${monthly ? yen(monthly) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num"><strong>${yen(r.total_outstanding)}</strong></td>
+      <td class="num">${yen(r.income)}</td>
+      <td class="num">${yen(r.predicted)}</td>
+      <td class="num"><strong>${yen(r.available)}</strong></td>
+      <td class="num" style="color:${shortfallColor};font-weight:700;">${r.shortfall > 0 ? '▲' : ''}${yen(Math.abs(r.shortfall))}</td>
+      <td>${judge}</td>
+    </tr>`;
+  }).join('') + `<tr style="background:#1F4E79;color:#fff;font-weight:700;">
+    <td>合計</td>
+    <td class="num">${yen(sumByPrio['高'])}</td>
+    <td class="num">${yen(sumByPrio['中'])}</td>
+    <td class="num">${yen(sumByPrio['低'])}</td>
+    <td class="num">${yen(sumByPrio['月次'])}</td>
+    <td class="num">${yen(totalOutstanding)}</td>
+    <td class="num">${yen(totalIncome)}</td>
+    <td class="num">${yen(totalPredicted)}</td>
+    <td class="num">${yen(totalIncome + totalPredicted)}</td>
+    <td class="num">${(totalIncome + totalPredicted - totalOutstanding) >= 0 ? '＋' : '▲'}${yen(Math.abs(totalIncome + totalPredicted - totalOutstanding))}</td>
+    <td></td>
+  </tr>`;
+}
+
+// ─── 2025-2026 売上比較 ───
+async function loadComparison() {
+  const prev = document.getElementById('cmpPrev').value;
+  const curr = document.getElementById('cmpCurr').value;
+  document.getElementById('cmpPrevHead').textContent = prev + '年';
+  document.getElementById('cmpCurrHead').textContent = curr + '年';
+  const res = await fetch('/api/funds/sales-comparison?years=' + prev + ',' + curr);
+  if (!res.ok) { alert('比較データの取得に失敗しました'); return; }
+  const data = await res.json();
+  const tbody = document.querySelector('#cmpTable tbody');
+  if (!tbody) return;
+  const yen = n => (Number(n) || 0).toLocaleString();
+  const fmtRatio = r => r === null ? '—' : (r * 100).toFixed(1) + '%';
+
+  tbody.innerHTML = data.comparison.map(r => {
+    const p = r.total[prev] || 0;
+    const c = r.total[curr] || 0;
+    const diff = c - p;
+    const ratio = r.ratio;
+    let status = '<span style="color:#ccc;">—</span>';
+    if (ratio !== null) {
+      if (ratio >= 1.0) status = '<span style="color:#00b894;font-weight:700;">✓ 前年並み以上</span>';
+      else if (ratio >= 0.8) status = '<span style="color:#f39c12;font-weight:700;">▼ 注意</span>';
+      else status = '<span style="color:#d63031;font-weight:700;">▼ 要対策</span>';
+    }
+    return `<tr>
+      <td><strong>${r.month}</strong></td>
+      <td class="num">${p ? yen(p) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num">${c ? yen(c) : '<span style="color:#ccc;">—</span>'}</td>
+      <td class="num" style="color:${diff >= 0 ? '#00b894' : '#d63031'};">${diff >= 0 ? '＋' : '▲'}${yen(Math.abs(diff))}</td>
+      <td class="num">${fmtRatio(ratio)}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('') + `<tr style="background:#1F4E79;color:#fff;font-weight:700;">
+    <td>年合計</td>
+    <td class="num">${yen(data.year_totals[prev])}</td>
+    <td class="num">${yen(data.year_totals[curr])}</td>
+    <td class="num">${data.year_totals[curr] - data.year_totals[prev] >= 0 ? '＋' : '▲'}${yen(Math.abs(data.year_totals[curr] - data.year_totals[prev]))}</td>
+    <td class="num">${fmtRatio(data.overall_ratio)}</td>
+    <td></td>
+  </tr>`;
+  document.getElementById('cmpOverallRatio').textContent =
+    data.overall_ratio !== null ? '通年充足率: ' + (data.overall_ratio * 100).toFixed(1) + '%' : '';
 }
 
 // ─── ダッシュボード ───
