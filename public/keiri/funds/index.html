@@ -1343,10 +1343,26 @@ document.getElementById('v10-file-input').addEventListener('change', async (e) =
 
   const s = preview.stats;
   const warns = preview.warnings || [];
+  const diag = preview.diagnostics;
   const warnTxt = warns.length > 0
     ? '\n\n⚠ 警告 (' + preview.total_warnings + '件):\n' + warns.slice(0, 5).map(w => ' ・' + w).join('\n')
         + (preview.total_warnings > 5 ? '\n ・(他' + (preview.total_warnings - 5) + '件)' : '')
     : '';
+  // 全件スキップ＆未マッチがある場合は、原因をユーザーに明示
+  const totalImport = s.income + s.sales + s.payable + s.card;
+  if (totalImport === 0 && s.skipped > 0) {
+    let msg = '⚠ 全行スキップされました（' + s.skipped + '件）。\n\nExcel内のマスタ値とDBのマスタが一致していません：\n';
+    if (diag) {
+      if (diag.unknown_companies.length > 0)  msg += '\n【Excelにあるが、DBにない会社】\n ・' + diag.unknown_companies.slice(0, 10).join('\n ・');
+      if (diag.unknown_facilities.length > 0) msg += '\n\n【Excelにあるが、DBにない施設】\n ・' + diag.unknown_facilities.slice(0, 10).join('\n ・');
+      if (diag.unknown_otas.length > 0)       msg += '\n\n【Excelにあるが、DBにないOTA】\n ・' + diag.unknown_otas.slice(0, 10).join('\n ・');
+      msg += '\n\n【DBに登録されている会社（参考）】\n ・' + (diag.known_companies.join('、') || '（なし）');
+      msg += '\n\n【DBに登録されている施設（参考）】\n ・' + (diag.known_facilities.slice(0,10).join('、') || '（なし）');
+      msg += '\n\n対処：マスタが空ならサーバーの初期化を再実行してください（管理者操作）。';
+    }
+    alert(msg);
+    return;
+  }
   const ok = confirm(
     '【社長Excel(v10) の取り込み確認】\n\n' +
     '以下の件数が反映されます：\n' +

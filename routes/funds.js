@@ -7,7 +7,7 @@
 const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
-const { query, run, runInsert, buildPredictedIncomes } = require('../db');
+const { query, run, runInsert, buildPredictedIncomes, seedFundsMasters, seedFundsV10 } = require('../db');
 
 const router = express.Router();
 router.use(express.json({ limit: '10mb' }));
@@ -605,6 +605,15 @@ router.post('/upload-v10', upload.single('file'), async (req, res) => {
     });
   }
 
+  // ── マスタ自動補充：本番DBが空の場合に備えて、毎回シードを試みる（空テーブルにだけ入る冪等処理） ──
+  try {
+    await seedFundsMasters();
+    await seedFundsV10();
+  } catch (e) {
+    // 既に値があれば UNIQUE 制約に当たるなど、エラーは握りつぶしてOK
+    console.warn('[upload-v10] master seed skip:', e.message);
+  }
+
   // ── マスタ取得 ──
   const companies = {};
   (await query("SELECT id, code, name FROM funds_companies")).forEach(r => {
@@ -624,6 +633,23 @@ router.post('/upload-v10', upload.single('file'), async (req, res) => {
   (await query("SELECT id, name FROM funds_fund_items")).forEach(r => fundItems[r.name] = r.id);
   const accountCategories = {};
   (await query("SELECT id, name FROM funds_account_categories")).forEach(r => accountCategories[r.name] = r.id);
+
+  // マスタが空ならエラー（自動補充も失敗した状況）
+  const masterCounts = {
+    companies: Object.keys(companies).length / 2,  // code+name両方で登録されているので半分
+    properties: Object.keys(properties).length,
+    facilities: Object.keys(facilities).length,
+    ota_channels: Object.keys(otaChannels).length,
+    fund_items: Object.keys(fundItems).length,
+    account_categories: Object.keys(accountCategories).length,
+  };
+  if (masterCounts.companies === 0 || masterCounts.facilities === 0 || masterCounts.ota_channels === 0) {
+    return res.status(500).json({
+      error: 'マスタデータが空です。サーバーの初期化に問題があります。',
+      master_counts: masterCounts,
+      hint: 'サーバー管理者にお問い合わせください。会社マスタ / 施設マスタ / OTAマスタが初期化されていません。',
+    });
+  }
 
   const stats = { income: 0, sales: 0, predicted: 0, payable: 0, card: 0, skipped: 0 };
   const warnings = [];
@@ -762,7 +788,69 @@ router.post('/upload-v10', upload.single('file'), async (req, res) => {
     stats.payable++;
   }
 
-  res.json({ ok: true, dry_run: dryRun, stats, warnings: warnings.slice(0, 20), total_warnings: warnings.length });
+  // 未マッチが大量にあるときの診断ヘルプ
+  let diagnostics = null;
+  if (stats.skipped > 0) {
+    // 警告から会社/施設/OTA別に集計
+    const unknownsByType = { '会社': new Set(), '施設': new Set(), 'OTA': new Set() };
+    for (const w of warnings) {
+      const m = w.match(/不明な(会社|施設|OTA)「(.+)」/);
+      if (m) unknownsByType[m[1]].add(m[2]);
+    }
+    diagnostics = {
+      master_counts: masterCounts,
+      unknown_companies: [...unknownsByType['会社']],
+      unknown_facilities: [...unknownsByType['施設']],
+      unknown_otas: [...unknownsByType['OTA']],
+      known_companies: Object.keys(companies).filter(k => !/^[a-z_]+$/.test(k)).slice(0, 10),
+      known_facilities: Object.keys(facilities).slice(0, 20),
+      known_otas: Object.keys(otaChannels).slice(0, 20),
+    };
+  }
+  res.json({
+    ok: true, dry_run: dryRun, stats,
+    warnings: warnings.slice(0, 20),
+    total_warnings: warnings.length,
+    diagnostics,
+  });
+});
+
+// ============================================================================
+// マスタ診断（管理者向け）
+// ============================================================================
+router.get('/diagnostics', async (req, res) => {
+  const companies = await query("SELECT id, code, name FROM funds_companies ORDER BY sort_order, id");
+  const properties = await query("SELECT id, name FROM funds_properties ORDER BY sort_order, id");
+  const facilities = await query("SELECT id, name, dept FROM funds_facilities ORDER BY sort_order, id");
+  const otas = await query("SELECT id, name FROM funds_ota_channels ORDER BY sort_order, id");
+  const items = await query("SELECT id, name, kind FROM funds_fund_items ORDER BY sort_order, id");
+  const accounts = await query("SELECT id, name FROM funds_account_categories ORDER BY sort_order, id");
+  res.json({
+    counts: {
+      companies: companies.length,
+      properties: properties.length,
+      facilities: facilities.length,
+      ota_channels: otas.length,
+      fund_items: items.length,
+      account_categories: accounts.length,
+    },
+    companies, properties, facilities, ota_channels: otas, fund_items: items, account_categories: accounts,
+  });
+});
+
+// ============================================================================
+// マスタ再シード（強制）— 管理者向け
+//   マスタが空の場合に強制的に初期データを投入する。既に値がある場合は変化なし。
+// ============================================================================
+router.post('/reseed-masters', async (req, res) => {
+  try {
+    await seedFundsMasters();
+    await seedFundsV10();
+    const r = await query("SELECT (SELECT COUNT(*) FROM funds_companies) AS companies, (SELECT COUNT(*) FROM funds_facilities) AS facilities, (SELECT COUNT(*) FROM funds_ota_channels) AS otas, (SELECT COUNT(*) FROM funds_fund_items) AS fund_items, (SELECT COUNT(*) FROM funds_account_categories) AS accounts");
+    res.json({ ok: true, counts: r[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

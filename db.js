@@ -60,6 +60,13 @@ function convertPlaceholders(sql) {
   return sql.replace(/\?/g, () => `$${++idx}`);
 }
 
+// pg ドライバは COUNT(*) を bigint = 文字列で返す。Number() で正規化する
+function asInt(v) {
+  if (v === null || v === undefined) return 0;
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 // ===== 初期化 =====
 
 async function initDatabase() {
@@ -465,7 +472,7 @@ async function seedFundsMasters() {
     { code: 'coco_uni',  name: 'ココ・ユニバース', is_funds_target: 0, color: '#d63031', sort_order: 6 },
   ];
   const cCount = await query("SELECT COUNT(*) as c FROM funds_companies");
-  if (cCount[0].c === 0) {
+  if (Number(cCount[0].c) === 0) {
     for (const c of companies) {
       await run("INSERT INTO funds_companies (code, name, is_funds_target, color, sort_order) VALUES (?, ?, ?, ?, ?)",
         [c.code, c.name, c.is_funds_target, c.color, c.sort_order]);
@@ -474,7 +481,7 @@ async function seedFundsMasters() {
 
   // 物件（引継ぎ書2.4）— 既存マッピング
   const pCount = await query("SELECT COUNT(*) as c FROM funds_properties");
-  if (pCount[0].c === 0) {
+  if (Number(pCount[0].c) === 0) {
     const compRows = await query("SELECT id, code FROM funds_companies");
     const byCode = {};
     compRows.forEach(r => { byCode[r.code] = r.id; });
@@ -497,7 +504,7 @@ async function seedFundsMasters() {
 
   // 資金繰り項目（引継ぎ書3.6・6.4：12ヶ月レイアウトの行構成）
   const fiCount = await query("SELECT COUNT(*) as c FROM funds_fund_items");
-  if (fiCount[0].c === 0) {
+  if (Number(fiCount[0].c) === 0) {
     const items = [
       // 収入
       { name: '現金売上',   kind: '収入', sort_order: 1 },
@@ -524,7 +531,7 @@ async function seedFundsMasters() {
 
   // 勘定科目マスタ（→ 資金繰り項目にマッピング）
   const acCount = await query("SELECT COUNT(*) as c FROM funds_account_categories");
-  if (acCount[0].c === 0) {
+  if (Number(acCount[0].c) === 0) {
     const fiRows = await query("SELECT id, name FROM funds_fund_items");
     const fiByName = {};
     fiRows.forEach(r => { fiByName[r.name] = r.id; });
@@ -560,7 +567,7 @@ async function seedFundsDemoData() {
   const incCount = await query("SELECT COUNT(*) as c FROM funds_income_entries");
   const payCount = await query("SELECT COUNT(*) as c FROM funds_payable_entries");
   const recCount = await query("SELECT COUNT(*) as c FROM funds_card_recoveries");
-  if (incCount[0].c > 0 || payCount[0].c > 0 || recCount[0].c > 0) return;
+  if (Number(incCount[0].c) > 0 || Number(payCount[0].c) > 0 || Number(recCount[0].c) > 0) return;
 
   const comp = {};
   (await query("SELECT id, code FROM funds_companies")).forEach(r => comp[r.code] = r.id);
@@ -653,7 +660,7 @@ async function seedFundsV10() {
 
   // 施設（売上計上単位・引継ぎ書2.4）
   const facCount = await query("SELECT COUNT(*) as c FROM funds_facilities");
-  if (facCount[0].c === 0) {
+  if (Number(facCount[0].c) === 0) {
     const facilities = [
       // リゾート（ホテル）
       { name: 'de Lune',           dept: 'ホテル',   code: 'resort',    sort_order: 1 },
@@ -687,7 +694,7 @@ async function seedFundsV10() {
 
   // OTA／決済（引継ぎ書5.2）
   const otaCount = await query("SELECT COUNT(*) as c FROM funds_ota_channels");
-  if (otaCount[0].c === 0) {
+  if (Number(otaCount[0].c) === 0) {
     const otas = [
       { name: 'Booking',     cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 15, d_nxt2: null, sort: 1 },
       { name: '楽天',        cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 2 },
@@ -715,7 +722,7 @@ async function seedFundsV10() {
 
   // 売上＋入金予測 サンプル（4-5月分） — 正式データ移行のため無効化
   const salesCount = await query("SELECT COUNT(*) as c FROM funds_sales_entries");
-  if (false && salesCount[0].c === 0) {
+  if (false && Number(salesCount[0].c) === 0) {
     const fac = {};
     (await query("SELECT id, name FROM funds_facilities")).forEach(r => fac[r.name] = r.id);
     const ota = {};
@@ -945,7 +952,7 @@ async function createKeiriTables() {
 
   // 初期データ（空の場合のみ）
   const bankAccCount = await query("SELECT COUNT(*) as c FROM keiri_bank_accounts");
-  if (bankAccCount[0].c === 0) {
+  if (Number(bankAccCount[0].c) === 0) {
     await run("INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)",
       ['リゾート親', 'リゾート親口座', 1]);
     await run("INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)",
@@ -1076,4 +1083,4 @@ async function seedData() {
   }
 }
 
-module.exports = { initDatabase, query, run, runInsert, buildPredictedIncomes };
+module.exports = { initDatabase, query, run, runInsert, buildPredictedIncomes, seedFundsMasters, seedFundsV10 };
