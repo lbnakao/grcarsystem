@@ -280,6 +280,14 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 
 <div class="main">
 
+  <!-- ─── ページの目的を明示するバナー ─── -->
+  <div style="background:#eef5ff;border-left:4px solid #1F4E79;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#2d3436;">
+    <strong style="color:#1F4E79;">📒 このページ（GR経理）の対象データ</strong><br>
+    ・<strong>通帳</strong>：銀行通帳のExcel/CSV（「勘定日／出金／入金／残高／摘要」のカラムを持つもの。例：「親通帳」「グリーンシャワー通帳」など）<br>
+    ・<strong>請求書</strong>：月次請求額のExcel（シート=エンティティ別、「概要／勘定科目／金額」を持つもの。例：「R8.5月（4月分）請求額.xlsx」）<br>
+    ・⚠ <strong>社長のExcel（全社統合_資金管理_v10）や月別経費一覧（_2026年月別経費一覧）はここで読み込めません</strong>。右上の「💴 資金管理（DEMO）」画面でフォームから手入力してください。誤って投入した場合は400エラーになりブロックします。
+  </div>
+
   <!-- ============================================================ -->
   <!-- Tab 1: 通帳データ -->
   <!-- ============================================================ -->
@@ -1156,7 +1164,14 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
   try {
     const res = await fetch('/api/keiri/bank/upload', { method: 'POST', body: fd });
     const data = await res.json();
-    if (data.error) { showToast(data.error, 'error'); return; }
+    if (data.error) {
+      if (data.incompatible) {
+        alert('⚠ ' + data.error + '\n\n（検出: ' + (data.incompatible.detail || '') + '）');
+      } else {
+        showToast(data.error, 'error');
+      }
+      return;
+    }
     pendingUpload = data;
     showUploadPreview(data);
   } catch (err) {
@@ -1945,7 +1960,14 @@ document.getElementById('invoice-file-input').addEventListener('change', async (
   formData.append('file', file);
 
   const res = await api('/api/keiri/invoices/upload', { method: 'POST', body: formData });
-  if (res.error) { showToast(res.error, 'error'); return; }
+  if (res.error) {
+    if (res.incompatible) {
+      alert('⚠ ' + res.error + '\n\n（検出: ' + (res.incompatible.detail || '') + '）');
+    } else {
+      showToast(res.error, 'error');
+    }
+    return;
+  }
 
   pendingInvoiceUpload = res;
 

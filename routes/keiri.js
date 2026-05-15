@@ -371,6 +371,48 @@ const CATEGORIES = [
 router.get('/categories', (req, res) => res.json(CATEGORIES));
 
 // ============================================================================
+// アップロード前のファイル形式判定（社長Excel v8/v10 を誤投入から守るガード）
+// ============================================================================
+// 社長のExcel (全社統合_資金管理_v10) に特徴的なシート名たち
+const PRESIDENT_EXCEL_SHEETS = [
+  '全社合算サマリー', '全社月次サマリー',
+  'マスター_物件', 'マスター_勘定科目', 'マスター_OTA',
+  '入金入力', '売上入力', '入金予測', '未払予定一覧',
+  '日次_レジデンス', '日次_リゾート', '日次_モーテル', '日次_ザック',
+  '日次_ワールド・レイ', '日次_ココ・ユニバース',
+  '資金繰り_全社合計', '資金繰り_レジデンス', '資金繰り_リゾート・モーテル', '資金繰り_ザック',
+];
+// 月次経費一覧（_2026年月別経費一覧【...】.xlsx）にも経理側のアップロード対象ではない
+const EXPENSE_SUMMARY_SHEETS = ['年間'];
+const EXPENSE_SUMMARY_FILENAME_RE = /経費一覧|月別経費/;
+
+function detectIncompatibleExcel(workbook, filename) {
+  const names = workbook.SheetNames || [];
+  const matchedPresident = PRESIDENT_EXCEL_SHEETS.filter(s => names.includes(s));
+  if (matchedPresident.length >= 2) {
+    return {
+      kind: 'president',
+      detail: `「${matchedPresident.slice(0,3).join('」「')}」など${matchedPresident.length}個の独自シートを検出`,
+      hint: 'このファイルは『社長Excel(全社統合_資金管理_v10)』形式です。経理ページの「通帳」「請求書」アップロード対象外なので、内容は資金管理（DEMO）画面のフォームから手入力してください。',
+    };
+  }
+  // _2026年月別経費一覧【...】.xlsx 系：月毎の集計表で、通帳でも請求書でもない
+  if ((EXPENSE_SUMMARY_FILENAME_RE.test(filename || '')) ||
+      (names.includes('年間') && (names.includes('1月') || names.includes('2月')))) {
+    // ただし通帳系（〜【CSV】）シートを含むなら除外（通帳のExcelだから）
+    const hasCsv = names.some(n => /【CSV】|【csv】/i.test(n));
+    if (!hasCsv) {
+      return {
+        kind: 'expense_summary',
+        detail: `「年間」+ 月別シートが並ぶ集計表形式`,
+        hint: 'このファイルは「月別経費一覧」の集計表で、通帳でも月次請求書(R8.◯月)でもありません。元データ（通帳CSV/Excel、請求書Excel）の方をアップロードしてください。',
+      };
+    }
+  }
+  return null;
+}
+
+// ============================================================================
 // 通帳アップロード
 // ============================================================================
 router.post('/bank/upload', upload.single('file'), async (req, res) => {
@@ -385,6 +427,14 @@ router.post('/bank/upload', upload.single('file'), async (req, res) => {
   try {
     if (isExcel) {
       const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+      // 互換性のないファイル（社長Excel v8/v10 など）を検出してガード
+      const incompat = detectIncompatibleExcel(wb, filename);
+      if (incompat) {
+        return res.status(400).json({
+          error: `通帳アップロードには使えないファイル形式です（${incompat.kind === 'president' ? '社長Excel v8/v10' : '月別経費一覧'}）。${incompat.hint}`,
+          incompatible: incompat,
+        });
+      }
       const csvSheets = wb.SheetNames.filter(n => n.includes('CSV') || n.includes('csv'));
       const sheetsToProcess = csvSheets.length > 0 ? csvSheets : wb.SheetNames;
       const isParentLedger = csvSheets.length > 0;
@@ -820,6 +870,14 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
 
   try {
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    // 互換性のないファイル（社長Excel v8/v10 や月別経費一覧）を検出してガード
+    const incompat = detectIncompatibleExcel(wb, filename);
+    if (incompat) {
+      return res.status(400).json({
+        error: `請求書アップロードには使えないファイル形式です（${incompat.kind === 'president' ? '社長Excel v8/v10' : '月別経費一覧'}）。${incompat.hint}`,
+        incompatible: incompat,
+      });
+    }
     const allInvoices = [];
     let year = defaultYear;
     for (const sheetName of wb.SheetNames) {
