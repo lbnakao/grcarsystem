@@ -278,8 +278,533 @@ async function migrateSchema() {
   // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
   await createKeiriTables();
 
+  // 資金管理（社長Excel v8 のアプリ化）用テーブル群
+  await createFundsTables();
+
   // 組織体制図ハブの編集差分テーブル
   await createOrgChartTables();
+}
+
+// ===== 資金管理モジュール用テーブル =====
+async function createFundsTables() {
+  const autoIncPK = (mode === 'pg') ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const nowDefault = (mode === 'pg') ? 'TIMESTAMP DEFAULT NOW()' : "TEXT DEFAULT (datetime('now','localtime'))";
+
+  // 会社マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_companies (
+      id ${autoIncPK},
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      is_funds_target INTEGER DEFAULT 1,
+      color TEXT DEFAULT '#1F4E79',
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 物件マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_properties (
+      id ${autoIncPK},
+      name TEXT NOT NULL,
+      company_id INTEGER NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 資金繰り項目マスタ（収入/支出/財務）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_fund_items (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 勘定科目マスタ（→ 資金繰り項目にマッピング）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_account_categories (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      fund_item_id INTEGER,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 入金記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_income_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      entry_date TEXT NOT NULL,
+      item TEXT,
+      fund_item_id INTEGER,
+      amount INTEGER DEFAULT 0,
+      status TEXT DEFAULT '予測',
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // 未払／支出記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_payable_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      property_id INTEGER,
+      kind TEXT DEFAULT '月次予定',
+      summary TEXT,
+      account_category_id INTEGER,
+      due_date TEXT,
+      billto TEXT DEFAULT '',
+      current_amount INTEGER DEFAULT 0,
+      carry_1m INTEGER DEFAULT 0,
+      carry_2m INTEGER DEFAULT 0,
+      carry_3m_plus INTEGER DEFAULT 0,
+      priority TEXT DEFAULT '月次',
+      plan_date TEXT,
+      plan_amount INTEGER DEFAULT 0,
+      pay_status TEXT DEFAULT '',
+      invoice_path TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // カード枠回復記録
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_card_recoveries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      pay_date TEXT NOT NULL,
+      card_name TEXT DEFAULT '',
+      amount INTEGER DEFAULT 0,
+      kind TEXT DEFAULT '通常',
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault}
+    )
+  `);
+
+  // ===== v10 で追加：施設／OTA／売上／入金予測 =====
+
+  // 施設マスタ（売上計上単位・17施設）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_facilities (
+      id ${autoIncPK},
+      name TEXT NOT NULL,
+      dept TEXT DEFAULT '',
+      company_id INTEGER NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // OTA／決済サイクルマスタ（売上計上月に対する入金タイミング）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_ota_channels (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      cur_ratio INTEGER DEFAULT 0,
+      nxt_ratio INTEGER DEFAULT 0,
+      nxt2_ratio INTEGER DEFAULT 0,
+      pay_day_cur INTEGER,
+      pay_day_nxt INTEGER,
+      pay_day_nxt2 INTEGER,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 売上入力（OTA別／施設別／月別）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_sales_entries (
+      id ${autoIncPK},
+      company_id INTEGER NOT NULL,
+      facility_id INTEGER NOT NULL,
+      ota_channel_id INTEGER NOT NULL,
+      year_month TEXT NOT NULL,
+      amount INTEGER DEFAULT 0,
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault},
+      updated_at ${nowDefault}
+    )
+  `);
+
+  // 入金予測（売上1行→最大3行展開／日次CFの入金へ加算）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_predicted_incomes (
+      id ${autoIncPK},
+      sales_entry_id INTEGER NOT NULL,
+      company_id INTEGER NOT NULL,
+      facility_id INTEGER NOT NULL,
+      ota_channel_id INTEGER NOT NULL,
+      expected_date TEXT,
+      amount INTEGER DEFAULT 0,
+      period TEXT,
+      created_at ${nowDefault}
+    )
+  `);
+
+  // 初期シード（マスタのみ。デモデータは投入しない）
+  await seedFundsMasters();
+  // await seedFundsDemoData();  // 正式データ移行のため無効化
+  await seedFundsV10();
+}
+
+async function seedFundsMasters() {
+  // 会社（引継ぎ書2.3）
+  const companies = [
+    { code: 'residence', name: 'レジデンス', is_funds_target: 1, color: '#1F4E79', sort_order: 1 },
+    { code: 'resort',    name: 'リゾート',   is_funds_target: 1, color: '#0984e3', sort_order: 2 },
+    { code: 'motel',     name: 'モーテル',   is_funds_target: 1, color: '#00b894', sort_order: 3 },
+    { code: 'zack',      name: 'ザック',     is_funds_target: 1, color: '#e17055', sort_order: 4 },
+    { code: 'world_ray', name: 'ワールド・レイ',   is_funds_target: 0, color: '#6c5ce7', sort_order: 5 },
+    { code: 'coco_uni',  name: 'ココ・ユニバース', is_funds_target: 0, color: '#d63031', sort_order: 6 },
+  ];
+  const cCount = await query("SELECT COUNT(*) as c FROM funds_companies");
+  if (cCount[0].c === 0) {
+    for (const c of companies) {
+      await run("INSERT INTO funds_companies (code, name, is_funds_target, color, sort_order) VALUES (?, ?, ?, ?, ?)",
+        [c.code, c.name, c.is_funds_target, c.color, c.sort_order]);
+    }
+  }
+
+  // 物件（引継ぎ書2.4）— 既存マッピング
+  const pCount = await query("SELECT COUNT(*) as c FROM funds_properties");
+  if (pCount[0].c === 0) {
+    const compRows = await query("SELECT id, code FROM funds_companies");
+    const byCode = {};
+    compRows.forEach(r => { byCode[r.code] = r.id; });
+    const props = [
+      { name: 'リゾート',        code: 'resort',    sort_order: 1 },
+      { name: 'ほうらい',        code: 'resort',    sort_order: 2 },
+      { name: 'フォレスト',      code: 'resort',    sort_order: 3 },
+      { name: 'グリーンシャワー',code: 'resort',    sort_order: 4 },
+      { name: '周防大島',        code: 'resort',    sort_order: 5 },
+      { name: 'モーテル',        code: 'motel',     sort_order: 6 },
+      { name: 'レジデンス',      code: 'residence', sort_order: 7 },
+      { name: 'ココユニバース',  code: 'zack',      sort_order: 8 },
+    ];
+    for (const p of props) {
+      const cid = byCode[p.code];
+      if (cid) await run("INSERT INTO funds_properties (name, company_id, sort_order) VALUES (?, ?, ?)",
+        [p.name, cid, p.sort_order]);
+    }
+  }
+
+  // 資金繰り項目（引継ぎ書3.6・6.4：12ヶ月レイアウトの行構成）
+  const fiCount = await query("SELECT COUNT(*) as c FROM funds_fund_items");
+  if (fiCount[0].c === 0) {
+    const items = [
+      // 収入
+      { name: '現金売上',   kind: '収入', sort_order: 1 },
+      { name: '売掛金回収', kind: '収入', sort_order: 2 },
+      { name: '手形入金',   kind: '収入', sort_order: 3 },
+      { name: 'その他収入', kind: '収入', sort_order: 4 },
+      // 支出
+      { name: '買掛金支払', kind: '支出', sort_order: 11 },
+      { name: '人件費',     kind: '支出', sort_order: 12 },
+      { name: '地代家賃',   kind: '支出', sort_order: 13 },
+      { name: '水道光熱費', kind: '支出', sort_order: 14 },
+      { name: '租税公課',   kind: '支出', sort_order: 15 },
+      { name: '支払利息',   kind: '支出', sort_order: 16 },
+      { name: 'その他経費', kind: '支出', sort_order: 17 },
+      // 財務
+      { name: '借入金',     kind: '財務', sort_order: 21 },
+      { name: '設備売却',   kind: '財務', sort_order: 22 },
+    ];
+    for (const it of items) {
+      await run("INSERT INTO funds_fund_items (name, kind, sort_order) VALUES (?, ?, ?)",
+        [it.name, it.kind, it.sort_order]);
+    }
+  }
+
+  // 勘定科目マスタ（→ 資金繰り項目にマッピング）
+  const acCount = await query("SELECT COUNT(*) as c FROM funds_account_categories");
+  if (acCount[0].c === 0) {
+    const fiRows = await query("SELECT id, name FROM funds_fund_items");
+    const fiByName = {};
+    fiRows.forEach(r => { fiByName[r.name] = r.id; });
+    const accs = [
+      { name: '仕入',           fi: '買掛金支払', sort_order: 1 },
+      { name: '給料手当',       fi: '人件費',     sort_order: 2 },
+      { name: '法定福利費',     fi: '人件費',     sort_order: 3 },
+      { name: '地代家賃',       fi: '地代家賃',   sort_order: 4 },
+      { name: '水道光熱費',     fi: '水道光熱費', sort_order: 5 },
+      { name: '通信費',         fi: 'その他経費', sort_order: 6 },
+      { name: '消耗品費',       fi: 'その他経費', sort_order: 7 },
+      { name: '修繕費',         fi: 'その他経費', sort_order: 8 },
+      { name: '広告宣伝費',     fi: 'その他経費', sort_order: 9 },
+      { name: '交際費',         fi: 'その他経費', sort_order: 10 },
+      { name: '旅費交通費',     fi: 'その他経費', sort_order: 11 },
+      { name: '車両費',         fi: 'その他経費', sort_order: 12 },
+      { name: '租税公課',       fi: '租税公課',   sort_order: 13 },
+      { name: '支払手数料',     fi: 'その他経費', sort_order: 14 },
+      { name: '支払利息',       fi: '支払利息',   sort_order: 15 },
+      { name: '減価償却費',     fi: 'その他経費', sort_order: 16 },
+      { name: '保険料',         fi: 'その他経費', sort_order: 17 },
+      { name: '雑費',           fi: 'その他経費', sort_order: 18 },
+    ];
+    for (const a of accs) {
+      await run("INSERT INTO funds_account_categories (name, fund_item_id, sort_order) VALUES (?, ?, ?)",
+        [a.name, fiByName[a.fi] || null, a.sort_order]);
+    }
+  }
+}
+
+// 5月のデモデータを投入（既にデータがあるときはスキップ）
+async function seedFundsDemoData() {
+  const incCount = await query("SELECT COUNT(*) as c FROM funds_income_entries");
+  const payCount = await query("SELECT COUNT(*) as c FROM funds_payable_entries");
+  const recCount = await query("SELECT COUNT(*) as c FROM funds_card_recoveries");
+  if (incCount[0].c > 0 || payCount[0].c > 0 || recCount[0].c > 0) return;
+
+  const comp = {};
+  (await query("SELECT id, code FROM funds_companies")).forEach(r => comp[r.code] = r.id);
+  const props = {};
+  (await query("SELECT p.id, p.name, c.code AS company_code FROM funds_properties p JOIN funds_companies c ON c.id = p.company_id"))
+    .forEach(r => props[r.name] = r.id);
+  const fi = {};
+  (await query("SELECT id, name FROM funds_fund_items")).forEach(r => fi[r.name] = r.id);
+  const ac = {};
+  (await query("SELECT id, name FROM funds_account_categories")).forEach(r => ac[r.name] = r.id);
+
+  // ─── 入金 ───
+  const incomeSeed = [
+    // レジデンス
+    { company: 'residence', entry_date: '2026-05-01', item: '5月分家賃（テナントA）', fi: '売掛金回収', amount: 1800000, status: '確認済' },
+    { company: 'residence', entry_date: '2026-05-10', item: '5月分家賃（テナントB）', fi: '売掛金回収', amount: 1200000, status: '確認済' },
+    { company: 'residence', entry_date: '2026-05-25', item: '駐車場収入',           fi: '現金売上',   amount:  350000, status: '確認済' },
+    // リゾート
+    { company: 'resort',    entry_date: '2026-05-03', item: '宿泊売上（GW）',       fi: '現金売上',   amount: 4200000, status: '確認済' },
+    { company: 'resort',    entry_date: '2026-05-18', item: '宿泊売上（中旬）',     fi: '現金売上',   amount: 1850000, status: '確認済' },
+    { company: 'resort',    entry_date: '2026-05-28', item: '法人団体予約入金',     fi: '売掛金回収', amount:  780000, status: '未確認' },
+    // モーテル
+    { company: 'motel',     entry_date: '2026-05-05', item: '宿泊売上（前半）',     fi: '現金売上',   amount: 1600000, status: '確認済' },
+    { company: 'motel',     entry_date: '2026-05-22', item: '宿泊売上（後半）',     fi: '現金売上',   amount: 1400000, status: '確認済' },
+    // ザック
+    { company: 'zack',      entry_date: '2026-05-12', item: '管理委託料',           fi: '売掛金回収', amount:  500000, status: '確認済' },
+    { company: 'zack',      entry_date: '2026-05-30', item: '清掃業務収入',         fi: 'その他収入', amount:  280000, status: '予測' },
+  ];
+  for (const s of incomeSeed) {
+    await run(`INSERT INTO funds_income_entries (company_id, entry_date, item, fund_item_id, amount, status, memo)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [comp[s.company], s.entry_date, s.item, fi[s.fi] || null, s.amount, s.status, '']);
+  }
+
+  // ─── 未払／支出 ───
+  const payableSeed = [
+    // レジデンス
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '○○ガス（5月分）',        ac: '水道光熱費', due: '2026-05-31', plan: '2026-05-28', amount: 180000, priority: '月次' },
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '清掃委託料（5月分）',    ac: '雑費',       due: '2026-05-31', plan: '2026-05-31', amount: 320000, priority: '月次' },
+    { company: 'residence', property: 'レジデンス', kind: '未払繰越', summary: '修繕費（漏水対応）',     ac: '修繕費',     due: '2026-04-30', plan: '2026-05-15', amount: 450000, priority: '低', carry_1m: 450000 },
+    { company: 'residence', property: 'レジデンス', kind: '月次予定', summary: '建物管理委託費',         ac: '雑費',       due: '2026-05-25', plan: '2026-05-25', amount: 280000, priority: '月次' },
+    // リゾート
+    { company: 'resort',    property: 'リゾート',         kind: '月次予定', summary: '食材仕入（A社）',         ac: '仕入',       due: '2026-05-20', plan: '2026-05-20', amount: 1200000, priority: '月次' },
+    { company: 'resort',    property: 'リゾート',         kind: '月次予定', summary: 'リネン業者',             ac: '雑費',       due: '2026-05-25', plan: '2026-05-25', amount:  450000, priority: '月次' },
+    { company: 'resort',    property: 'ほうらい',         kind: '未払繰越', summary: '燃料費（前々月分）',     ac: '水道光熱費', due: '2026-03-31', plan: '2026-05-10', amount:  220000, priority: '中', carry_2m: 220000 },
+    { company: 'resort',    property: 'フォレスト',       kind: '月次予定', summary: 'パート給与（5月分）',     ac: '給料手当',   due: '2026-05-25', plan: '2026-05-25', amount: 1800000, priority: '月次' },
+    { company: 'resort',    property: 'グリーンシャワー', kind: '月次予定', summary: '電気代（中国電力）',     ac: '水道光熱費', due: '2026-05-31', plan: '2026-05-31', amount:  680000, priority: '月次' },
+    // モーテル
+    { company: 'motel',     property: 'モーテル', kind: '月次予定', summary: '備品仕入',                 ac: '消耗品費',   due: '2026-05-15', plan: '2026-05-15', amount: 180000, priority: '月次' },
+    { company: 'motel',     property: 'モーテル', kind: '月次予定', summary: '清掃用洗剤',               ac: '消耗品費',   due: '2026-05-20', plan: '2026-05-20', amount:  85000, priority: '月次' },
+    { company: 'motel',     property: 'モーテル', kind: '未払繰越', summary: '看板修理代（滞留）',       ac: '修繕費',     due: '2026-02-28', plan: '2026-05-30', amount: 350000, priority: '高', carry_3m_plus: 350000 },
+    // ザック
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: '清掃用品仕入',         ac: '消耗品費',   due: '2026-05-15', plan: '2026-05-15', amount: 120000, priority: '月次' },
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: 'スタッフ給与',         ac: '給料手当',   due: '2026-05-25', plan: '2026-05-25', amount: 850000, priority: '月次' },
+    { company: 'zack',      property: 'ココユニバース', kind: '月次予定', summary: '社用車リース',         ac: '車両費',     due: '2026-05-27', plan: '2026-05-27', amount:  95000, priority: '月次' },
+  ];
+  for (const s of payableSeed) {
+    const total = (s.current_amount || 0) + (s.carry_1m || 0) + (s.carry_2m || 0) + (s.carry_3m_plus || 0);
+    const current = total === 0 ? s.amount : (s.current_amount || 0);
+    await run(`INSERT INTO funds_payable_entries
+      (company_id, property_id, kind, summary, account_category_id, due_date, billto,
+       current_amount, carry_1m, carry_2m, carry_3m_plus, priority, plan_date, plan_amount, pay_status, invoice_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        comp[s.company], props[s.property] || null, s.kind, s.summary, ac[s.ac] || null,
+        s.due, '', current, s.carry_1m || 0, s.carry_2m || 0, s.carry_3m_plus || 0,
+        s.priority, s.plan, s.amount, '', ''
+      ]);
+  }
+
+  // ─── カード枠回復 ───
+  const cardSeed = [
+    { company: 'residence', pay_date: '2026-05-01', card_name: 'JCB',       amount: 280000, kind: '通常', memo: '5月分カード支払' },
+    { company: 'residence', pay_date: '2026-05-10', card_name: '楽天カード', amount: 150000, kind: '通常', memo: '' },
+    { company: 'resort',    pay_date: '2026-05-03', card_name: 'JCB',       amount: 850000, kind: '通常', memo: 'GW期間支払分' },
+    { company: 'resort',    pay_date: '2026-05-18', card_name: 'AMEX',      amount: 320000, kind: '通常', memo: '' },
+    { company: 'motel',     pay_date: '2026-05-05', card_name: '楽天カード', amount: 180000, kind: '通常', memo: '' },
+    { company: 'zack',      pay_date: '2026-05-12', card_name: 'JCB',       amount: 120000, kind: '通常', memo: '' },
+  ];
+  for (const s of cardSeed) {
+    await run("INSERT INTO funds_card_recoveries (company_id, pay_date, card_name, amount, kind, memo) VALUES (?, ?, ?, ?, ?, ?)",
+      [comp[s.company], s.pay_date, s.card_name, s.amount, s.kind, s.memo]);
+  }
+}
+
+// ===== v10 追加分のシード（17施設・16OTA・売上&入金予測サンプル） =====
+async function seedFundsV10() {
+  const comp = {};
+  (await query("SELECT id, code FROM funds_companies")).forEach(r => comp[r.code] = r.id);
+
+  // 施設（売上計上単位・引継ぎ書2.4）
+  const facCount = await query("SELECT COUNT(*) as c FROM funds_facilities");
+  if (facCount[0].c === 0) {
+    const facilities = [
+      // リゾート（ホテル）
+      { name: 'de Lune',           dept: 'ホテル',   code: 'resort',    sort_order: 1 },
+      { name: 'VIEW',              dept: 'ホテル',   code: 'resort',    sort_order: 2 },
+      { name: '本川',              dept: 'ホテル',   code: 'resort',    sort_order: 3 },
+      { name: '天神',              dept: 'ホテル',   code: 'resort',    sort_order: 4 },
+      { name: '玖波',              dept: 'ホテル',   code: 'resort',    sort_order: 5 },
+      { name: '温井',              dept: 'ホテル',   code: 'resort',    sort_order: 6 },
+      { name: 'いこいの村',        dept: 'ホテル',   code: 'resort',    sort_order: 7 },
+      // モーテル（ホテル）
+      { name: '弥山',              dept: 'ホテル',   code: 'motel',     sort_order: 8 },
+      // リゾート（マンスリー）
+      { name: 'TAKAYA',            dept: 'マンスリー', code: 'resort', sort_order: 9 },
+      { name: '壱番館',            dept: 'マンスリー', code: 'resort', sort_order: 10 },
+      { name: '弐番館',            dept: 'マンスリー', code: 'resort', sort_order: 11 },
+      { name: 'Otake',             dept: 'マンスリー', code: 'resort', sort_order: 12 },
+      // リゾート（指定管理）
+      { name: '竹原（レストラン含む）', dept: '指定管理', code: 'resort', sort_order: 13 },
+      { name: 'フォレストヒルズガーデン', dept: '指定管理', code: 'resort', sort_order: 14 },
+      { name: 'グリーンシャワー',  dept: '指定管理', code: 'resort', sort_order: 15 },
+      // サウナ
+      { name: 'MAKI de SAUNA',     dept: 'サウナ',   code: 'zack',      sort_order: 16 },
+      { name: '周防大島',          dept: 'サウナ',   code: 'resort',    sort_order: 17 },
+    ];
+    for (const f of facilities) {
+      const cid = comp[f.code];
+      if (cid) await run("INSERT INTO funds_facilities (name, dept, company_id, sort_order) VALUES (?, ?, ?, ?)",
+        [f.name, f.dept, cid, f.sort_order]);
+    }
+  }
+
+  // OTA／決済（引継ぎ書5.2）
+  const otaCount = await query("SELECT COUNT(*) as c FROM funds_ota_channels");
+  if (otaCount[0].c === 0) {
+    const otas = [
+      { name: 'Booking',     cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 15, d_nxt2: null, sort: 1 },
+      { name: '楽天',        cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 2 },
+      { name: 'じゃらん',    cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 3 },
+      { name: '一休',        cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 28, d_nxt2: null, sort: 4 },
+      { name: 'Expedia',     cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 5 },
+      { name: 'Agoda',       cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 6 },
+      { name: 'スマレジ',    cur: 100, nxt: 0,   nxt2: 0,   d_cur: 31,   d_nxt: null, d_nxt2: null, sort: 7 },
+      { name: 'JCB',         cur: 0,   nxt: 50,  nxt2: 50,  d_cur: null, d_nxt: 25, d_nxt2: 25,   sort: 8 },
+      { name: 'GMO',         cur: 50,  nxt: 50,  nxt2: 0,   d_cur: 31,   d_nxt: 15, d_nxt2: null, sort: 9 },
+      { name: 'JMS',         cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 15, d_nxt2: null, sort: 10 },
+      { name: 'PayPay',      cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 11 },
+      { name: 'カード',      cur: 0,   nxt: 100, nxt2: 0,   d_cur: null, d_nxt: 25, d_nxt2: null, sort: 12 },
+      { name: '現金売上',    cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 13 },
+      { name: 'ホテル売上',  cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 14 },
+      { name: '竹原市',      cur: 0,   nxt: 0,   nxt2: 100, d_cur: null, d_nxt: null, d_nxt2: 28,   sort: 15 },
+      { name: '売上',        cur: 100, nxt: 0,   nxt2: 0,   d_cur: 28,   d_nxt: null, d_nxt2: null, sort: 16 },
+    ];
+    for (const o of otas) {
+      await run(`INSERT INTO funds_ota_channels (name, cur_ratio, nxt_ratio, nxt2_ratio, pay_day_cur, pay_day_nxt, pay_day_nxt2, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [o.name, o.cur, o.nxt, o.nxt2, o.d_cur, o.d_nxt, o.d_nxt2, o.sort]);
+    }
+  }
+
+  // 売上＋入金予測 サンプル（4-5月分） — 正式データ移行のため無効化
+  const salesCount = await query("SELECT COUNT(*) as c FROM funds_sales_entries");
+  if (false && salesCount[0].c === 0) {
+    const fac = {};
+    (await query("SELECT id, name FROM funds_facilities")).forEach(r => fac[r.name] = r.id);
+    const ota = {};
+    (await query("SELECT * FROM funds_ota_channels")).forEach(r => ota[r.name] = r);
+
+    // Excel v10「売上入力」より4-5月の代表データ（ホテル売上中心）
+    const salesSeed = [
+      // 4月計上
+      { ym: '2026-04', company: 'zack',     fac: 'MAKI de SAUNA', ota: '売上',       amount:  121831 },
+      { ym: '2026-04', company: 'resort',   fac: 'VIEW',          ota: 'ホテル売上', amount: 2904045 },
+      { ym: '2026-04', company: 'resort',   fac: 'de Lune',       ota: 'ホテル売上', amount: 8310821 },
+      { ym: '2026-04', company: 'resort',   fac: 'いこいの村',    ota: 'ホテル売上', amount: 6092392 },
+      { ym: '2026-04', company: 'resort',   fac: '本川',          ota: 'ホテル売上', amount: 1955058 },
+      { ym: '2026-04', company: 'resort',   fac: '温井',          ota: 'ホテル売上', amount: 2330934 },
+      { ym: '2026-04', company: 'resort',   fac: '玖波',          ota: 'ホテル売上', amount:  331500 },
+      { ym: '2026-04', company: 'motel',    fac: '弥山',          ota: 'ホテル売上', amount: 4004248 },
+      { ym: '2026-04', company: 'resort',   fac: 'TAKAYA',        ota: '売上',       amount:  455000 },
+      { ym: '2026-04', company: 'resort',   fac: '壱番館',        ota: '売上',       amount:  101400 },
+      { ym: '2026-04', company: 'resort',   fac: '弐番館',        ota: '売上',       amount:   90000 },
+      { ym: '2026-04', company: 'resort',   fac: 'Otake',         ota: '売上',       amount:  105000 },
+      { ym: '2026-04', company: 'resort',   fac: 'グリーンシャワー',           ota: '売上',  amount:  626997 },
+      { ym: '2026-04', company: 'resort',   fac: 'フォレストヒルズガーデン',   ota: '売上',  amount: 5535949 },
+      { ym: '2026-04', company: 'resort',   fac: '竹原（レストラン含む）',     ota: '竹原市', amount: 840500 },
+      // 5月計上
+      { ym: '2026-05', company: 'zack',     fac: 'MAKI de SAUNA', ota: '売上',       amount:   36276 },
+      { ym: '2026-05', company: 'resort',   fac: 'VIEW',          ota: 'ホテル売上', amount: 2287142 },
+      { ym: '2026-05', company: 'resort',   fac: 'de Lune',       ota: 'ホテル売上', amount: 6833097 },
+      { ym: '2026-05', company: 'resort',   fac: 'いこいの村',    ota: 'ホテル売上', amount: 4468786 },
+      { ym: '2026-05', company: 'motel',    fac: '弥山',          ota: 'ホテル売上', amount: 1161868 },
+      { ym: '2026-05', company: 'resort',   fac: 'VIEW',          ota: 'Booking',    amount: 1200000 },
+      { ym: '2026-05', company: 'resort',   fac: 'de Lune',       ota: '楽天',       amount:  850000 },
+      { ym: '2026-05', company: 'resort',   fac: 'いこいの村',    ota: 'じゃらん',   amount:  650000 },
+      { ym: '2026-05', company: 'resort',   fac: 'TAKAYA',        ota: '売上',       amount:  455000 },
+    ];
+    for (const s of salesSeed) {
+      const cid = comp[s.company];
+      const fid = fac[s.fac];
+      const o = ota[s.ota];
+      if (!cid || !fid || !o) continue;
+      const sid = await runInsert(`
+        INSERT INTO funds_sales_entries (company_id, facility_id, ota_channel_id, year_month, amount, memo)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [cid, fid, o.id, s.ym, s.amount, '']);
+      // 予測入金を3行展開
+      const predictions = buildPredictedIncomes(s.ym, s.amount, o);
+      for (const p of predictions) {
+        await run(`
+          INSERT INTO funds_predicted_incomes
+            (sales_entry_id, company_id, facility_id, ota_channel_id, expected_date, amount, period)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [sid, cid, fid, o.id, p.date, p.amount, p.period]);
+      }
+    }
+  }
+}
+
+// 売上1件→（当月／翌月／翌々月）の予測入金を計算
+function buildPredictedIncomes(yearMonth, amount, ota) {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const out = [];
+  function clampDay(year, mo, day) {
+    if (!day) return null;
+    const last = new Date(year, mo, 0).getDate();
+    return Math.min(day, last);
+  }
+  function addMonths(year, mo, delta) {
+    let nm = mo + delta;
+    let ny = year;
+    while (nm > 12) { nm -= 12; ny += 1; }
+    while (nm < 1)  { nm += 12; ny -= 1; }
+    return { y: ny, m: nm };
+  }
+  const periods = [
+    { ratio: ota.cur_ratio,  day: ota.pay_day_cur,  shift: 0, label: '当月分'  },
+    { ratio: ota.nxt_ratio,  day: ota.pay_day_nxt,  shift: 1, label: '翌月分'  },
+    { ratio: ota.nxt2_ratio, day: ota.pay_day_nxt2, shift: 2, label: '翌々月分' },
+  ];
+  for (const p of periods) {
+    const r = p.ratio || 0;
+    const amt = Math.round(amount * r / 100);
+    let date = null;
+    if (r > 0 && p.day) {
+      const { y: yy, m: mm } = addMonths(y, m, p.shift);
+      const d = clampDay(yy, mm, p.day);
+      if (d) date = `${yy}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    out.push({ date, amount: amt, period: p.label });
+  }
+  return out;
 }
 
 // ===== 組織体制図ハブ用テーブル =====
@@ -551,4 +1076,4 @@ async function seedData() {
   }
 }
 
-module.exports = { initDatabase, query, run, runInsert };
+module.exports = { initDatabase, query, run, runInsert, buildPredictedIncomes };

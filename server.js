@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const carsRoutes = require('./routes/cars');
 const reservationsRoutes = require('./routes/reservations');
 const keiriRoutes = require('./routes/keiri');
+const fundsRoutes = require('./routes/funds');
 const orgChartRoutes = require('./routes/org-chart');
 
 const app = express();
@@ -76,6 +77,9 @@ app.use('/api/admin/cars', requireAuth, requireAdmin, carsRoutes);
 // 経理モジュールAPI（井上さん201 or 管理者のみ）
 app.use('/api/keiri', requireAuth, requireKeiriAccess, keiriRoutes);
 
+// 資金管理モジュールAPI（デモ：経理権限と同じ）
+app.use('/api/funds', requireAuth, requireKeiriAccess, fundsRoutes);
+
 // 組織体制図ハブの編集差分API（認証なし: 既存の/keiri/と同じ静的扱い方針）
 app.use('/api/org-chart', orgChartRoutes);
 
@@ -101,6 +105,12 @@ app.get('/select', (req, res) => {
 app.get('/keiri', (req, res) => res.redirect('/keiri/'));
 app.get('/keiri/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'keiri', 'index.html'));
+});
+
+// 資金管理モジュール（デモ）
+app.get('/keiri/funds', (req, res) => res.redirect('/keiri/funds/'));
+app.get('/keiri/funds/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'keiri', 'funds', 'index.html'));
 });
 
 // 組織体制図ハブ（静的ファイル）

@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GR 資金管理（デモ）</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: #f0f2f5; color: #2d3436; font-size: 13px; }
+
+  .nav { background: #1F4E79; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .nav-title { font-size: 18px; font-weight: 700; }
+  .nav-sub { font-size: 12px; opacity: 0.85; }
+  .nav-spacer { flex: 1; }
+  .nav-link { color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 6px; background: rgba(255,255,255,0.1); font-size: 12px; }
+  .nav-link:hover { background: rgba(255,255,255,0.25); }
+  .demo-badge { background: #f39c12; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+
+  .main { max-width: none; margin: 0; padding: 16px 24px; }
+
+  /* 会社タブ */
+  .company-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+  .company-tab { padding: 8px 16px; border: 2px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 500; }
+  .company-tab:hover { border-color: #0984e3; }
+  .company-tab.active { background: #1F4E79; color: #fff; border-color: #1F4E79; font-weight: 700; }
+  .company-tab .badge { font-size: 10px; background: rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 8px; margin-left: 4px; }
+
+  /* サブタブ */
+  .sub-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+  .sub-tab { padding: 8px 16px; border: none; background: transparent; cursor: pointer; font-size: 13px; font-family: inherit; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .sub-tab:hover { color: #0984e3; }
+  .sub-tab.active { color: #0984e3; border-bottom-color: #0984e3; font-weight: 700; }
+
+  /* ツールバー */
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .toolbar select, .toolbar input { padding: 7px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; font-family: inherit; background: #fff; }
+  .toolbar label { font-size: 12px; color: #636e72; }
+  .toolbar-spacer { flex: 1; }
+  .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; }
+  .btn-primary { background: #0984e3; color: #fff; }
+  .btn-primary:hover { background: #0570c0; }
+  .btn-danger { background: #d63031; color: #fff; }
+  .btn-danger:hover { background: #b02a2b; }
+  .btn-ghost { background: transparent; color: #636e72; }
+  .btn-ghost:hover { color: #2d3436; }
+
+  /* サマリーカード */
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .summary-card { background: #fff; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .summary-card .label { font-size: 11px; color: #636e72; margin-bottom: 4px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card .value.green { color: #00b894; }
+  .summary-card .value.red { color: #d63031; }
+  .summary-card .value.blue { color: #0984e3; }
+  .summary-card .value.orange { color: #e17055; }
+  .summary-card .value.gray { color: #636e72; }
+  .summary-card .hint { font-size: 10px; color: #b2bec3; margin-top: 2px; }
+
+  /* テーブル */
+  .panel { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; }
+  .panel-header { padding: 12px 16px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
+  .panel-header h2 { font-size: 14px; font-weight: 700; }
+  .panel-header .count { font-size: 11px; color: #636e72; }
+  .panel-spacer { flex: 1; }
+  .table-wrap { overflow: auto; max-height: 65vh; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f5f7fa; color: #2d3436; padding: 10px 12px; text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 5; font-size: 12px; border-bottom: 2px solid #ddd; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+  tr:hover td { background: #f8fbff; }
+  tr.cleared td { background: #f5f5f5; color: #999; text-decoration: line-through; }
+  tr.cancelled td { background: #ffe6e6; color: #999; text-decoration: line-through; }
+  /* 日次CF専用 */
+  tr.sat td { background: #eaf3ff !important; }
+  tr.sun td { background: #ffeaea !important; }
+  tr.today td { box-shadow: inset 3px 0 0 #f39c12; font-weight: 600; }
+  tr.carryover td { background: #f5f5f5; font-style: italic; color: #636e72; }
+  tr.month-total td { background: #1F4E79; color: #fff; font-weight: 700; }
+  tr.month-total td.num { color: #fff; }
+  td.dow-sat { color: #0984e3; }
+  td.dow-sun { color: #d63031; }
+  td.zero { color: #b2bec3; }
+  tr.priority-high td { background: #ffe9e9; }
+  tr.priority-mid td  { background: #fff4e0; }
+  tr.priority-low td  { background: #e9f7ec; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.actions { white-space: nowrap; }
+  .icon-btn { background: transparent; border: none; cursor: pointer; padding: 3px 6px; font-size: 14px; color: #636e72; }
+  .icon-btn:hover { color: #d63031; }
+  .icon-btn.edit:hover { color: #0984e3; }
+  .empty { text-align: center; padding: 30px; color: #b2bec3; }
+
+  /* モーダル */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 200; }
+  .modal-backdrop.show { display: flex; }
+  .modal { background: #fff; border-radius: 10px; padding: 20px; width: 520px; max-width: 95vw; max-height: 90vh; overflow: auto; }
+  .modal h3 { font-size: 16px; margin-bottom: 14px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-grid .full { grid-column: span 2; }
+  .form-grid label { font-size: 11px; color: #636e72; display: block; margin-bottom: 3px; }
+  .form-grid input, .form-grid select, .form-grid textarea { width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; font-family: inherit; }
+  .form-grid textarea { resize: vertical; min-height: 60px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  .info-box { background: #e6f4ff; border-left: 4px solid #0984e3; padding: 8px 12px; margin-bottom: 12px; font-size: 12px; color: #34495e; border-radius: 4px; }
+  .info-box strong { color: #0984e3; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-title">💴 GR 資金管理</div>
+  <span class="demo-badge">DEMO</span>
+  <div class="nav-sub">Excel v10（20シート）の統合プロトタイプ — OTAサイクル＆入金予測対応</div>
+  <div class="nav-spacer"></div>
+  <a class="nav-link" href="/keiri/">← 経理トップに戻る</a>
+</nav>
+
+<main class="main">
+  <!-- 会社タブ -->
+  <div id="companyTabs" class="company-tabs"></div>
+
+  <!-- サブタブ -->
+  <div class="sub-tabs">
+    <button class="sub-tab active" data-pane="dashboard">📊 ダッシュボード</button>
+    <button class="sub-tab" data-pane="daily">📅 日次CF</button>
+    <button class="sub-tab" data-pane="income">💰 入金入力</button>
+    <button class="sub-tab" data-pane="sales">🏨 売上入力</button>
+    <button class="sub-tab" data-pane="predicted">🔮 入金予測</button>
+    <button class="sub-tab" data-pane="payable">📋 未払一覧</button>
+    <button class="sub-tab" data-pane="card">💳 カード枠回復</button>
+    <button class="sub-tab" data-pane="ota">⚙️ OTA設定</button>
+  </div>
+
+  <!-- ツールバー（月選択） -->
+  <div class="toolbar">
+    <label>年</label>
+    <select id="yearSel"></select>
+    <label>月</label>
+    <select id="monthSel"></select>
+    <div class="toolbar-spacer"></div>
+    <span id="loadIndicator" style="color:#b2bec3;font-size:11px"></span>
+  </div>
+
+  <!-- ダッシュボード -->
+  <div id="pane-dashboard" class="pane">
+    <div class="info-box">
+      <strong>💡 v10 ハイライト：</strong>
+      売上入力 × OTAサイクル（マスター_OTA）から<strong>入金予測</strong>を自動生成し、日次CFの入金へ自動加算します。
+      <br>
+      <strong>カード枠回復ルール：</strong>入金 → カード債務返済 → 即日カード枠回復 → その枠で支出。
+      <strong>使用可能額</strong> = 累計差引（純現金） + 累計カード枠回復額。
+    </div>
+    <div class="summary-cards" id="summaryCards"></div>
+    <div class="panel">
+      <div class="panel-header"><h2>📈 当月の概況</h2></div>
+      <div style="padding: 16px;">
+        <div id="summaryDetail" style="font-size:13px; line-height:1.8;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 日次CF -->
+  <div id="pane-daily" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>📅 日次キャッシュフロー：</strong>
+      入金・支出・カード枠回復を日別に集計し、累計差引・使用可能額を計算します。
+      Excel v8 では <strong>会社×月で24シート</strong>に分かれていたこの表が、月選択1つに集約されています。
+      月初行は前月末からの繰越（月またぎ連動）です。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2 id="dailyTitle">📅 日次キャッシュフロー</h2>
+        <div class="panel-spacer"></div>
+        <span class="count" id="dailyHint">土＝薄青／日＝薄赤／今日＝オレンジ枠</span>
+      </div>
+      <div class="table-wrap" style="max-height:75vh">
+        <table id="dailyTable">
+          <thead><tr>
+            <th>日付</th><th>曜</th>
+            <th style="text-align:right">入金<br><span style="font-size:9px;font-weight:400">(手動+予測)</span></th>
+            <th style="text-align:right">内：予測</th>
+            <th style="text-align:right">支出</th>
+            <th style="text-align:right">カード回復</th>
+            <th style="text-align:right">日次差引</th>
+            <th style="text-align:right">累計差引<br><span style="font-size:9px;font-weight:400">(純現金)</span></th>
+            <th style="text-align:right">累計カード枠</th>
+            <th style="text-align:right">使用可能額<br><span style="font-size:9px;font-weight:400">(差引+カード)</span></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 入金 -->
+  <div id="pane-income" class="pane" style="display:none">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>💰 入金一覧</h2>
+        <span class="count" id="incomeCount">0件</span>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="openIncomeModal()">+ 新規入金</button>
+      </div>
+      <div class="table-wrap">
+        <table id="incomeTable">
+          <thead><tr>
+            <th>日付</th><th>項目</th><th>区分</th><th>金額</th><th>状況</th><th>備考</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未払 -->
+  <div id="pane-payable" class="pane" style="display:none">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>📋 未払・支出予定一覧</h2>
+        <span class="count" id="payableCount">0件</span>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="openPayableModal()">+ 新規未払</button>
+      </div>
+      <div class="table-wrap">
+        <table id="payableTable">
+          <thead><tr>
+            <th>種別</th><th>物件</th><th>概要</th><th>勘定科目</th><th>期日</th>
+            <th>請求先</th><th>累積未払</th><th>優先度</th>
+            <th>支払予定日</th><th>支払予定額</th><th>状況</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 売上入力 -->
+  <div id="pane-sales" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>🏨 売上入力：</strong>計上月・施設・OTA/決済・売上額を入力 → マスター_OTAの分配比率で
+      <strong>入金予測</strong>へ自動展開（当月／翌月／翌々月の最大3行）。
+      日次CFの「入金」へも自動加算されます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🏨 売上一覧（OTA別×施設別×月別）</h2>
+        <span class="count" id="salesCount">0件</span>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="openSalesModal()">+ 新規売上</button>
+      </div>
+      <div class="table-wrap">
+        <table id="salesTable">
+          <thead><tr>
+            <th>計上月</th><th>施設</th><th>部門</th><th>OTA／決済</th>
+            <th>分配（当/翌/翌々）</th><th>売上額</th><th>備考</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 入金予測 -->
+  <div id="pane-predicted" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>🔮 入金予測：</strong>売上入力 × マスター_OTA から自動生成された予測入金（読み取り専用）。
+      <br>
+      入金日が「翌月15日」「翌月25日」等は計上月＋OTA設定の入金日で計算。月末日は当該月の最終日に丸めます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🔮 予測入金一覧（当月分のみ表示）</h2>
+        <span class="count" id="predictedCount">0件</span>
+      </div>
+      <div class="table-wrap">
+        <table id="predictedTable">
+          <thead><tr>
+            <th>予測入金日</th><th>施設</th><th>OTA／決済</th><th>期</th><th>予測入金額</th><th>売上計上月</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- OTA設定 -->
+  <div id="pane-ota" class="pane" style="display:none">
+    <div class="info-box">
+      <strong>⚙️ OTA／決済サイクル マスタ：</strong>
+      売上計上月に対し、当月・翌月・翌々月への入金分配比率（合計100%）と入金日を設定します。
+      値を変更すると「保存」で全予測入金が再計算されます。
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>⚙️ マスター_OTA</h2>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="saveAllOta()">変更を保存して予測再計算</button>
+      </div>
+      <div class="table-wrap">
+        <table id="otaTable">
+          <thead><tr>
+            <th>OTA／決済</th>
+            <th>当月比率(%)</th><th>翌月比率(%)</th><th>翌々月比率(%)</th>
+            <th>当月入金日</th><th>翌月入金日</th><th>翌々月入金日</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- カード -->
+  <div id="pane-card" class="pane" style="display:none">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>💳 カード枠回復一覧</h2>
+        <span class="count" id="cardCount">0件</span>
+        <div class="panel-spacer"></div>
+        <button class="btn btn-primary" onclick="openCardModal()">+ 新規カード支払</button>
+      </div>
+      <div class="table-wrap">
+        <table id="cardTable">
+          <thead><tr>
+            <th>支払日</th><th>カード会社</th><th>回復額</th><th>区分</th><th>備考</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 入金モーダル -->
+<div class="modal-backdrop" id="incomeModal">
+  <div class="modal">
+    <h3 id="incomeModalTitle">入金の登録</h3>
+    <input type="hidden" id="incomeId">
+    <div class="form-grid">
+      <div>
+        <label>日付 *</label>
+        <input type="date" id="incomeDate" required>
+      </div>
+      <div>
+        <label>金額（円） *</label>
+        <input type="number" id="incomeAmount" required>
+      </div>
+      <div class="full">
+        <label>項目</label>
+        <input type="text" id="incomeItem" placeholder="例：5月分家賃">
+      </div>
+      <div>
+        <label>区分（資金繰り項目）</label>
+        <select id="incomeFundItem"><option value="">（選択）</option></select>
+      </div>
+      <div>
+        <label>確認状況</label>
+        <select id="incomeStatus">
+          <option value="予測">予測</option>
+          <option value="未確認">未確認</option>
+          <option value="確認済">確認済</option>
+        </select>
+      </div>
+      <div class="full">
+        <label>備考</label>
+        <textarea id="incomeMemo"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('incomeModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveIncome()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 未払モーダル -->
+<div class="modal-backdrop" id="payableModal">
+  <div class="modal" style="width:680px">
+    <h3 id="payableModalTitle">未払・支出予定の登録</h3>
+    <input type="hidden" id="payableId">
+    <div class="form-grid">
+      <div>
+        <label>種別</label>
+        <select id="payableKind">
+          <option value="月次予定">月次予定</option>
+          <option value="未払繰越">未払繰越</option>
+        </select>
+      </div>
+      <div>
+        <label>物件</label>
+        <select id="payableProperty"><option value="">（選択）</option></select>
+      </div>
+      <div class="full">
+        <label>概要（取引先名等） *</label>
+        <input type="text" id="payableSummary" required>
+      </div>
+      <div>
+        <label>勘定科目</label>
+        <select id="payableAccount"><option value="">（選択）</option></select>
+      </div>
+      <div>
+        <label>期日（原請求）</label>
+        <input type="date" id="payableDueDate">
+      </div>
+      <div class="full">
+        <label>請求先（建物名等）</label>
+        <input type="text" id="payableBillto">
+      </div>
+      <div>
+        <label>当月分</label>
+        <input type="number" id="payableCurrent" value="0">
+      </div>
+      <div>
+        <label>前月繰越</label>
+        <input type="number" id="payableCarry1m" value="0">
+      </div>
+      <div>
+        <label>前々月繰越</label>
+        <input type="number" id="payableCarry2m" value="0">
+      </div>
+      <div>
+        <label>前々々月以前</label>
+        <input type="number" id="payableCarry3m" value="0">
+      </div>
+      <div>
+        <label>優先度</label>
+        <select id="payablePriority">
+          <option value="月次">月次</option>
+          <option value="高">高（3ヶ月以上）</option>
+          <option value="中">中（2ヶ月）</option>
+          <option value="低">低（前月のみ）</option>
+        </select>
+      </div>
+      <div>
+        <label>支払状況</label>
+        <select id="payableStatus">
+          <option value="">（未済）</option>
+          <option value="済">済</option>
+          <option value="取消">取消</option>
+        </select>
+      </div>
+      <div>
+        <label>支払予定日</label>
+        <input type="date" id="payablePlanDate">
+      </div>
+      <div>
+        <label>支払予定額 *</label>
+        <input type="number" id="payablePlanAmount" required>
+      </div>
+      <div class="full">
+        <label>請求書ファイルパス</label>
+        <input type="text" id="payableInvoicePath" placeholder="例：\\\\server\\invoices\\2026\\05\\xxx.pdf">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('payableModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="savePayable()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 売上モーダル -->
+<div class="modal-backdrop" id="salesModal">
+  <div class="modal">
+    <h3 id="salesModalTitle">売上の登録</h3>
+    <input type="hidden" id="salesId">
+    <div class="form-grid">
+      <div>
+        <label>計上月 *</label>
+        <input type="month" id="salesYearMonth" required>
+      </div>
+      <div>
+        <label>売上額（円） *</label>
+        <input type="number" id="salesAmount" required>
+      </div>
+      <div class="full">
+        <label>施設 *</label>
+        <select id="salesFacility" required></select>
+      </div>
+      <div class="full">
+        <label>OTA／決済 *</label>
+        <select id="salesOta" required></select>
+      </div>
+      <div class="full">
+        <label>備考</label>
+        <input type="text" id="salesMemo" placeholder="例：GW期間／法人団体予約 など">
+      </div>
+      <div class="full" id="salesPreviewBox" style="background:#e6f4ff;padding:8px 12px;border-radius:5px;font-size:11px;color:#34495e;display:none">
+        <strong>📊 入金予測プレビュー：</strong><span id="salesPreview"></span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('salesModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSales()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- カードモーダル -->
+<div class="modal-backdrop" id="cardModal">
+  <div class="modal">
+    <h3 id="cardModalTitle">カード枠回復の登録</h3>
+    <input type="hidden" id="cardId">
+    <div class="form-grid">
+      <div>
+        <label>支払日 *</label>
+        <input type="date" id="cardPayDate" required>
+      </div>
+      <div>
+        <label>回復額 *</label>
+        <input type="number" id="cardAmount" required>
+      </div>
+      <div>
+        <label>カード会社</label>
+        <input type="text" id="cardName" placeholder="例：JCB / 楽天">
+      </div>
+      <div>
+        <label>区分</label>
+        <select id="cardKind">
+          <option value="通常">通常</option>
+          <option value="リボ">リボ</option>
+          <option value="分割">分割</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="full">
+        <label>備考</label>
+        <textarea id="cardMemo"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('cardModal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveCard()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const state = {
+  masters: { companies: [], properties: [], fundItems: [], accountCategories: [] },
+  companyId: null,
+  pane: 'dashboard',
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+};
+
+// ─── 起動 ───
+(async function init() {
+  setupYearMonth();
+  setupSubTabs();
+  await loadMasters();
+  buildCompanyTabs();
+  if (state.masters.companies.length > 0) {
+    state.companyId = state.masters.companies[0].id;
+    document.querySelector(`.company-tab[data-id="${state.companyId}"]`)?.classList.add('active');
+  }
+  populateMasterSelects();
+  refresh();
+})();
+
+function setupYearMonth() {
+  const yearSel = document.getElementById('yearSel');
+  for (let y = 2025; y <= 2027; y++) {
+    const o = document.createElement('option'); o.value = y; o.textContent = y + '年';
+    if (y === state.year) o.selected = true;
+    yearSel.appendChild(o);
+  }
+  const monthSel = document.getElementById('monthSel');
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option'); o.value = m; o.textContent = m + '月';
+    if (m === state.month) o.selected = true;
+    monthSel.appendChild(o);
+  }
+  yearSel.onchange  = () => { state.year  = +yearSel.value; refresh(); };
+  monthSel.onchange = () => { state.month = +monthSel.value; refresh(); };
+}
+
+function setupSubTabs() {
+  document.querySelectorAll('.sub-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      state.pane = tab.dataset.pane;
+      document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
+      document.getElementById('pane-' + state.pane).style.display = '';
+      refresh();
+    });
+  });
+}
+
+async function loadMasters() {
+  const res = await fetch('/api/funds/masters');
+  state.masters = await res.json();
+}
+
+function buildCompanyTabs() {
+  const wrap = document.getElementById('companyTabs');
+  wrap.innerHTML = '';
+  for (const c of state.masters.companies) {
+    const btn = document.createElement('button');
+    btn.className = 'company-tab';
+    btn.dataset.id = c.id;
+    btn.innerHTML = c.name + (c.is_funds_target ? '' : ' <span class="badge">対象外</span>');
+    btn.onclick = () => {
+      document.querySelectorAll('.company-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      state.companyId = c.id;
+      refresh();
+    };
+    wrap.appendChild(btn);
+  }
+}
+
+function populateMasterSelects() {
+  const fundSel = document.getElementById('incomeFundItem');
+  for (const fi of state.masters.fundItems) {
+    if (fi.kind === '収入' || fi.kind === '財務') {
+      const o = document.createElement('option');
+      o.value = fi.id; o.textContent = `${fi.name}（${fi.kind}）`;
+      fundSel.appendChild(o);
+    }
+  }
+  const accSel = document.getElementById('payableAccount');
+  for (const a of state.masters.accountCategories) {
+    const o = document.createElement('option');
+    o.value = a.id; o.textContent = a.name;
+    accSel.appendChild(o);
+  }
+}
+
+function refreshPropertySelect() {
+  const propSel = document.getElementById('payableProperty');
+  propSel.innerHTML = '<option value="">（選択）</option>';
+  const props = state.masters.properties.filter(p => p.company_id === state.companyId);
+  for (const p of props) {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name;
+    propSel.appendChild(o);
+  }
+}
+
+async function refresh() {
+  if (!state.companyId) return;
+  const ind = document.getElementById('loadIndicator');
+  ind.textContent = '読込中…';
+  try {
+    if (state.pane === 'dashboard') await loadSummary();
+    if (state.pane === 'daily')     await loadDaily();
+    if (state.pane === 'income')    await loadIncome();
+    if (state.pane === 'sales')     await loadSales();
+    if (state.pane === 'predicted') await loadPredicted();
+    if (state.pane === 'payable')   await loadPayable();
+    if (state.pane === 'card')      await loadCard();
+    if (state.pane === 'ota')       await loadOta();
+  } finally {
+    ind.textContent = '';
+  }
+}
+
+// ─── ダッシュボード ───
+async function loadSummary() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const res = await fetch('/api/funds/summary?' + q);
+  const s = await res.json();
+  const cards = document.getElementById('summaryCards');
+  cards.innerHTML = '';
+  const items = [
+    { label: '入金合計', value: s.income, klass: 'green', hint: '= 手動入金 + 入金予測' },
+    { label: '内：入金予測', value: s.incomePredicted, klass: 'blue', hint: '売上×OTAサイクル' },
+    { label: '支出予定合計', value: s.payout, klass: 'red' },
+    { label: 'カード枠回復', value: s.cardRecovery, klass: 'orange' },
+    { label: '日次差引合計（純現金）', value: s.dailyNet, klass: 'blue', hint: '= 入金 − 支出 − カード枠回復' },
+    { label: '使用可能額', value: s.usable, klass: 'gray', hint: '= 差引 + 回復済カード枠' },
+  ];
+  for (const it of items) {
+    const div = document.createElement('div');
+    div.className = 'summary-card';
+    div.innerHTML = `<div class="label">${it.label}</div>
+      <div class="value ${it.klass}">¥${(it.value||0).toLocaleString()}</div>
+      ${it.hint ? `<div class="hint">${it.hint}</div>` : ''}`;
+    cards.appendChild(div);
+  }
+  const company = state.masters.companies.find(c => c.id === state.companyId);
+  document.getElementById('summaryDetail').innerHTML = `
+    <p><strong>会社：</strong>${company?.name}</p>
+    <p><strong>対象月：</strong>${state.year}年${state.month}月</p>
+    <p><strong>カード枠回復のルーティング：</strong> 入金 → カード債務返済 → カード枠回復 → その枠で支出。
+       支出列にはカード枠回復額を<strong>含めません</strong>（引継ぎ書5.1）。</p>
+    <p style="color:#636e72; font-size:12px;">
+      この画面は Excel v10 の <strong>「全社合算サマリー」「全社月次サマリー」「日次_社名」</strong>を
+      DB集計で動的生成しています。20シートの集計表は不要になります。<br>
+      入金合計 = <strong>手動入金</strong>（入金入力タブ）＋ <strong>入金予測</strong>（売上入力タブ × OTAサイクル）。
+    </p>
+  `;
+}
+
+// ─── 日次CF ───
+async function loadDaily() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const data = await (await fetch('/api/funds/daily-cashflow?' + q)).json();
+  const company = state.masters.companies.find(c => c.id === state.companyId);
+  document.getElementById('dailyTitle').textContent = `📅 ${company?.name || ''}　${state.year}年${state.month}月 日次キャッシュフロー`;
+  const tb = document.querySelector('#dailyTable tbody');
+  tb.innerHTML = '';
+  const dowName = ['日','月','火','水','木','金','土'];
+
+  // 月初繰越行
+  if (data.prevCumNet !== 0 || data.prevCumCard !== 0) {
+    const tr = document.createElement('tr');
+    tr.className = 'carryover';
+    tr.innerHTML = `
+      <td colspan="2">前月末繰越</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num zero">—</td>
+      <td class="num">${yen(data.prevCumNet)}</td>
+      <td class="num">${yen(data.prevCumCard)}</td>
+      <td class="num">${yen(data.prevCumNet + data.prevCumCard)}</td>`;
+    tb.appendChild(tr);
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  let sumInc = 0, sumPred = 0, sumPay = 0, sumRec = 0;
+
+  for (const d of data.days) {
+    const tr = document.createElement('tr');
+    const dow = d.dow;
+    let cls = '';
+    if (dow === 0) cls = 'sun';
+    else if (dow === 6) cls = 'sat';
+    const dateObj = new Date(d.date + 'T00:00:00');
+    if (dateObj.getTime() === today.getTime()) cls += ' today';
+    if (cls) tr.className = cls.trim();
+    const dowCls = dow === 0 ? 'dow-sun' : dow === 6 ? 'dow-sat' : '';
+    const dayLabel = parseInt(d.date.split('-')[2], 10);
+    sumInc += d.income; sumPred += (d.incomePredicted||0); sumPay += d.payout; sumRec += d.cardRecovery;
+    tr.innerHTML = `
+      <td>${dayLabel}日</td>
+      <td class="${dowCls}">${dowName[dow]}</td>
+      <td class="num ${d.income ? '' : 'zero'}">${d.income ? yen(d.income) : '—'}</td>
+      <td class="num ${d.incomePredicted ? '' : 'zero'}" style="color:#0984e3">${d.incomePredicted ? yen(d.incomePredicted) : '—'}</td>
+      <td class="num ${d.payout ? '' : 'zero'}">${d.payout ? yen(d.payout) : '—'}</td>
+      <td class="num ${d.cardRecovery ? '' : 'zero'}">${d.cardRecovery ? yen(d.cardRecovery) : '—'}</td>
+      <td class="num ${d.dailyNet === 0 ? 'zero' : ''}" style="${d.dailyNet < 0 ? 'color:#d63031' : ''}">${d.dailyNet === 0 ? '—' : yen(d.dailyNet)}</td>
+      <td class="num" style="${d.cumNet < 0 ? 'color:#d63031;font-weight:600' : ''}">${yen(d.cumNet)}</td>
+      <td class="num">${yen(d.cumCard)}</td>
+      <td class="num" style="font-weight:600">${yen(d.usable)}</td>`;
+    tb.appendChild(tr);
+  }
+
+  // 月合計行
+  const last = data.days[data.days.length - 1] || { cumNet: data.prevCumNet, cumCard: data.prevCumCard, usable: data.prevCumNet + data.prevCumCard };
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'month-total';
+  totalRow.innerHTML = `
+    <td colspan="2">${state.month}月合計</td>
+    <td class="num">${yen(sumInc)}</td>
+    <td class="num">${yen(sumPred)}</td>
+    <td class="num">${yen(sumPay)}</td>
+    <td class="num">${yen(sumRec)}</td>
+    <td class="num">${yen(sumInc - sumPay - sumRec)}</td>
+    <td class="num">${yen(last.cumNet)}</td>
+    <td class="num">${yen(last.cumCard)}</td>
+    <td class="num">${yen(last.usable)}</td>`;
+  tb.appendChild(totalRow);
+}
+
+function yen(n) {
+  if (n === 0) return '¥0';
+  const sign = n < 0 ? '-' : '';
+  return sign + '¥' + Math.abs(n).toLocaleString();
+}
+
+// ─── 入金 ───
+async function loadIncome() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/income?' + q)).json();
+  document.getElementById('incomeCount').textContent = `${rows.length}件`;
+  const tb = document.querySelector('#incomeTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="7" class="empty">入金データはまだありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.entry_date || ''}</td>
+      <td>${escapeHtml(r.item || '')}</td>
+      <td>${escapeHtml(r.fund_item_name || '')}</td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${escapeHtml(r.status || '')}</td>
+      <td>${escapeHtml(r.memo || '')}</td>
+      <td class="actions">
+        <button class="icon-btn edit" onclick='editIncome(${JSON.stringify(r)})'>✎</button>
+        <button class="icon-btn" onclick="delIncome(${r.id})">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function openIncomeModal() {
+  document.getElementById('incomeId').value = '';
+  document.getElementById('incomeModalTitle').textContent = '入金の登録';
+  document.getElementById('incomeDate').value = `${state.year}-${String(state.month).padStart(2,'0')}-01`;
+  document.getElementById('incomeAmount').value = '';
+  document.getElementById('incomeItem').value = '';
+  document.getElementById('incomeFundItem').value = '';
+  document.getElementById('incomeStatus').value = '予測';
+  document.getElementById('incomeMemo').value = '';
+  showModal('incomeModal');
+}
+
+function editIncome(r) {
+  document.getElementById('incomeId').value = r.id;
+  document.getElementById('incomeModalTitle').textContent = '入金の編集';
+  document.getElementById('incomeDate').value = r.entry_date || '';
+  document.getElementById('incomeAmount').value = r.amount || 0;
+  document.getElementById('incomeItem').value = r.item || '';
+  document.getElementById('incomeFundItem').value = r.fund_item_id || '';
+  document.getElementById('incomeStatus').value = r.status || '予測';
+  document.getElementById('incomeMemo').value = r.memo || '';
+  showModal('incomeModal');
+}
+
+async function saveIncome() {
+  const id = document.getElementById('incomeId').value;
+  const body = {
+    company_id: state.companyId,
+    entry_date: document.getElementById('incomeDate').value,
+    item: document.getElementById('incomeItem').value,
+    fund_item_id: document.getElementById('incomeFundItem').value || null,
+    amount: document.getElementById('incomeAmount').value,
+    status: document.getElementById('incomeStatus').value,
+    memo: document.getElementById('incomeMemo').value,
+  };
+  const url = id ? `/api/funds/income/${id}` : '/api/funds/income';
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeModal('incomeModal');
+  loadIncome();
+}
+
+async function delIncome(id) {
+  if (!confirm('削除しますか？')) return;
+  await fetch(`/api/funds/income/${id}`, { method: 'DELETE' });
+  loadIncome();
+}
+
+// ─── 未払 ───
+async function loadPayable() {
+  refreshPropertySelect();
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/payables?' + q)).json();
+  document.getElementById('payableCount').textContent = `${rows.length}件`;
+  const tb = document.querySelector('#payableTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="12" class="empty">未払データはまだありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const total = (r.current_amount||0)+(r.carry_1m||0)+(r.carry_2m||0)+(r.carry_3m_plus||0);
+    const tr = document.createElement('tr');
+    const cls = r.pay_status === '済' ? 'cleared' :
+                r.pay_status === '取消' ? 'cancelled' :
+                r.priority === '高' ? 'priority-high' :
+                r.priority === '中' ? 'priority-mid' :
+                r.priority === '低' ? 'priority-low' : '';
+    if (cls) tr.className = cls;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.kind || '')}</td>
+      <td>${escapeHtml(r.property_name || '')}</td>
+      <td>${escapeHtml(r.summary || '')}</td>
+      <td>${escapeHtml(r.account_category_name || '')}</td>
+      <td>${r.due_date || ''}</td>
+      <td>${escapeHtml(r.billto || '')}</td>
+      <td class="num">¥${total.toLocaleString()}</td>
+      <td>${escapeHtml(r.priority || '')}</td>
+      <td>${r.plan_date || ''}</td>
+      <td class="num">¥${(r.plan_amount||0).toLocaleString()}</td>
+      <td>${escapeHtml(r.pay_status || '')}</td>
+      <td class="actions">
+        <button class="icon-btn edit" onclick='editPayable(${JSON.stringify(r)})'>✎</button>
+        <button class="icon-btn" onclick="delPayable(${r.id})">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function openPayableModal() {
+  refreshPropertySelect();
+  document.getElementById('payableId').value = '';
+  document.getElementById('payableModalTitle').textContent = '未払・支出予定の登録';
+  document.getElementById('payableKind').value = '月次予定';
+  document.getElementById('payableProperty').value = '';
+  document.getElementById('payableSummary').value = '';
+  document.getElementById('payableAccount').value = '';
+  document.getElementById('payableDueDate').value = '';
+  document.getElementById('payableBillto').value = '';
+  document.getElementById('payableCurrent').value = 0;
+  document.getElementById('payableCarry1m').value = 0;
+  document.getElementById('payableCarry2m').value = 0;
+  document.getElementById('payableCarry3m').value = 0;
+  document.getElementById('payablePriority').value = '月次';
+  document.getElementById('payableStatus').value = '';
+  document.getElementById('payablePlanDate').value = `${state.year}-${String(state.month).padStart(2,'0')}-01`;
+  document.getElementById('payablePlanAmount').value = '';
+  document.getElementById('payableInvoicePath').value = '';
+  showModal('payableModal');
+}
+
+function editPayable(r) {
+  refreshPropertySelect();
+  document.getElementById('payableId').value = r.id;
+  document.getElementById('payableModalTitle').textContent = '未払・支出予定の編集';
+  document.getElementById('payableKind').value = r.kind || '月次予定';
+  document.getElementById('payableProperty').value = r.property_id || '';
+  document.getElementById('payableSummary').value = r.summary || '';
+  document.getElementById('payableAccount').value = r.account_category_id || '';
+  document.getElementById('payableDueDate').value = r.due_date || '';
+  document.getElementById('payableBillto').value = r.billto || '';
+  document.getElementById('payableCurrent').value = r.current_amount || 0;
+  document.getElementById('payableCarry1m').value = r.carry_1m || 0;
+  document.getElementById('payableCarry2m').value = r.carry_2m || 0;
+  document.getElementById('payableCarry3m').value = r.carry_3m_plus || 0;
+  document.getElementById('payablePriority').value = r.priority || '月次';
+  document.getElementById('payableStatus').value = r.pay_status || '';
+  document.getElementById('payablePlanDate').value = r.plan_date || '';
+  document.getElementById('payablePlanAmount').value = r.plan_amount || 0;
+  document.getElementById('payableInvoicePath').value = r.invoice_path || '';
+  showModal('payableModal');
+}
+
+async function savePayable() {
+  const id = document.getElementById('payableId').value;
+  const body = {
+    company_id: state.companyId,
+    property_id: document.getElementById('payableProperty').value || null,
+    kind: document.getElementById('payableKind').value,
+    summary: document.getElementById('payableSummary').value,
+    account_category_id: document.getElementById('payableAccount').value || null,
+    due_date: document.getElementById('payableDueDate').value,
+    billto: document.getElementById('payableBillto').value,
+    current_amount: document.getElementById('payableCurrent').value,
+    carry_1m: document.getElementById('payableCarry1m').value,
+    carry_2m: document.getElementById('payableCarry2m').value,
+    carry_3m_plus: document.getElementById('payableCarry3m').value,
+    priority: document.getElementById('payablePriority').value,
+    plan_date: document.getElementById('payablePlanDate').value,
+    plan_amount: document.getElementById('payablePlanAmount').value,
+    pay_status: document.getElementById('payableStatus').value,
+    invoice_path: document.getElementById('payableInvoicePath').value,
+  };
+  const url = id ? `/api/funds/payables/${id}` : '/api/funds/payables';
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeModal('payableModal');
+  loadPayable();
+}
+
+async function delPayable(id) {
+  if (!confirm('削除しますか？')) return;
+  await fetch(`/api/funds/payables/${id}`, { method: 'DELETE' });
+  loadPayable();
+}
+
+// ─── カード ───
+async function loadCard() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/card-recoveries?' + q)).json();
+  document.getElementById('cardCount').textContent = `${rows.length}件`;
+  const tb = document.querySelector('#cardTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty">カード枠回復データはまだありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.pay_date || ''}</td>
+      <td>${escapeHtml(r.card_name || '')}</td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${escapeHtml(r.kind || '')}</td>
+      <td>${escapeHtml(r.memo || '')}</td>
+      <td class="actions">
+        <button class="icon-btn edit" onclick='editCard(${JSON.stringify(r)})'>✎</button>
+        <button class="icon-btn" onclick="delCard(${r.id})">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function openCardModal() {
+  document.getElementById('cardId').value = '';
+  document.getElementById('cardModalTitle').textContent = 'カード枠回復の登録';
+  document.getElementById('cardPayDate').value = `${state.year}-${String(state.month).padStart(2,'0')}-01`;
+  document.getElementById('cardAmount').value = '';
+  document.getElementById('cardName').value = '';
+  document.getElementById('cardKind').value = '通常';
+  document.getElementById('cardMemo').value = '';
+  showModal('cardModal');
+}
+
+function editCard(r) {
+  document.getElementById('cardId').value = r.id;
+  document.getElementById('cardModalTitle').textContent = 'カード枠回復の編集';
+  document.getElementById('cardPayDate').value = r.pay_date || '';
+  document.getElementById('cardAmount').value = r.amount || 0;
+  document.getElementById('cardName').value = r.card_name || '';
+  document.getElementById('cardKind').value = r.kind || '通常';
+  document.getElementById('cardMemo').value = r.memo || '';
+  showModal('cardModal');
+}
+
+async function saveCard() {
+  const id = document.getElementById('cardId').value;
+  const body = {
+    company_id: state.companyId,
+    pay_date: document.getElementById('cardPayDate').value,
+    card_name: document.getElementById('cardName').value,
+    amount: document.getElementById('cardAmount').value,
+    kind: document.getElementById('cardKind').value,
+    memo: document.getElementById('cardMemo').value,
+  };
+  const url = id ? `/api/funds/card-recoveries/${id}` : '/api/funds/card-recoveries';
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeModal('cardModal');
+  loadCard();
+}
+
+async function delCard(id) {
+  if (!confirm('削除しますか？')) return;
+  await fetch(`/api/funds/card-recoveries/${id}`, { method: 'DELETE' });
+  loadCard();
+}
+
+// ─── 売上入力 ───
+async function loadSales() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/sales?' + q)).json();
+  document.getElementById('salesCount').textContent = `${rows.length}件`;
+  const tb = document.querySelector('#salesTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="8" class="empty">売上データはまだありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const ratio = `${r.cur_ratio||0}/${r.nxt_ratio||0}/${r.nxt2_ratio||0}`;
+    tr.innerHTML = `
+      <td>${r.year_month || ''}</td>
+      <td>${escapeHtml(r.facility_name || '')}</td>
+      <td><span style="background:#eee;padding:2px 8px;border-radius:8px;font-size:11px">${escapeHtml(r.facility_dept || '')}</span></td>
+      <td>${escapeHtml(r.ota_name || '')}</td>
+      <td><span style="font-size:11px;color:#636e72">${ratio}</span></td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${escapeHtml(r.memo || '')}</td>
+      <td class="actions">
+        <button class="icon-btn edit" onclick='editSales(${JSON.stringify(r)})'>✎</button>
+        <button class="icon-btn" onclick="delSales(${r.id})">🗑</button>
+      </td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function fillSalesSelects() {
+  const fSel = document.getElementById('salesFacility');
+  fSel.innerHTML = '';
+  const facilities = (state.masters.facilities || []).filter(f => f.company_id === state.companyId);
+  if (facilities.length === 0) {
+    fSel.innerHTML = '<option value="">（この会社に施設なし）</option>';
+  } else {
+    for (const f of facilities) {
+      const o = document.createElement('option');
+      o.value = f.id; o.textContent = `${f.name}（${f.dept || ''}）`;
+      fSel.appendChild(o);
+    }
+  }
+  const oSel = document.getElementById('salesOta');
+  oSel.innerHTML = '';
+  for (const o of (state.masters.otaChannels || [])) {
+    const opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = `${o.name}　[${o.cur_ratio}/${o.nxt_ratio}/${o.nxt2_ratio}]`;
+    oSel.appendChild(opt);
+  }
+}
+
+function openSalesModal() {
+  fillSalesSelects();
+  document.getElementById('salesId').value = '';
+  document.getElementById('salesModalTitle').textContent = '売上の登録';
+  document.getElementById('salesYearMonth').value = `${state.year}-${String(state.month).padStart(2,'0')}`;
+  document.getElementById('salesAmount').value = '';
+  document.getElementById('salesMemo').value = '';
+  document.getElementById('salesPreviewBox').style.display = 'none';
+  showModal('salesModal');
+  bindSalesPreview();
+}
+
+function editSales(r) {
+  fillSalesSelects();
+  document.getElementById('salesId').value = r.id;
+  document.getElementById('salesModalTitle').textContent = '売上の編集';
+  document.getElementById('salesYearMonth').value = r.year_month || '';
+  document.getElementById('salesAmount').value = r.amount || 0;
+  document.getElementById('salesFacility').value = r.facility_id || '';
+  document.getElementById('salesOta').value = r.ota_channel_id || '';
+  document.getElementById('salesMemo').value = r.memo || '';
+  showModal('salesModal');
+  bindSalesPreview();
+  updateSalesPreview();
+}
+
+function bindSalesPreview() {
+  ['salesAmount','salesOta','salesYearMonth'].forEach(id => {
+    const el = document.getElementById(id);
+    el.oninput = updateSalesPreview;
+    el.onchange = updateSalesPreview;
+  });
+}
+
+function updateSalesPreview() {
+  const amt = parseInt(document.getElementById('salesAmount').value || '0', 10);
+  const otaId = parseInt(document.getElementById('salesOta').value || '0', 10);
+  const ym = document.getElementById('salesYearMonth').value;
+  const box = document.getElementById('salesPreviewBox');
+  const out = document.getElementById('salesPreview');
+  if (!amt || !otaId || !ym) { box.style.display = 'none'; return; }
+  const ota = (state.masters.otaChannels || []).find(o => o.id === otaId);
+  if (!ota) { box.style.display = 'none'; return; }
+  const parts = previewPredictions(ym, amt, ota);
+  box.style.display = '';
+  out.innerHTML = parts.map(p =>
+    p.amount > 0
+      ? `${p.label}：<strong>${p.date || '—'}</strong> ¥${p.amount.toLocaleString()}`
+      : `${p.label}：—`
+  ).join('　／　');
+}
+
+function previewPredictions(ym, amount, ota) {
+  const [y, m] = ym.split('-').map(Number);
+  function clamp(year, mo, day) {
+    if (!day) return null;
+    const last = new Date(year, mo, 0).getDate();
+    return Math.min(day, last);
+  }
+  function shift(year, mo, delta) {
+    let nm = mo + delta, ny = year;
+    while (nm > 12) { nm -= 12; ny++; }
+    return { y: ny, m: nm };
+  }
+  const periods = [
+    { ratio: ota.cur_ratio,  day: ota.pay_day_cur,  shift: 0, label: '当月' },
+    { ratio: ota.nxt_ratio,  day: ota.pay_day_nxt,  shift: 1, label: '翌月' },
+    { ratio: ota.nxt2_ratio, day: ota.pay_day_nxt2, shift: 2, label: '翌々月' },
+  ];
+  return periods.map(p => {
+    const r = p.ratio || 0;
+    const amt = Math.round(amount * r / 100);
+    let date = null;
+    if (r > 0 && p.day) {
+      const { y: yy, m: mm } = shift(y, m, p.shift);
+      const d = clamp(yy, mm, p.day);
+      if (d) date = `${yy}-${String(mm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    return { label: p.label, date, amount: amt };
+  });
+}
+
+async function saveSales() {
+  const id = document.getElementById('salesId').value;
+  const body = {
+    company_id: state.companyId,
+    facility_id: document.getElementById('salesFacility').value,
+    ota_channel_id: document.getElementById('salesOta').value,
+    year_month: document.getElementById('salesYearMonth').value,
+    amount: document.getElementById('salesAmount').value,
+    memo: document.getElementById('salesMemo').value,
+  };
+  if (!body.facility_id || !body.ota_channel_id) {
+    alert('施設と OTA／決済 を選択してください');
+    return;
+  }
+  const url = id ? `/api/funds/sales/${id}` : '/api/funds/sales';
+  const method = id ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  closeModal('salesModal');
+  loadSales();
+}
+
+async function delSales(id) {
+  if (!confirm('削除しますか？（紐づく入金予測も削除されます）')) return;
+  await fetch(`/api/funds/sales/${id}`, { method: 'DELETE' });
+  loadSales();
+}
+
+// ─── 入金予測（読み取り専用） ───
+async function loadPredicted() {
+  const q = new URLSearchParams({ companyId: state.companyId, year: state.year, month: state.month });
+  const rows = await (await fetch('/api/funds/predicted-incomes?' + q)).json();
+  document.getElementById('predictedCount').textContent = `${rows.length}件 / 合計 ¥${rows.reduce((s,r)=>s+(r.amount||0),0).toLocaleString()}`;
+  const tb = document.querySelector('#predictedTable tbody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty">この月の予測入金はありません</td></tr>`;
+    return;
+  }
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.expected_date || ''}</td>
+      <td>${escapeHtml(r.facility_name || '')}</td>
+      <td>${escapeHtml(r.ota_name || '')}</td>
+      <td><span style="font-size:11px;background:#eee;padding:2px 8px;border-radius:8px">${escapeHtml(r.period || '')}</span></td>
+      <td class="num">¥${(r.amount||0).toLocaleString()}</td>
+      <td>${r.sales_entry_id ? '#' + r.sales_entry_id : ''}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ─── OTAマスタ（編集可） ───
+async function loadOta() {
+  const rows = await (await fetch('/api/funds/ota-channels')).json();
+  const tb = document.querySelector('#otaTable tbody');
+  tb.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td><input type="number" min="0" max="100" data-field="cur_ratio" value="${r.cur_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="0" max="100" data-field="nxt_ratio" value="${r.nxt_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="0" max="100" data-field="nxt2_ratio" value="${r.nxt2_ratio||0}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_cur" value="${r.pay_day_cur||''}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_nxt" value="${r.pay_day_nxt||''}" style="width:70px"></td>
+      <td><input type="number" min="1" max="31" data-field="pay_day_nxt2" value="${r.pay_day_nxt2||''}" style="width:70px"></td>`;
+    tb.appendChild(tr);
+  }
+}
+
+async function saveAllOta() {
+  const rows = document.querySelectorAll('#otaTable tbody tr');
+  for (const tr of rows) {
+    const id = tr.dataset.id;
+    const body = {};
+    tr.querySelectorAll('input[data-field]').forEach(inp => { body[inp.dataset.field] = inp.value; });
+    await fetch(`/api/funds/ota-channels/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+  }
+  // 売上の予測再計算：全 sales を取得して PUT で再保存（簡易方式）
+  await regenerateAllPredictions();
+  // マスタ再ロード
+  await loadMasters();
+  alert('OTAマスタを保存し、入金予測を再計算しました');
+  loadOta();
+}
+
+async function regenerateAllPredictions() {
+  // 各会社の sales を全件 fetch → 同じ内容で PUT すれば predicted_incomes が再生成される
+  const allSales = [];
+  for (const c of state.masters.companies) {
+    const q = new URLSearchParams({ companyId: c.id });
+    const rows = await (await fetch('/api/funds/sales?' + q)).json();
+    rows.forEach(r => allSales.push(r));
+  }
+  for (const s of allSales) {
+    await fetch(`/api/funds/sales/${s.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: s.company_id, facility_id: s.facility_id,
+        ota_channel_id: s.ota_channel_id, year_month: s.year_month,
+        amount: s.amount, memo: s.memo || ''
+      })
+    });
+  }
+}
+
+// ─── ユーティリティ ───
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+</script>
+</body>
+</html>

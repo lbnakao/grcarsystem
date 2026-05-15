@@ -196,6 +196,13 @@
     color: #95a5a6;
     font-weight: 500;
   }
+
+  /* ─── ソート可能な列ヘッダー ─── */
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { background: #eef5ff; }
+  th.sortable .sort-arrow { display: inline-block; margin-left: 4px; font-size: 10px; color: #bbb; }
+  th.sortable.sort-asc .sort-arrow,
+  th.sortable.sort-desc .sort-arrow { color: #0984e3; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -210,6 +217,7 @@
     <button class="nav-tab" data-page="help">❓ 使い方</button>
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+    <a href="/keiri/funds/" style="background:#f39c12;color:#fff;text-decoration:none;padding:6px 12px;border-radius:4px;font-size:12px;font-weight:700;" title="社長Excel v8の統合プロトタイプ">💴 資金管理（DEMO）</a>
     <span id="nav-user-name" style="font-size:12px;color:#cfe6ff;"></span>
     <button id="nav-home" style="background:rgba(255,255,255,0.15);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;" title="選択画面に戻る">🏠 ホーム</button>
     <button id="nav-logout" style="background:rgba(255,255,255,0.15);color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;">ログアウト</button>
@@ -246,6 +254,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div class="action-bar">
       <button class="btn btn-primary" id="btn-bank-upload">📂 通帳データを読み込む（CSV/Excel）</button>
       <button class="btn btn-success" id="btn-bulk-vendor">🏢 支払先を一括で設定する</button>
+      <button class="btn btn-success" id="btn-auto-vendor">🔮 摘要から支払先を自動推定</button>
       <button class="btn btn-ghost" id="btn-bank-pivot-toggle">📊 経費の内訳を見る</button>
       <button class="btn btn-ghost" id="btn-bootstrap-rules">今までの入力から自動認識ルールを学習</button>
     </div>
@@ -278,7 +287,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
         <table>
           <thead>
             <tr>
-              <th>勘定日</th>
+              <th class="sortable" data-sort="tx_date" title="クリックで昇順/降順を切替">勘定日<span class="sort-arrow">⇅</span></th>
               <th>出金</th>
               <th>入金</th>
               <th>残高</th>
@@ -311,6 +320,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="btn btn-success" id="btn-invoice-add">＋ 請求書を1件追加</button>
       <button class="btn btn-primary" id="btn-invoice-upload-excel">📂 請求書Excelをまとめて読み込む</button>
       <button class="btn btn-primary" id="btn-invoice-match">🔄 通帳と照合して消込する...</button>
+      <button class="btn btn-success" id="btn-auto-clear">⚡ 完全一致を自動消込</button>
       <button class="btn btn-primary" id="btn-invoice-clear" disabled>選択した請求を消込...</button>
       <button class="btn btn-ghost" id="btn-invoice-undo" disabled>消込を取り消す</button>
       <button class="btn btn-danger" id="btn-invoice-delete" disabled>選択した請求を削除</button>
@@ -353,7 +363,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <th>支払方法</th>
             <th>支払期日</th>
             <th>請求先（施設）</th>
-            <th>取引日</th>
+            <th class="sortable" data-sort="transaction_date" title="クリックで昇順/降順を切替">取引日<span class="sort-arrow">⇅</span></th>
             <th>今月金額</th>
             <th>前月繰越</th>
             <th>前々月繰越</th>
@@ -724,6 +734,40 @@ let selectedInvoices = new Set();
 let pendingUpload = null;
 let matchData = [];
 
+// 列ソート状態（key=ソートキー文字列, dir='asc'|'desc'）
+let bankSort = { key: 'tx_date', dir: 'desc' };
+let invoiceSort = { key: 'transaction_date', dir: 'asc' };
+
+function sortByKey(arr, key, dir) {
+  const mul = dir === 'desc' ? -1 : 1;
+  return [...arr].sort((a, b) => {
+    const av = a[key], bv = b[key];
+    // 空文字・null・undefinedは常に末尾
+    const aE = (av === null || av === undefined || av === '');
+    const bE = (bv === null || bv === undefined || bv === '');
+    if (aE && bE) return 0;
+    if (aE) return 1;
+    if (bE) return -1;
+    if (av < bv) return -1 * mul;
+    if (av > bv) return 1 * mul;
+    return 0;
+  });
+}
+function applySortHeaderStyle(scope, sortKey, dir) {
+  // scope: querySelector で table を絞り込み
+  const ths = document.querySelectorAll(scope + ' th.sortable');
+  ths.forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    const arrow = th.querySelector('.sort-arrow');
+    if (th.dataset.sort === sortKey) {
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      if (arrow) arrow.textContent = dir === 'asc' ? '▲' : '▼';
+    } else {
+      if (arrow) arrow.textContent = '⇅';
+    }
+  });
+}
+
 // =============================================================================
 // Utilities
 // =============================================================================
@@ -859,6 +903,10 @@ function renderBankTable() {
   else if (status === 'auto') filtered = filtered.filter(t => t.auto_categorized === 1);
   else if (status === 'manual') filtered = filtered.filter(t => t.category && t.auto_categorized === 0);
 
+  // ソート適用
+  filtered = sortByKey(filtered, bankSort.key, bankSort.dir);
+  applySortHeaderStyle('#page-bank', bankSort.key, bankSort.dir);
+
   const tbody = document.getElementById('bank-tbody');
   tbody.innerHTML = filtered.map(t => {
     let rowClass = '';
@@ -976,6 +1024,34 @@ document.getElementById('bank-tbody').addEventListener('click', (e) => {
 document.getElementById('bank-filter-search').addEventListener('input', () => {
   clearTimeout(window.__bankSearchT);
   window.__bankSearchT = setTimeout(loadBankTransactions, 300);
+});
+
+// 通帳テーブル：ソート可能ヘッダーのクリック
+document.querySelectorAll('#page-bank th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (bankSort.key === key) {
+      bankSort.dir = bankSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      bankSort.key = key;
+      bankSort.dir = 'desc';
+    }
+    renderBankTable();
+  });
+});
+
+// 請求書テーブル：ソート可能ヘッダーのクリック
+document.querySelectorAll('#page-invoices th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (invoiceSort.key === key) {
+      invoiceSort.dir = invoiceSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      invoiceSort.key = key;
+      invoiceSort.dir = 'asc';
+    }
+    renderInvoiceTable();
+  });
 });
 
 // 経費内訳ビュー切替
@@ -1193,6 +1269,34 @@ document.getElementById('btn-bootstrap-rules').addEventListener('click', async (
   showToast(`✓ ルール作成:${res.created}件 / 更新:${res.updated}件`, 'success');
 });
 
+// 摘要から支払先を自動推定（一括）
+document.getElementById('btn-auto-vendor').addEventListener('click', async () => {
+  if (!confirm(
+    '通帳の「摘要」から会社名を自動推定して、空欄の「支払先（会社名）」を一括で埋めます。\n\n' +
+    '・登録済みルールに一致するものはそのルールで\n' +
+    '・一致しないものは汎用ロジックで「株式会社」「(ｶ)」「振込先頭」「末尾の番号」などを除去し会社名を抽出\n\n' +
+    '実行しますか？'
+  )) return;
+  const btn = document.getElementById('btn-auto-vendor');
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = '推定中...';
+  try {
+    const res = await api('/api/keiri/bank/auto-vendor', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ only_empty: true })
+    });
+    showToast(`✓ ${res.updated}件の支払先を推定（ルール:${res.by_rule} / 汎用:${res.by_infer}）`, 'success');
+    await loadBankTransactions();
+  } catch (e) {
+    showToast('エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+});
+
 // =============================================================================
 // 支払先一括設定モーダル
 // =============================================================================
@@ -1367,6 +1471,10 @@ async function loadInvoices() {
 }
 
 function renderInvoiceTable() {
+  // ソート適用（render毎に最新の invoices をソート）
+  invoices = sortByKey(invoices, invoiceSort.key, invoiceSort.dir);
+  applySortHeaderStyle('#page-invoices', invoiceSort.key, invoiceSort.dir);
+
   const tbody = document.getElementById('invoice-tbody');
 
   // 遅延月数でレベル判定（支払いが遅れている月数が多いほど濃い赤）
@@ -1871,6 +1979,55 @@ document.getElementById('btn-invoice-match').addEventListener('click', () => {
 
 document.getElementById('match-modal-close').addEventListener('click', () => {
   document.getElementById('match-modal').classList.remove('show');
+});
+
+// 完全一致を自動消込
+document.getElementById('btn-auto-clear').addEventListener('click', async () => {
+  // 先にドライランで件数だけ取得
+  let preview;
+  try {
+    preview = await api('/api/keiri/match/auto-clear', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ dry_run: true })
+    });
+  } catch (e) {
+    showToast('プレビュー取得エラー: ' + e.message, 'error');
+    return;
+  }
+  const n = preview.cleared || 0;
+  if (n === 0) {
+    alert(
+      '自動消込対象の完全一致はありませんでした。\n\n' +
+      '前提：通帳の「支払先（会社名）」と請求書の「業者名」が類似度80%以上 + 金額が完全一致。\n' +
+      '通帳に支払先が未入力の場合は、まず「🔮 摘要から支払先を自動推定」を実行してください。'
+    );
+    return;
+  }
+  if (!confirm(
+    `通帳と請求書で「支払先(会社名) + 金額」が完全一致したものを ${n}件 自動的に消込みます。\n\n` +
+    '※ 該当の請求書には取消線が付き、ステータスが「済」または「一部済」に変わります。\n' +
+    '※ 「消込を取り消す」で一件ずつ取り消すことができます。\n\n' +
+    '実行しますか？'
+  )) return;
+  const btn = document.getElementById('btn-auto-clear');
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = '自動消込中...';
+  try {
+    const res = await api('/api/keiri/match/auto-clear', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ dry_run: false })
+    });
+    showToast(`✓ ${res.cleared}件を自動消込しました`, 'success');
+    await loadInvoices();
+  } catch (e) {
+    showToast('エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
 });
 
 document.getElementById('btn-run-match').addEventListener('click', async () => {
