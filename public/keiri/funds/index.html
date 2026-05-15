@@ -1363,6 +1363,9 @@ document.getElementById('v10-file-input').addEventListener('change', async (e) =
     alert(msg);
     return;
   }
+  const healedTxt = preview.self_healed
+    ? '\n\n🔧 マスタが空だったため、会社／物件／施設／OTA／勘定科目を自動で初期化しました。'
+    : '';
   const ok = confirm(
     '【社長Excel(v10) の取り込み確認】\n\n' +
     '以下の件数が反映されます：\n' +
@@ -1371,6 +1374,7 @@ document.getElementById('v10-file-input').addEventListener('change', async (e) =
     '・未払予定: ' + s.payable + '件\n' +
     '・カード枠回復: ' + s.card + '件\n' +
     '・スキップ: ' + s.skipped + '件\n' +
+    healedTxt +
     warnTxt + '\n\n' +
     '⚠ 注意：実行すると現在の資金管理データ（入金/売上/未払/予測/カード枠回復）は<<全て削除>>されて、Excelの内容で置き換わります。\n\n' +
     '実行してよろしいですか？'

@@ -962,7 +962,7 @@ async function createKeiriTables() {
   }
 
   const facCount = await query("SELECT COUNT(*) as c FROM keiri_facilities");
-  if (facCount[0].c === 0) {
+  if (Number(facCount[0].c) === 0) {
     const facList = [
       'リゾート', 'ビュー', 'デルーネ', 'デルーネ西館', '天神ハウス', '本川', '竹原', 'たけはら',
       'フォレストヒルズ', '温井', 'いこいの村', 'グリーンシャワー', 'パルコ',

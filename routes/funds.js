@@ -614,16 +614,32 @@ router.post('/upload-v10', upload.single('file'), async (req, res) => {
     console.warn('[upload-v10] master seed skip:', e.message);
   }
 
-  // ── マスタ取得 ──
+  // ── マスタ取得（空ならその場で自動シード。PostgreSQL初回起動でseedが効かなかった場合の自己治癒） ──
+  let companyRows = await query("SELECT id, code, name FROM funds_companies");
+  let selfHealed = false;
+  if (companyRows.length === 0) {
+    try {
+      await seedFundsMasters();
+      await seedFundsV10();
+      selfHealed = true;
+      companyRows = await query("SELECT id, code, name FROM funds_companies");
+    } catch (e) {
+      return res.status(500).json({ error: 'マスタ自動シードに失敗: ' + e.message });
+    }
+  }
   const companies = {};
-  (await query("SELECT id, code, name FROM funds_companies")).forEach(r => {
+  companyRows.forEach(r => {
     companies[r.code] = r.id;
     companies[r.name] = r.id;
   });
   const properties = {};
   (await query("SELECT id, name FROM funds_properties")).forEach(r => properties[r.name] = r.id);
+  let facilityRows = await query("SELECT id, name FROM funds_facilities");
+  if (facilityRows.length === 0) {
+    try { await seedFundsV10(); facilityRows = await query("SELECT id, name FROM funds_facilities"); selfHealed = true; } catch (e) {}
+  }
   const facilities = {};
-  (await query("SELECT id, name FROM funds_facilities")).forEach(r => facilities[r.name] = r.id);
+  facilityRows.forEach(r => facilities[r.name] = r.id);
   if (facilities['竹原（レストラン含む）']) {
     facilities['竹原（ﾚｽﾄﾗﾝ含む）'] = facilities['竹原（レストラン含む）'];
   }
@@ -812,6 +828,7 @@ router.post('/upload-v10', upload.single('file'), async (req, res) => {
     warnings: warnings.slice(0, 20),
     total_warnings: warnings.length,
     diagnostics,
+    self_healed: selfHealed,
   });
 });
 
