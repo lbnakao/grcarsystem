@@ -113,15 +113,19 @@
   <span class="demo-badge">DEMO</span>
   <div class="nav-sub">Excel v10（20シート）の統合プロトタイプ — OTAサイクル＆入金予測対応</div>
   <div class="nav-spacer"></div>
+  <button id="btn-upload-v10" class="nav-link" style="background:#00b894;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700;">📂 社長Excel(v10)を読み込む</button>
   <a class="nav-link" href="/keiri/">← 経理トップに戻る</a>
 </nav>
+
+<input type="file" id="v10-file-input" accept=".xlsx,.xls" style="display:none;">
 
 <main class="main">
   <!-- ─── ページの目的を明示するバナー ─── -->
   <div style="background:#fff8dc;border-left:4px solid #f39c12;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#2d3436;">
     <strong style="color:#b8860b;">💴 このページ（資金管理 DEMO）の対象データ</strong><br>
-    ・社長Excel「全社統合_資金管理_v10」(20シート構成) のデータをフォーム入力で扱います<br>
-    ・<strong>Excelファイルの一括取り込み機能はありません</strong>。「+新規入金」「+新規未払」「+新規売上」「+新規カード支払」ボタンから1件ずつ入力してください<br>
+    ・社長Excel「全社統合_資金管理_v10」(20シート構成) のデータを管理する画面です<br>
+    ・<strong>右上の「📂 社長Excel(v10)を読み込む」</strong> から一括取り込みできます（入金入力／売上入力／未払予定一覧の3シートを自動でパース）<br>
+    ・取り込み後は「+新規入金」「+新規未払」などのボタンから個別に追加・修正できます<br>
     ・⚠ 通帳CSV/Excel や 月次請求書Excel（R8.◯月）の取り込みは「← 経理トップに戻る」から経理画面でアップロードします
   </div>
 
@@ -1309,6 +1313,80 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
+
+// ─── 社長Excel(v10) アップロード ───
+document.getElementById('btn-upload-v10').addEventListener('click', () => {
+  document.getElementById('v10-file-input').click();
+});
+document.getElementById('v10-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  // ① プレビュー（dry_run=true）
+  const fd1 = new FormData();
+  fd1.append('file', file);
+  fd1.append('dry_run', 'true');
+  let preview;
+  try {
+    const res = await fetch('/api/funds/upload-v10', { method: 'POST', body: fd1 });
+    preview = await res.json();
+    if (!res.ok || preview.error) {
+      const hint = preview.hint ? '\n\n' + preview.hint : '';
+      alert('⚠ ' + (preview.error || 'プレビューエラー') + hint);
+      return;
+    }
+  } catch (err) {
+    alert('プレビュー取得エラー: ' + err.message);
+    return;
+  }
+
+  const s = preview.stats;
+  const warns = preview.warnings || [];
+  const warnTxt = warns.length > 0
+    ? '\n\n⚠ 警告 (' + preview.total_warnings + '件):\n' + warns.slice(0, 5).map(w => ' ・' + w).join('\n')
+        + (preview.total_warnings > 5 ? '\n ・(他' + (preview.total_warnings - 5) + '件)' : '')
+    : '';
+  const ok = confirm(
+    '【社長Excel(v10) の取り込み確認】\n\n' +
+    '以下の件数が反映されます：\n' +
+    '・入金入力: ' + s.income + '件\n' +
+    '・売上入力: ' + s.sales + '件（→ 入金予測 ' + s.predicted + '件を自動展開）\n' +
+    '・未払予定: ' + s.payable + '件\n' +
+    '・カード枠回復: ' + s.card + '件\n' +
+    '・スキップ: ' + s.skipped + '件\n' +
+    warnTxt + '\n\n' +
+    '⚠ 注意：実行すると現在の資金管理データ（入金/売上/未払/予測/カード枠回復）は<<全て削除>>されて、Excelの内容で置き換わります。\n\n' +
+    '実行してよろしいですか？'
+  );
+  if (!ok) return;
+
+  // ② 確定（dry_run=false）
+  const fd2 = new FormData();
+  fd2.append('file', file);
+  fd2.append('dry_run', 'false');
+  try {
+    const res = await fetch('/api/funds/upload-v10', { method: 'POST', body: fd2 });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      alert('⚠ 取り込みエラー: ' + (data.error || res.status));
+      return;
+    }
+    const s2 = data.stats;
+    alert(
+      '✓ 取り込み完了\n\n' +
+      '入金入力: ' + s2.income + '件\n' +
+      '売上入力: ' + s2.sales + '件 / 入金予測自動展開: ' + s2.predicted + '件\n' +
+      '未払予定: ' + s2.payable + '件\n' +
+      'カード枠回復: ' + s2.card + '件\n' +
+      'スキップ: ' + s2.skipped + '件'
+    );
+    // 画面を再読み込み
+    location.reload();
+  } catch (err) {
+    alert('取り込みエラー: ' + err.message);
+  }
+});
 </script>
 </body>
 </html>

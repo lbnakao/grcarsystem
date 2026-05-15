@@ -393,7 +393,7 @@ function detectIncompatibleExcel(workbook, filename) {
     return {
       kind: 'president',
       detail: `「${matchedPresident.slice(0,3).join('」「')}」など${matchedPresident.length}個の独自シートを検出`,
-      hint: 'このファイルは『社長Excel(全社統合_資金管理_v10)』形式です。経理ページの「通帳」「請求書」アップロード対象外なので、内容は資金管理（DEMO）画面のフォームから手入力してください。',
+      hint: 'このファイルは『社長Excel(全社統合_資金管理_v10)』形式です。経理ページではなく、右上の「💴 資金管理（DEMO）」画面を開き、「📂 社長Excel(v10)を読み込む」ボタンからアップロードしてください。',
     };
   }
   // _2026年月別経費一覧【...】.xlsx 系：月毎の集計表で、通帳でも請求書でもない
