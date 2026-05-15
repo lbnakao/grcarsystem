@@ -856,6 +856,151 @@ router.get('/diagnostics', async (req, res) => {
 });
 
 // ============================================================================
+// 支払可能性分析（要件定義書 F-07）
+//   月×優先度(高/中/低/月次/カード枠回復)のクロステーブル + 月別資金充足度
+//   未払予定の plan_date / due_date を月でグルーピングし、優先度別に集計
+//   月単位の入金(actual + predicted) と比較して unmet をハイライト
+// ============================================================================
+router.get('/payment-affordability', async (req, res) => {
+  const { year, companyId } = req.query;
+  let sql = `
+    SELECT
+      substr(COALESCE(plan_date, due_date), 1, 7) AS ym,
+      priority,
+      COUNT(*) AS cnt,
+      SUM(plan_amount) AS plan_total,
+      SUM(current_amount + carry_1m + carry_2m + carry_3m_plus) AS outstanding_total
+    FROM funds_payable_entries
+    WHERE (pay_status IS NULL OR pay_status = '' OR pay_status != '済')
+      AND (plan_date IS NOT NULL OR due_date IS NOT NULL)
+  `;
+  const params = [];
+  if (companyId) { sql += " AND company_id = ?"; params.push(toInt(companyId)); }
+  if (year) {
+    sql += " AND substr(COALESCE(plan_date, due_date),1,4) = ?";
+    params.push(String(year));
+  }
+  sql += " GROUP BY ym, priority ORDER BY ym, priority";
+  const rows = await query(sql, params);
+
+  const PRIORITIES = ['高', '中', '低', '月次', 'カード枠回復'];
+  const byMonth = {};
+  rows.forEach(r => {
+    if (!r.ym) return;
+    if (!byMonth[r.ym]) byMonth[r.ym] = {};
+    const p = PRIORITIES.includes(r.priority) ? r.priority : '月次';
+    if (!byMonth[r.ym][p]) byMonth[r.ym][p] = { cnt: 0, plan: 0, outstanding: 0 };
+    byMonth[r.ym][p].cnt += Number(r.cnt) || 0;
+    byMonth[r.ym][p].plan += Number(r.plan_total) || 0;
+    byMonth[r.ym][p].outstanding += Number(r.outstanding_total) || 0;
+  });
+
+  // 入金（実績）
+  let availSql = `SELECT substr(entry_date,1,7) AS ym, SUM(amount) AS inc
+                  FROM funds_income_entries WHERE entry_date IS NOT NULL`;
+  const ap = [];
+  if (companyId) { availSql += " AND company_id = ?"; ap.push(toInt(companyId)); }
+  if (year) { availSql += " AND substr(entry_date,1,4) = ?"; ap.push(String(year)); }
+  availSql += " GROUP BY ym";
+  const incRows = await query(availSql, ap);
+  const incomeByMonth = {};
+  incRows.forEach(r => { if (r.ym) incomeByMonth[r.ym] = Number(r.inc) || 0; });
+
+  // 予測入金
+  let preSql = `SELECT substr(expected_date,1,7) AS ym, SUM(amount) AS inc
+                FROM funds_predicted_incomes WHERE expected_date IS NOT NULL AND amount > 0`;
+  const pp = [];
+  if (companyId) { preSql += " AND company_id = ?"; pp.push(toInt(companyId)); }
+  if (year) { preSql += " AND substr(expected_date,1,4) = ?"; pp.push(String(year)); }
+  preSql += " GROUP BY ym";
+  const preRows = await query(preSql, pp);
+  const predictedByMonth = {};
+  preRows.forEach(r => { if (r.ym) predictedByMonth[r.ym] = Number(r.inc) || 0; });
+
+  const months = [...new Set([...Object.keys(byMonth), ...Object.keys(incomeByMonth), ...Object.keys(predictedByMonth)])].sort();
+  const result = months.map(ym => {
+    const cells = byMonth[ym] || {};
+    // 「カード枠回復」は支出に含めない (R-1: カード枠回復ルール)
+    const totalOutstandingExclCard = ['高', '中', '低', '月次'].reduce((s, p) => s + ((cells[p] && cells[p].outstanding) || 0), 0);
+    const inc = incomeByMonth[ym] || 0;
+    const pre = predictedByMonth[ym] || 0;
+    const available = inc + pre;
+    const shortfall = totalOutstandingExclCard - available;
+    return {
+      ym,
+      cells,
+      total_outstanding: totalOutstandingExclCard,
+      income: inc,
+      predicted: pre,
+      available,
+      shortfall,
+      affordable: shortfall <= 0,
+    };
+  });
+  res.json({ priorities: PRIORITIES, rows: result });
+});
+
+// ============================================================================
+// 売上比較（年×月×会社のクロステーブル）— 「2025-2026比較」シート相当
+// ============================================================================
+router.get('/sales-comparison', async (req, res) => {
+  const { years, companyId } = req.query;
+  const targetYears = years ? String(years).split(',') : ['2025', '2026'];
+
+  const placeholders = targetYears.map(() => '?').join(',');
+  let sql = `
+    SELECT
+      substr(year_month, 1, 4) AS year,
+      substr(year_month, 6, 2) AS month,
+      company_id,
+      SUM(amount) AS total
+    FROM funds_sales_entries
+    WHERE year_month IS NOT NULL AND substr(year_month,1,4) IN (${placeholders})
+  `;
+  const params = [...targetYears];
+  if (companyId) { sql += " AND company_id = ?"; params.push(toInt(companyId)); }
+  sql += " GROUP BY year, month, company_id ORDER BY year, month, company_id";
+  const rows = await query(sql, params);
+
+  const companies = await query("SELECT id, name, code FROM funds_companies ORDER BY sort_order, id");
+
+  const tree = {};
+  rows.forEach(r => {
+    const y = r.year, m = r.month, cid = r.company_id;
+    if (!tree[y]) tree[y] = {};
+    if (!tree[y][m]) tree[y][m] = {};
+    tree[y][m][cid] = Number(r.total) || 0;
+  });
+
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const comparison = months.map(m => {
+    const row = { month: m + '月', byYear: {}, total: {} };
+    targetYears.forEach(y => {
+      row.byYear[y] = tree[y]?.[m] || {};
+      row.total[y] = Object.values(row.byYear[y]).reduce((s, v) => s + v, 0);
+    });
+    const [prev, curr] = targetYears;
+    row.ratio = (row.total[prev] > 0) ? (row.total[curr] / row.total[prev]) : null;
+    return row;
+  });
+
+  const yearTotals = {};
+  targetYears.forEach(y => {
+    yearTotals[y] = comparison.reduce((s, r) => s + (r.total[y] || 0), 0);
+  });
+
+  res.json({
+    years: targetYears,
+    companies,
+    comparison,
+    year_totals: yearTotals,
+    overall_ratio: yearTotals[targetYears[0]] > 0
+      ? (yearTotals[targetYears[1]] / yearTotals[targetYears[0]])
+      : null,
+  });
+});
+
+// ============================================================================
 // マスタ再シード（強制）— 管理者向け
 //   マスタが空の場合に強制的に初期データを投入する。既に値がある場合は変化なし。
 // ============================================================================
