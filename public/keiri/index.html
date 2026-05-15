@@ -203,6 +203,39 @@
   th.sortable .sort-arrow { display: inline-block; margin-left: 4px; font-size: 10px; color: #bbb; }
   th.sortable.sort-asc .sort-arrow,
   th.sortable.sort-desc .sort-arrow { color: #0984e3; font-weight: 700; }
+
+  /* ─── 金額クリック式アクションメニュー ─── */
+  td.editable.amount { cursor: pointer; position: relative; }
+  td.editable.amount:not(.editing):hover { background: #eef9ff !important; box-shadow: inset 0 0 0 2px #0984e3; }
+  td.editable.amount:not(.editing):hover::after {
+    content: '▾'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    color: #0984e3; font-size: 10px; pointer-events: none;
+  }
+  .amount-action-menu {
+    position: absolute; z-index: 500;
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18); padding: 6px;
+    min-width: 200px; display: none; flex-direction: column; gap: 2px;
+    font-family: inherit;
+  }
+  .amount-action-menu.show { display: flex; }
+  .amount-action-menu .menu-header {
+    padding: 6px 10px; font-size: 11px; color: #636e72; border-bottom: 1px solid #eee; margin-bottom: 4px;
+  }
+  .amount-action-menu .menu-header strong { font-size: 13px; color: #2d3436; }
+  .amount-action-menu .action-btn {
+    padding: 9px 12px; text-align: left; border: none; background: transparent;
+    cursor: pointer; border-radius: 5px; font-size: 13px; font-family: inherit; font-weight: 500;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .amount-action-menu .action-btn:hover { background: #f0f4ff; }
+  .amount-action-menu .action-btn.act-clear { color: #00b894; }
+  .amount-action-menu .action-btn.act-clear:hover { background: #d6f5ea; }
+  .amount-action-menu .action-btn.act-undo  { color: #e17055; }
+  .amount-action-menu .action-btn.act-undo:hover  { background: #ffe9e0; }
+  .amount-action-menu .action-btn.act-edit  { color: #0984e3; }
+  .amount-action-menu .action-btn.act-edit:hover  { background: #d6ecff; }
+  .amount-action-menu .action-btn .ic { font-size: 14px; width: 18px; text-align: center; }
 </style>
 </head>
 <body>
@@ -329,7 +362,8 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     </div>
 
     <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
-      💡 ヒント：「🔄 通帳と照合して消込」を使うと、通帳の出金額と請求書の金額（今月分/前月繰越/前々月繰越/前々々月繰越）を自動で突き合わせて、まとめて消込できます。<br>
+      💡 <strong>1件ずつ消込する</strong>：表の金額（今月分・前月繰越…）を<strong>直接クリック</strong>すると「✓ 消込にする / ✎ 金額を変更」のメニューが出ます。<br>
+      💡 <strong>まとめて消込する</strong>：「🔄 通帳と照合して消込」または「⚡ 完全一致を自動消込」で複数件を一括処理できます。<br>
       💡 消込すると、金額を消すのではなく <span style="text-decoration:line-through;text-decoration-color:#d63031;text-decoration-thickness:2px;color:#95a5a6;">¥10,000</span> のように赤い取消線で支払い済みを表します。
     </div>
 
@@ -635,6 +669,9 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 <!-- ─── 隠しファイル入力 ─── -->
 <input type="file" id="bank-file-input" accept=".xlsx,.xls,.csv" style="display:none;">
 <input type="file" id="invoice-file-input" accept=".xlsx,.xls" style="display:none;">
+
+<!-- ─── 金額セル用アクションメニュー（フローティング） ─── -->
+<div class="amount-action-menu" id="amount-action-menu"></div>
 
 <!-- ─── トースト ─── -->
 <div class="toast" id="toast"></div>
@@ -1557,16 +1594,92 @@ function renderInvoiceSummary() {
   `;
 }
 
-// 請求書セルのインライン編集
-document.getElementById('invoice-tbody').addEventListener('click', (e) => {
-  const td = e.target.closest('td.editable');
-  if (!td || td.classList.contains('editing')) return;
-  const tr = td.closest('tr');
-  const id = Number(tr.dataset.id);
-  const field = td.dataset.field;
-  const type = td.dataset.type;
-  const inv = invoices.find(i => i.id === id);
+// =============================================================================
+// 金額セル用：クリック時に「消込／取消／金額変更」のアクションメニューを表示
+// =============================================================================
+const FIELD_LABEL = { amount: '今月分', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越' };
+let amountMenuTarget = null; // { td, invoiceId, field, value, isCleared }
+
+function hideAmountMenu() {
+  const menu = document.getElementById('amount-action-menu');
+  menu.classList.remove('show');
+  amountMenuTarget = null;
+}
+function showAmountMenu(td, inv, field) {
+  const menu = document.getElementById('amount-action-menu');
+  const value = inv[field] || 0;
+  const isCleared = !!inv[field + '_cleared'];
+  amountMenuTarget = { td, invoiceId: inv.id, field, value, isCleared };
+
+  // メニュー HTML 構築
+  const clearBtn = isCleared
+    ? `<button class="action-btn act-undo" data-act="undo"><span class="ic">↩</span><span>消込を取り消す</span></button>`
+    : `<button class="action-btn act-clear" data-act="clear"><span class="ic">✓</span><span>支払い済み（消込）にする</span></button>`;
+  menu.innerHTML = `
+    <div class="menu-header">
+      <strong>${inv.vendor || '(業者名なし)'}</strong><br>
+      ${FIELD_LABEL[field]}：¥${yen(value)}
+      ${isCleared ? '<span style="color:#00b894;font-weight:700;"> ✓消込済</span>' : ''}
+    </div>
+    ${value > 0 ? clearBtn : ''}
+    <button class="action-btn act-edit" data-act="edit"><span class="ic">✎</span><span>金額を変更</span></button>
+  `;
+  // 位置決め: tdの右下に表示。画面端ではみ出るときは左寄せ
+  const r = td.getBoundingClientRect();
+  menu.classList.add('show');
+  const mw = menu.offsetWidth || 220;
+  const mh = menu.offsetHeight || 100;
+  let left = r.left + window.scrollX;
+  let top = r.bottom + window.scrollY + 4;
+  if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+  if (top + mh > window.innerHeight + window.scrollY - 8) top = r.top + window.scrollY - mh - 4;
+  menu.style.left = left + 'px';
+  menu.style.top  = top + 'px';
+}
+// メニュー外クリック / Escapeで閉じる
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#amount-action-menu') && !e.target.closest('td.editable.amount')) hideAmountMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideAmountMenu(); });
+window.addEventListener('scroll', hideAmountMenu, true);
+
+// メニュー内ボタンのクリック
+document.getElementById('amount-action-menu').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.action-btn');
+  if (!btn || !amountMenuTarget) return;
+  const act = btn.dataset.act;
+  const { td, invoiceId, field, value } = amountMenuTarget;
+  const inv = invoices.find(i => i.id === invoiceId);
+  hideAmountMenu();
   if (!inv) return;
+  if (act === 'clear') {
+    try {
+      await api('/api/keiri/invoices/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [invoiceId], clear_type: field }),
+      });
+      showToast(`✓ 「${FIELD_LABEL[field]} ¥${yen(value)}」を消込しました`, 'success');
+      await loadInvoices();
+    } catch (err) { showToast('エラー: ' + err.message, 'error'); }
+  } else if (act === 'undo') {
+    try {
+      await api('/api/keiri/invoices/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: invoiceId, clear_type: field }),
+      });
+      showToast(`↩ 「${FIELD_LABEL[field]}」の消込を取り消しました`, 'success');
+      await loadInvoices();
+    } catch (err) { showToast('エラー: ' + err.message, 'error'); }
+  } else if (act === 'edit') {
+    startInlineEdit(td, inv, field, 'number');
+  }
+});
+
+// 請求書セルのインライン編集（金額以外は従来通り即時編集 / 金額のみメニュー経由）
+function startInlineEdit(td, inv, field, type) {
+  if (td.classList.contains('editing')) return;
   const current = inv[field] ?? '';
   td.classList.add('editing');
   let input;
@@ -1602,7 +1715,7 @@ document.getElementById('invoice-tbody').addEventListener('click', (e) => {
       renderInvoiceTable();
       return;
     }
-    await api(`/api/invoices/${id}`, {
+    await api(`/api/keiri/invoices/${inv.id}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ [field]: newVal })
@@ -1616,6 +1729,25 @@ document.getElementById('invoice-tbody').addEventListener('click', (e) => {
     if (e.key === 'Escape') { saved = true; td.classList.remove('editing'); renderInvoiceTable(); }
   });
   if (input.tagName === 'SELECT') input.addEventListener('change', save);
+}
+
+// 請求書テーブル クリックハンドラ：金額セルはメニュー、それ以外は従来通り即インライン編集
+document.getElementById('invoice-tbody').addEventListener('click', (e) => {
+  if (e.target.type === 'checkbox') return;
+  const td = e.target.closest('td.editable');
+  if (!td || td.classList.contains('editing')) return;
+  const tr = td.closest('tr');
+  const inv = invoices.find(i => i.id === Number(tr.dataset.id));
+  if (!inv) return;
+  const field = td.dataset.field;
+  const type = td.dataset.type;
+  if (td.classList.contains('amount')) {
+    // 金額セル：アクションメニューを開く
+    e.stopPropagation();
+    showAmountMenu(td, inv, field);
+  } else {
+    startInlineEdit(td, inv, field, type);
+  }
 });
 
 // チェックボックス
@@ -1940,7 +2072,8 @@ function renderSummary(data) {
       let rowTotal = 0;
       html += `<tr>${vi === 0 ? `<td class="cat-col" rowspan="${vendorNames.length}">${cat}</td>` : ''}<td class="vendor-col">${v}</td>`;
       facilities.forEach((f, fi) => {
-        const v2 = facMap[f] || 0;
+        // Number() で強制数値化（API/sql.jsから文字列が来ても string 結合事故を防ぐ）
+        const v2 = Number(facMap[f]) || 0;
         rowTotal += v2;
         catFacTotals[fi] += v2;
         facilityTotals[fi] += v2;
