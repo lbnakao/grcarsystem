@@ -67,8 +67,8 @@ body {
 .login-logo {
   display: block;
   margin: 0 auto 8px;
-  width: 140px;
-  height: 140px;
+  width: 280px;
+  height: 280px;
   object-fit: contain;
 }
 
