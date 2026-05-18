@@ -1065,7 +1065,7 @@ document.getElementById('bank-tbody').addEventListener('click', (e) => {
     }
     // 学習対象：勘定科目・施設名・会社名の変更
     const learn = (field === 'category' || field === 'facility' || field === 'vendor_name');
-    const result = await api(`/api/bank/transactions/${id}`, {
+    const result = await api(`/api/keiri/bank/transactions/${id}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ [field]: newVal, learn })
