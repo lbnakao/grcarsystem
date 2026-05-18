@@ -1334,6 +1334,21 @@ router.post('/match/confirm', async (req, res) => {
 // ============================================================================
 // ヘルプ（説明書）
 // ============================================================================
+// 通帳取引のみ全削除（月別経費はこのデータから集計されるので一緒にクリアされる）
+router.post('/admin/reset-bank', async (req, res) => {
+  const { confirm } = req.body || {};
+  if (confirm !== 'RESET') {
+    return res.status(400).json({ error: 'confirm:"RESET" が必要です' });
+  }
+  try {
+    const before = (await query('SELECT COUNT(*) AS c FROM keiri_bank_transactions'))[0].c;
+    await run('DELETE FROM keiri_bank_transactions');
+    res.json({ ok: true, deleted: { bank_transactions: before } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 取引データ全削除（請求書・通帳取引・消込履歴）。マスタと学習ルールは残す。
 router.post('/admin/reset-transactions', async (req, res) => {
   const { confirm } = req.body || {};

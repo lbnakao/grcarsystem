@@ -298,6 +298,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="btn btn-success" id="btn-auto-vendor">🔮 摘要から支払先を自動推定</button>
       <button class="btn btn-ghost" id="btn-bank-pivot-toggle">📊 経費の内訳を見る</button>
       <button class="btn btn-ghost" id="btn-bootstrap-rules">今までの入力から自動認識ルールを学習</button>
+      <button class="btn btn-danger" id="btn-bank-reset" title="通帳取引データを全件削除（月別経費もリセットされます）">⚠ 通帳データを全削除</button>
     </div>
     <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
       💡 通帳データを読み込むと、下の表に1取引ずつ並びます。「支払先」「勘定科目」「施設名」はセルをクリックして直接入力できます。
@@ -428,6 +429,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div class="action-bar">
       <select id="summary-year"><option value="">全ての年</option></select>
       <select id="summary-account"><option value="">全ての銀行口座</option></select>
+      <button class="btn btn-danger" id="btn-summary-reset" title="月別経費の元データ（通帳取引）を全件削除">⚠ 集計データを全削除</button>
     </div>
 
     <div class="month-tabs" id="summary-month-tabs"></div>
@@ -2345,6 +2347,29 @@ async function loadResetCounts() {
     console.error(e);
   }
 }
+
+async function resetBankConfirm(label) {
+  const word = prompt(`${label}\n\n通帳取引データを全件削除します。月別経費の集計もリセットされます。\nこの操作は元に戻せません。\n\n確認のため「RESET」と入力してください:`);
+  if (word === null) return;
+  if (word.trim() !== 'RESET') {
+    alert('「RESET」と入力されなかったので削除しませんでした。');
+    return;
+  }
+  try {
+    const r = await fetch('/api/keiri/admin/reset-bank', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'RESET' }),
+    }).then(r => r.json());
+    if (r.error) throw new Error(r.error);
+    alert(`✅ 削除完了 — 通帳取引 ${r.deleted.bank_transactions}件 を削除しました`);
+    location.reload();
+  } catch (e) {
+    alert('❌ エラー: ' + e.message);
+  }
+}
+document.getElementById('btn-bank-reset')?.addEventListener('click', () => resetBankConfirm('⚠ 通帳データの全削除'));
+document.getElementById('btn-summary-reset')?.addEventListener('click', () => resetBankConfirm('⚠ 月別経費の元データ（通帳取引）を全削除'));
 
 document.getElementById('btn-reset-all')?.addEventListener('click', async () => {
   const input = document.getElementById('reset-confirm-input').value.trim();
