@@ -1334,6 +1334,27 @@ router.post('/match/confirm', async (req, res) => {
 // ============================================================================
 // ヘルプ（説明書）
 // ============================================================================
+// 取引データ全削除（請求書・通帳取引・消込履歴）。マスタと学習ルールは残す。
+router.post('/admin/reset-transactions', async (req, res) => {
+  const { confirm } = req.body || {};
+  if (confirm !== 'RESET') {
+    return res.status(400).json({ error: 'confirm:"RESET" が必要です' });
+  }
+  try {
+    const before = {
+      invoices: (await query('SELECT COUNT(*) AS c FROM keiri_invoices'))[0].c,
+      bank_transactions: (await query('SELECT COUNT(*) AS c FROM keiri_bank_transactions'))[0].c,
+      clear_history: (await query('SELECT COUNT(*) AS c FROM keiri_clear_history'))[0].c,
+    };
+    await run('DELETE FROM keiri_clear_history');
+    await run('DELETE FROM keiri_bank_transactions');
+    await run('DELETE FROM keiri_invoices');
+    res.json({ ok: true, deleted: before });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/help', (req, res) => {
   const fs = require('fs');
   const p = path.join(__dirname, '..', 'public', 'keiri', '使い方.md');
