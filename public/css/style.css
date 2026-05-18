@@ -64,6 +64,14 @@ body {
   display: block;
 }
 
+.login-logo {
+  display: block;
+  margin: 0 auto 8px;
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+}
+
 .login-header h1 {
   font-size: 22px;
   font-weight: 700;

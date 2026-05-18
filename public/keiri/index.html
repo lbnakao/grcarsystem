@@ -298,6 +298,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="btn btn-success" id="btn-auto-vendor">🔮 摘要から支払先を自動推定</button>
       <button class="btn btn-ghost" id="btn-bank-pivot-toggle">📊 経費の内訳を見る</button>
       <button class="btn btn-ghost" id="btn-bootstrap-rules">今までの入力から自動認識ルールを学習</button>
+      <button class="btn btn-danger" id="btn-bank-reset" title="通帳取引データを全件削除（月別経費もリセットされます）">⚠ 通帳データを全削除</button>
     </div>
     <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
       💡 通帳データを読み込むと、下の表に1取引ずつ並びます。「支払先」「勘定科目」「施設名」はセルをクリックして直接入力できます。
@@ -428,6 +429,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div class="action-bar">
       <select id="summary-year"><option value="">全ての年</option></select>
       <select id="summary-account"><option value="">全ての銀行口座</option></select>
+      <button class="btn btn-danger" id="btn-summary-reset" title="月別経費の元データ（通帳取引）を全件削除">⚠ 集計データを全削除</button>
     </div>
 
     <div class="month-tabs" id="summary-month-tabs"></div>
@@ -445,6 +447,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="sub-tab active" data-settings="rules">支払先の自動認識ルール</button>
       <button class="sub-tab" data-settings="accounts">銀行口座の登録</button>
       <button class="sub-tab" data-settings="facilities">施設・物件の登録</button>
+      <button class="sub-tab" data-settings="reset" style="color:#d63031;">⚠ 全データリセット</button>
     </div>
 
     <!-- 支払先の自動認識ルール -->
@@ -498,6 +501,30 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
           </thead>
           <tbody id="accounts-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- 全データリセット -->
+    <div class="sub-section" id="settings-reset">
+      <div style="background:#fff5f5;border:2px solid #d63031;border-radius:8px;padding:20px;max-width:720px;">
+        <h3 style="color:#d63031;margin-top:0;">⚠ 経理データを全件リセット</h3>
+        <p style="color:#2d3436;line-height:1.7;">
+          以下のデータを<strong>全て削除</strong>します。元に戻せません。<br>
+          ・請求書（<span id="reset-count-invoices">…</span>件）<br>
+          ・通帳取引（<span id="reset-count-bank">…</span>件）<br>
+          ・消込履歴（<span id="reset-count-clear">…</span>件）
+        </p>
+        <p style="color:#2d3436;font-size:13px;background:#f5f5f5;padding:10px;border-radius:4px;">
+          ✅ <strong>残るもの</strong>: 銀行口座マスタ・施設マスタ・支払先の自動認識ルール（手打ちでの新規入力にすぐ使えます）
+        </p>
+        <div style="margin-top:16px;">
+          <label style="display:block;margin-bottom:8px;color:#2d3436;">
+            確認のため、下に <code style="background:#fff;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">RESET</code> と入力してください:
+          </label>
+          <input type="text" id="reset-confirm-input" placeholder="RESET" style="padding:8px 12px;border:2px solid #d63031;border-radius:5px;font-size:14px;width:200px;">
+          <button class="btn btn-danger" id="btn-reset-all" style="margin-left:8px;">全データを削除する</button>
+        </div>
+        <div id="reset-result" style="margin-top:12px;"></div>
       </div>
     </div>
 
@@ -1038,7 +1065,7 @@ document.getElementById('bank-tbody').addEventListener('click', (e) => {
     }
     // 学習対象：勘定科目・施設名・会社名の変更
     const learn = (field === 'category' || field === 'facility' || field === 'vendor_name');
-    const result = await api(`/api/bank/transactions/${id}`, {
+    const result = await api(`/api/keiri/bank/transactions/${id}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ [field]: newVal, learn })
@@ -2303,7 +2330,71 @@ document.querySelectorAll('[data-settings]').forEach(t => {
     if (t.dataset.settings === 'rules') loadRules();
     if (t.dataset.settings === 'accounts') loadAccountsTable();
     if (t.dataset.settings === 'facilities') loadFacilitiesTable();
+    if (t.dataset.settings === 'reset') loadResetCounts();
   });
+});
+
+async function loadResetCounts() {
+  try {
+    const [inv, tx] = await Promise.all([
+      api('/api/keiri/invoices'),
+      api('/api/keiri/bank/transactions'),
+    ]);
+    document.getElementById('reset-count-invoices').textContent = inv.length;
+    document.getElementById('reset-count-bank').textContent = tx.length;
+    document.getElementById('reset-count-clear').textContent = '—';
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function resetBankConfirm(label) {
+  const word = prompt(`${label}\n\n通帳取引データを全件削除します。月別経費の集計もリセットされます。\nこの操作は元に戻せません。\n\n確認のため「RESET」と入力してください:`);
+  if (word === null) return;
+  if (word.trim() !== 'RESET') {
+    alert('「RESET」と入力されなかったので削除しませんでした。');
+    return;
+  }
+  try {
+    const r = await fetch('/api/keiri/admin/reset-bank', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'RESET' }),
+    }).then(r => r.json());
+    if (r.error) throw new Error(r.error);
+    alert(`✅ 削除完了 — 通帳取引 ${r.deleted.bank_transactions}件 を削除しました`);
+    location.reload();
+  } catch (e) {
+    alert('❌ エラー: ' + e.message);
+  }
+}
+document.getElementById('btn-bank-reset')?.addEventListener('click', () => resetBankConfirm('⚠ 通帳データの全削除'));
+document.getElementById('btn-summary-reset')?.addEventListener('click', () => resetBankConfirm('⚠ 月別経費の元データ（通帳取引）を全削除'));
+
+document.getElementById('btn-reset-all')?.addEventListener('click', async () => {
+  const input = document.getElementById('reset-confirm-input').value.trim();
+  if (input !== 'RESET') {
+    alert('確認のため「RESET」と入力してください');
+    return;
+  }
+  if (!confirm('本当に経理データを全件削除しますか？この操作は元に戻せません。')) return;
+  const resultEl = document.getElementById('reset-result');
+  resultEl.innerHTML = '<span style="color:#636e72;">削除中...</span>';
+  try {
+    const r = await fetch('/api/keiri/admin/reset-transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'RESET' }),
+    }).then(r => r.json());
+    if (r.error) throw new Error(r.error);
+    resultEl.innerHTML = `<div style="background:#d1f2eb;border:1px solid #00b894;border-radius:4px;padding:10px;color:#006266;">
+      ✅ 削除完了 — 請求書 ${r.deleted.invoices}件 / 通帳取引 ${r.deleted.bank_transactions}件 / 消込履歴 ${r.deleted.clear_history}件 を削除しました
+    </div>`;
+    document.getElementById('reset-confirm-input').value = '';
+    setTimeout(loadResetCounts, 500);
+  } catch (e) {
+    resultEl.innerHTML = `<div style="background:#fadbd8;border:1px solid #d63031;border-radius:4px;padding:10px;color:#922b21;">❌ エラー: ${e.message}</div>`;
+  }
 });
 
 async function loadRules() {
