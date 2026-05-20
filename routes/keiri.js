@@ -1413,7 +1413,7 @@ async function extractAndSaveOne(file, genAI) {
   const isPdf = mimetype === 'application/pdf';
   if (!isImage && !isPdf) throw new Error(`${originalname}: JPEG・PNG・PDFのみ対応`);
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent([
     { inlineData: { mimeType: mimetype, data: buffer.toString('base64') } },
     EXTRACT_PROMPT,
