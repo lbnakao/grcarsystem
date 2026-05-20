@@ -1407,14 +1407,39 @@ const EXTRACT_PROMPT = `この請求書から以下の項目を抽出してJSON�
   "note": "品目・内容を30字以内で"
 }`;
 
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+
+async function callGeminiWithRetry(genAI, parts) {
+  const MAX_RETRIES = 3;
+  let lastError;
+  for (const modelName of GEMINI_MODELS) {
+    const model = genAI.getGenerativeModel({ model: modelName });
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await model.generateContent(parts);
+      } catch (err) {
+        lastError = err;
+        const msg = (err.message || '').toLowerCase();
+        const isRetryable = msg.includes('503') || msg.includes('service unavailable') ||
+                            msg.includes('high demand') || msg.includes('429') ||
+                            msg.includes('resource has been exhausted') || msg.includes('overloaded');
+        if (!isRetryable) break; // このモデルでは回復不能 → 次モデルへ
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function extractAndSaveOne(file, genAI) {
   const { mimetype, buffer, originalname } = file;
   const isImage = mimetype.startsWith('image/');
   const isPdf = mimetype === 'application/pdf';
   if (!isImage && !isPdf) throw new Error(`${originalname}: JPEG・PNG・PDFのみ対応`);
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const result = await model.generateContent([
+  const result = await callGeminiWithRetry(genAI, [
     { inlineData: { mimeType: mimetype, data: buffer.toString('base64') } },
     EXTRACT_PROMPT,
   ]);
