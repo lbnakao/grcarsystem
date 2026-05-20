@@ -1392,17 +1392,7 @@ function sanitizeDirName(name) {
   return (name || '不明').replace(/[\/\\:*?"<>|]/g, '_').trim().slice(0, 50);
 }
 
-router.post('/extract-invoice', upload.single('file'), async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEYが設定されていません' });
-  if (!req.file) return res.status(400).json({ error: 'ファイルが必要です' });
-
-  const { mimetype, buffer, originalname } = req.file;
-  const isImage = mimetype.startsWith('image/');
-  const isPdf = mimetype === 'application/pdf';
-  if (!isImage && !isPdf) return res.status(400).json({ error: 'JPEG・PNG・PDFのみ対応しています' });
-
-  const prompt = `この請求書から以下の項目を抽出してJSON形式のみで返してください。読み取れない項目はnullにしてください。コードブロック不要、JSONだけ返す。
+const EXTRACT_PROMPT = `この請求書から以下の項目を抽出してJSON形式のみで返してください。読み取れない項目はnullにしてください。コードブロック不要、JSONだけ返す。
 
 {
   "vendor": "業者名（請求元の会社名）",
@@ -1417,47 +1407,65 @@ router.post('/extract-invoice', upload.single('file'), async (req, res) => {
   "note": "品目・内容を30字以内で"
 }`;
 
+async function extractAndSaveOne(file, genAI) {
+  const { mimetype, buffer, originalname } = file;
+  const isImage = mimetype.startsWith('image/');
+  const isPdf = mimetype === 'application/pdf';
+  if (!isImage && !isPdf) throw new Error(`${originalname}: JPEG・PNG・PDFのみ対応`);
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const result = await model.generateContent([
+    { inlineData: { mimeType: mimetype, data: buffer.toString('base64') } },
+    EXTRACT_PROMPT,
+  ]);
+  const raw = result.response.text().trim();
+  let data;
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const result = await model.generateContent([
-      { inlineData: { mimeType: mimetype, data: buffer.toString('base64') } },
-      prompt,
-    ]);
-    const raw = result.response.text().trim();
-    let data;
-    try {
-      data = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, ''));
-    } catch {
-      return res.status(500).json({ error: 'AI応答のパースに失敗しました', raw });
-    }
-
-    // ファイルを業者名フォルダに保存
-    const vendorDir = path.join(INVOICE_FILES_DIR, sanitizeDirName(data.vendor));
-    if (!fsModule.existsSync(vendorDir)) fsModule.mkdirSync(vendorDir, { recursive: true });
-    const timestamp = Date.now();
-    const ext = isPdf ? '.pdf' : (mimetype === 'image/png' ? '.png' : '.jpg');
-    const storedName = `${timestamp}${ext}`;
-    const storedPath = path.join(vendorDir, storedName);
-    fsModule.writeFileSync(storedPath, buffer);
-
-    const fileId = await runInsert(
-      `INSERT INTO keiri_invoice_files (original_name, stored_name, vendor, file_path, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?)`,
-      [originalname, storedName, data.vendor || '不明', storedPath, mimetype, buffer.length]
-    );
-
-    res.json({ success: true, data, file_id: fileId });
-  } catch (err) {
-    console.error('extract-invoice error:', err);
-    res.status(500).json({ error: err.message });
+    data = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, ''));
+  } catch {
+    throw new Error(`${originalname}: AI応答のパースに失敗`);
   }
+
+  // 施設名フォルダに保存
+  const facilityDir = path.join(INVOICE_FILES_DIR, sanitizeDirName(data.facility));
+  if (!fsModule.existsSync(facilityDir)) fsModule.mkdirSync(facilityDir, { recursive: true });
+  const ext = isPdf ? '.pdf' : (mimetype === 'image/png' ? '.png' : '.jpg');
+  const storedName = `${Date.now()}_${sanitizeDirName(data.vendor)}${ext}`;
+  const storedPath = path.join(facilityDir, storedName);
+  fsModule.writeFileSync(storedPath, buffer);
+
+  const fileId = await runInsert(
+    `INSERT INTO keiri_invoice_files (original_name, stored_name, vendor, facility, file_path, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [originalname, storedName, data.vendor || '不明', data.facility || '不明', storedPath, mimetype, buffer.length]
+  );
+
+  return { success: true, data, file_id: fileId, original_name: originalname };
+}
+
+router.post('/extract-invoice', upload.array('files', 20), async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEYが設定されていません' });
+  const files = req.files;
+  if (!files || files.length === 0) return res.status(400).json({ error: 'ファイルが必要です' });
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const results = [];
+  for (const file of files) {
+    try {
+      const r = await extractAndSaveOne(file, genAI);
+      results.push(r);
+    } catch (err) {
+      results.push({ success: false, original_name: file.originalname, error: err.message });
+    }
+  }
+  res.json({ results });
 });
 
 // ファイル一覧
 router.get('/invoice-files', async (req, res) => {
   try {
     const files = await query(
-      `SELECT id, original_name, vendor, mime_type, file_size, uploaded_at FROM keiri_invoice_files ORDER BY uploaded_at DESC`
+      `SELECT id, original_name, vendor, facility, mime_type, file_size, uploaded_at FROM keiri_invoice_files ORDER BY facility, uploaded_at DESC`
     );
     res.json(files);
   } catch (err) {
