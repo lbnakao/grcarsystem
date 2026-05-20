@@ -2032,21 +2032,21 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
     status.textContent = `✅ ${ok.length}件を解析・保存しました` + (ng.length ? `　❌ ${ng.length}件失敗` : '');
     status.style.color = ng.length ? '#e17055' : '#00b894';
 
+    // 失敗がある場合は常に詳細を表示
+    let html = '<div style="font-size:11px;margin-top:4px;">';
+    ok.forEach(r => {
+      html += `<div style="color:#00b894;">✅ ${r.original_name} → ${r.data.facility || '不明'} / ${r.data.vendor || '不明'}</div>`;
+    });
+    ng.forEach(r => {
+      html += `<div style="color:#d63031;">❌ ${r.original_name}: ${r.error}</div>`;
+    });
+    html += '</div>';
+    if (ok.length + ng.length > 1 || ng.length > 0) resultsDiv.innerHTML = html;
+
     // 成功が1件なら自動入力
     if (ok.length === 1) {
       const count = applyInvoiceData(ok[0].data);
       status.textContent += `（${count}項目を自動入力）`;
-    } else if (ok.length > 1) {
-      // 複数の場合は結果を一覧表示
-      let html = '<div style="font-size:11px;margin-top:4px;">';
-      ok.forEach(r => {
-        html += `<div style="color:#00b894;">✅ ${r.original_name} → ${r.data.facility || '不明'} / ${r.data.vendor || '不明'}</div>`;
-      });
-      ng.forEach(r => {
-        html += `<div style="color:#d63031;">❌ ${r.original_name}: ${r.error}</div>`;
-      });
-      html += '</div>';
-      resultsDiv.innerHTML = html;
     }
   } catch (err) {
     status.textContent = `❌ ${err.message}`;
