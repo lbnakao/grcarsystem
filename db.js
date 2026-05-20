@@ -959,7 +959,7 @@ async function createKeiriTables() {
       file_path TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       file_size INTEGER,
-      uploaded_at TEXT DEFAULT (datetime('now', 'localtime'))
+      uploaded_at ${nowDefault}
     )
   `);
 
