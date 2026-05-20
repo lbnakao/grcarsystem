@@ -987,6 +987,16 @@ async function createKeiriTables() {
       await run("INSERT INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [facList[i], i]);
     }
   }
+
+  // 必須5社を確実に登録（既存DBへの追加マイグレーション）
+  const requiredFacilities = ['リゾート', 'レジデンス', 'ワールド・レイ', 'ココ・ユニバース', 'モーテル'];
+  for (const name of requiredFacilities) {
+    const exists = await query("SELECT COUNT(*) as c FROM keiri_facilities WHERE name = ?", [name]);
+    if (Number(exists[0].c) === 0) {
+      const maxRow = await query("SELECT COALESCE(MAX(sort_order), -1) as m FROM keiri_facilities");
+      await run("INSERT INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [name, Number(maxRow[0].m) + 1]);
+    }
+  }
 }
 
 // ===== 初期データ =====
