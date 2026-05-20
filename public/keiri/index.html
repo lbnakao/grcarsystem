@@ -2022,6 +2022,7 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
 
   try {
     const res = await fetch('/api/keiri/extract-invoice', { method: 'POST', body: formData });
+    if (res.status === 401 || res.status === 403) { location.href = '/login'; return; }
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || '解析失敗');
 
