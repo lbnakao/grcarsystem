@@ -10,6 +10,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const { query, run, runInsert } = require('../db');
 const categorizer = require('../lib/keiri-categorizer');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -303,20 +304,21 @@ router.get('/accounts', async (req, res) => {
   res.json(rows);
 });
 router.post('/accounts', async (req, res) => {
-  const { name, display_name, sort_order } = req.body;
+  const { name, display_name, sort_order, account_number } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
   try {
-    const id = await runInsert('INSERT INTO keiri_bank_accounts (name, display_name, sort_order) VALUES (?, ?, ?)',
-      [name, display_name || name, sort_order || 99]);
+    const id = await runInsert('INSERT INTO keiri_bank_accounts (name, display_name, sort_order, account_number) VALUES (?, ?, ?, ?)',
+      [name, display_name || name, sort_order || 99, account_number || '']);
     res.json({ id });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 router.patch('/accounts/:id', async (req, res) => {
-  const { name, display_name, sort_order } = req.body;
+  const { name, display_name, sort_order, account_number } = req.body;
   const upd = [], val = [];
   if (name !== undefined) { upd.push('name = ?'); val.push(name); }
   if (display_name !== undefined) { upd.push('display_name = ?'); val.push(display_name); }
   if (sort_order !== undefined) { upd.push('sort_order = ?'); val.push(sort_order); }
+  if (account_number !== undefined) { upd.push('account_number = ?'); val.push(account_number); }
   if (upd.length === 0) return res.status(400).json({ error: 'no fields' });
   val.push(req.params.id);
   await run(`UPDATE keiri_bank_accounts SET ${upd.join(', ')} WHERE id = ?`, val);
@@ -1378,6 +1380,132 @@ router.get('/help', (req, res) => {
     res.type('text/markdown; charset=utf-8').send(md);
   } catch (e) {
     res.status(404).json({ error: '説明書が見つかりません' });
+  }
+});
+
+// ─── 請求書AI自動抽出 + ファイル保存 ───
+const fsModule = require('fs');
+const INVOICE_FILES_DIR = path.join(__dirname, '..', 'uploads', 'invoice-files');
+if (!fsModule.existsSync(INVOICE_FILES_DIR)) fsModule.mkdirSync(INVOICE_FILES_DIR, { recursive: true });
+
+function sanitizeDirName(name) {
+  return (name || '不明').replace(/[\/\\:*?"<>|]/g, '_').trim().slice(0, 50);
+}
+
+router.post('/extract-invoice', upload.single('file'), async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEYが設定されていません' });
+  if (!req.file) return res.status(400).json({ error: 'ファイルが必要です' });
+
+  const { mimetype, buffer, originalname } = req.file;
+  const isImage = mimetype.startsWith('image/');
+  const isPdf = mimetype === 'application/pdf';
+  if (!isImage && !isPdf) return res.status(400).json({ error: 'JPEG・PNG・PDFのみ対応しています' });
+
+  const prompt = `この請求書から以下の項目を抽出してJSON形式のみで返してください。読み取れない項目はnullにしてください。コードブロック不要、JSONだけ返す。
+
+{
+  "vendor": "業者名（請求元の会社名）",
+  "category": "勘定科目（修繕費・管理費・光熱費・通信費・消耗品費・外注費など）",
+  "payment_method": "支払方法（振替・振込・クレジット・コンビニ・銀行 のいずれか）",
+  "due_date": "支払期限（M/D形式 例: 5/31）",
+  "facility": "請求先の施設名・物件名",
+  "entity": "エンティティ（リゾート・ほうらい・フォレスト・グリーンシャワー・周防大島・モーテル・レジデンス・ユニバース のいずれかに推測）",
+  "transaction_date": "請求書の発行日（M/D形式 例: 5/10）",
+  "month": "対象月（M月形式 例: 5月）",
+  "amount": 数値のみ,
+  "note": "品目・内容を30字以内で"
+}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent([
+      { inlineData: { mimeType: mimetype, data: buffer.toString('base64') } },
+      prompt,
+    ]);
+    const raw = result.response.text().trim();
+    let data;
+    try {
+      data = JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, ''));
+    } catch {
+      return res.status(500).json({ error: 'AI応答のパースに失敗しました', raw });
+    }
+
+    // ファイルを業者名フォルダに保存
+    const vendorDir = path.join(INVOICE_FILES_DIR, sanitizeDirName(data.vendor));
+    if (!fsModule.existsSync(vendorDir)) fsModule.mkdirSync(vendorDir, { recursive: true });
+    const timestamp = Date.now();
+    const ext = isPdf ? '.pdf' : (mimetype === 'image/png' ? '.png' : '.jpg');
+    const storedName = `${timestamp}${ext}`;
+    const storedPath = path.join(vendorDir, storedName);
+    fsModule.writeFileSync(storedPath, buffer);
+
+    const fileId = await runInsert(
+      `INSERT INTO keiri_invoice_files (original_name, stored_name, vendor, file_path, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?)`,
+      [originalname, storedName, data.vendor || '不明', storedPath, mimetype, buffer.length]
+    );
+
+    res.json({ success: true, data, file_id: fileId });
+  } catch (err) {
+    console.error('extract-invoice error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ファイル一覧
+router.get('/invoice-files', async (req, res) => {
+  try {
+    const files = await query(
+      `SELECT id, original_name, vendor, mime_type, file_size, uploaded_at FROM keiri_invoice_files ORDER BY uploaded_at DESC`
+    );
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ファイルをブラウザで表示（inline）
+router.get('/invoice-files/:id/view', async (req, res) => {
+  try {
+    const rows = await query(`SELECT * FROM keiri_invoice_files WHERE id = ?`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'ファイルが見つかりません' });
+    const file = rows[0];
+    if (!fsModule.existsSync(file.file_path)) return res.status(404).json({ error: 'ファイルが見つかりません' });
+    res.setHeader('Content-Type', file.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.original_name)}"`);
+    fsModule.createReadStream(file.file_path).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ファイルをダウンロード
+router.get('/invoice-files/:id/download', async (req, res) => {
+  try {
+    const rows = await query(`SELECT * FROM keiri_invoice_files WHERE id = ?`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'ファイルが見つかりません' });
+    const file = rows[0];
+    if (!fsModule.existsSync(file.file_path)) return res.status(404).json({ error: 'ファイルが見つかりません' });
+    res.setHeader('Content-Type', file.mime_type);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+    fsModule.createReadStream(file.file_path).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ファイル削除
+router.delete('/invoice-files/:id', async (req, res) => {
+  try {
+    const rows = await query(`SELECT * FROM keiri_invoice_files WHERE id = ?`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'ファイルが見つかりません' });
+    const file = rows[0];
+    if (fsModule.existsSync(file.file_path)) fsModule.unlinkSync(file.file_path);
+    await run(`DELETE FROM keiri_invoice_files WHERE id = ?`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

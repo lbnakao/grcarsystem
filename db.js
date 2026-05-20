@@ -284,6 +284,7 @@ async function migrateSchema() {
 
   // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
   await createKeiriTables();
+  await addColumnIfMissing('keiri_bank_accounts', 'account_number', "TEXT DEFAULT ''");
 
   // 資金管理（社長Excel v8 のアプリ化）用テーブル群
   await createFundsTables();
@@ -947,6 +948,18 @@ async function createKeiriTables() {
       invoice_id INTEGER,
       clear_type TEXT,
       cleared_at TEXT
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_invoice_files (
+      id ${autoIncPK},
+      original_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      vendor TEXT,
+      file_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER,
+      uploaded_at TEXT DEFAULT (datetime('now', 'localtime'))
     )
   `);
 

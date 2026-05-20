@@ -367,6 +367,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="btn btn-ghost" id="btn-invoice-undo" disabled>消込を取り消す</button>
       <button class="btn btn-danger" id="btn-invoice-delete" disabled>選択した請求を削除</button>
       <button class="btn btn-danger" id="btn-invoice-delete-filter">今表示中の請求をまとめて削除...</button>
+      <button class="btn btn-ghost" id="btn-invoice-files">🗂 保存ファイル一覧</button>
       <span id="invoice-selected-count" style="font-size:12px;color:#636e72;"></span>
     </div>
 
@@ -495,6 +496,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <tr>
               <th>口座名</th>
               <th>表示名</th>
+              <th>口座番号</th>
               <th>並び順</th>
               <th>操作</th>
             </tr>
@@ -759,9 +761,49 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 </div>
 
 <!-- ─── 請求書フォームモーダル ─── -->
+<!-- ─── 保存ファイル一覧モーダル ─── -->
+<div class="modal-overlay" id="invoice-files-modal">
+  <div class="modal" style="max-width:780px;width:95%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3>🗂 保存済み請求書ファイル</h3>
+      <button class="btn btn-ghost" id="invoice-files-modal-close">✕ 閉じる</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="files-search" placeholder="業者名で絞り込み..." style="padding:7px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;min-width:200px;">
+      <span id="files-count" style="font-size:12px;color:#636e72;"></span>
+    </div>
+    <div id="invoice-files-list" style="max-height:480px;overflow-y:auto;">
+      <div style="text-align:center;padding:30px;color:#636e72;">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="invoice-modal">
   <div class="modal medium">
     <h3 id="invoice-modal-title">新規請求書</h3>
+    <!-- ─── AI自動入力セクション ─── -->
+    <div style="margin-bottom:14px;background:#f0f6ff;border:1px solid #c3d9f5;border-radius:8px;padding:12px;">
+      <div style="font-size:13px;font-weight:600;color:#0984e3;margin-bottom:10px;">🤖 請求書をアップしてAI自動入力</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <label class="btn btn-primary" for="inv-file-input" id="inv-file-label" style="font-size:12px;cursor:pointer;">📎 ファイルを選択（PDF / 画像）</label>
+        <input type="file" id="inv-file-input" accept=".pdf,image/jpeg,image/png,image/jpg" style="display:none;">
+        <span id="inv-file-name" style="font-size:12px;color:#636e72;">未選択</span>
+      </div>
+      <div id="inv-ai-status" style="margin-top:8px;font-size:12px;color:#636e72;min-height:20px;"></div>
+      <!-- テキスト貼り付け（折りたたみ・サブ手段） -->
+      <div style="margin-top:10px;border-top:1px solid #d0e4f7;padding-top:10px;">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" id="inv-paste-toggle">
+          <span style="font-size:11px;color:#636e72;">▼ Claudeのテキスト出力を直接貼り付ける場合はこちら</span>
+        </div>
+        <div id="inv-paste-area" style="display:none;margin-top:8px;">
+          <textarea id="inv-paste-text" rows="6" style="width:100%;padding:8px;border:1px solid #c3d1e0;border-radius:5px;font-size:12px;font-family:inherit;resize:vertical;" placeholder="業者名: 山田電気&#10;勘定科目: 修繕費&#10;金額: 55000&#10;期日: 5/31"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;align-items:center;">
+            <button class="btn btn-ghost" id="inv-paste-apply" style="font-size:12px;">📋 テキストから自動入力</button>
+            <span id="inv-paste-result" style="font-size:11px;color:#636e72;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="form-grid">
       <div class="form-row"><label>業者名</label><input id="inv-vendor" type="text"></div>
       <div class="form-row"><label>勘定科目</label><select id="inv-category"></select></div>
@@ -1001,7 +1043,7 @@ function renderBankTable() {
       <td class="editable" data-field="vendor_name" data-type="text" style="font-weight:600;">${t.vendor_name || '<span style="color:#bbb;">未入力</span>'}</td>
       <td class="editable" data-field="category" data-type="select-category">${t.category || '<span style="color:#bbb;">未入力</span>'}</td>
       <td class="editable" data-field="facility" data-type="select-facility">${t.facility || '<span style="color:#bbb;">未入力</span>'}</td>
-      <td class="editable" data-field="is_cleared" data-type="text">${t.is_cleared || ''}</td>
+      <td class="editable" data-field="is_cleared" data-type="select-cleared">${t.is_cleared || ''}</td>
       <td class="editable" data-field="note1" data-type="text">${t.note1 || ''}</td>
     </tr>`;
   }).join('');
@@ -1037,18 +1079,28 @@ document.getElementById('bank-tbody').addEventListener('click', (e) => {
   td.classList.add('editing');
 
   let input;
+  let facilityDatalist = null;
   if (type === 'select-category') {
     input = document.createElement('select');
     input.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
   } else if (type === 'select-facility') {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    facilityDatalist = document.createElement('datalist');
+    facilityDatalist.id = 'keiri-facility-dl';
+    facilityDatalist.innerHTML = FACILITIES.map(f => `<option value="${f.name}"></option>`).join('');
+    input.setAttribute('list', 'keiri-facility-dl');
+  } else if (type === 'select-cleared') {
     input = document.createElement('select');
-    input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === current ? 'selected' : ''}>${f.name}</option>`).join('');
+    input.innerHTML = `<option value="">（未）</option><option value="済" ${current === '済' ? 'selected' : ''}>済</option>`;
   } else {
     input = document.createElement('input');
     input.type = 'text';
     input.value = current;
   }
   td.textContent = '';
+  if (facilityDatalist) td.appendChild(facilityDatalist);
   td.appendChild(input);
   input.focus();
   if (input.select) input.select();
@@ -1939,12 +1991,203 @@ document.getElementById('btn-invoice-add').addEventListener('click', () => {
   ['inv-category', 'inv-payment-method', 'inv-facility', 'inv-entity'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('inv-month').value = currentInvoiceMonth || '';
   document.getElementById('inv-entity').value = currentInvoiceEntity || '';
+  document.getElementById('inv-paste-area').style.display = 'none';
+  document.getElementById('inv-paste-text').value = '';
+  document.getElementById('inv-paste-result').textContent = '';
+  document.getElementById('inv-file-name').textContent = '未選択';
+  document.getElementById('inv-ai-status').textContent = '';
   document.getElementById('invoice-modal').classList.add('show');
 });
 
 document.getElementById('inv-modal-cancel').addEventListener('click', () => {
   document.getElementById('invoice-modal').classList.remove('show');
 });
+
+// ─── AI自動入力（ファイルアップロード） ───
+document.getElementById('inv-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('inv-file-name').textContent = file.name;
+  const status = document.getElementById('inv-ai-status');
+  status.textContent = '⏳ AIが請求書を解析中...';
+  status.style.color = '#0984e3';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/keiri/extract-invoice', { method: 'POST', body: formData });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || '解析失敗');
+    const count = applyInvoiceData(json.data);
+    status.textContent = `✅ ${count}項目を自動入力しました（内容を確認して保存してください）`;
+    status.style.color = '#00b894';
+  } catch (err) {
+    status.textContent = `❌ ${err.message}`;
+    status.style.color = '#d63031';
+  }
+  e.target.value = '';
+});
+
+function applyInvoiceData(data) {
+  const mapping = {
+    vendor: 'inv-vendor', category: 'inv-category', payment_method: 'inv-payment-method',
+    due_date: 'inv-due-date', facility: 'inv-facility', entity: 'inv-entity',
+    transaction_date: 'inv-transaction-date', month: 'inv-month',
+    amount: 'inv-amount', note: 'inv-note',
+  };
+  let filled = 0;
+  Object.entries(mapping).forEach(([key, elId]) => {
+    const val = data[key];
+    if (val === null || val === undefined || val === '') return;
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (el.tagName === 'SELECT') {
+      const found = Array.from(el.options).find(o => o.value === String(val) || o.textContent.trim() === String(val));
+      if (found) { el.value = found.value; filled++; }
+    } else {
+      el.value = val;
+      filled++;
+    }
+  });
+  return filled;
+}
+
+// ─── テキスト貼り付け（サブ手段） ───
+document.getElementById('inv-paste-toggle').addEventListener('click', () => {
+  const area = document.getElementById('inv-paste-area');
+  const toggle = document.getElementById('inv-paste-toggle').querySelector('span');
+  const isOpen = area.style.display !== 'none';
+  area.style.display = isOpen ? 'none' : 'block';
+  toggle.textContent = isOpen ? '▼ Claudeのテキスト出力を直接貼り付ける場合はこちら' : '▲ 閉じる';
+});
+
+document.getElementById('inv-paste-apply').addEventListener('click', () => {
+  const text = document.getElementById('inv-paste-text').value;
+  const r = document.getElementById('inv-paste-result');
+  if (!text.trim()) { r.textContent = 'テキストを貼り付けてください'; r.style.color = '#d63031'; return; }
+  const count = parseInvoiceText(text);
+  r.textContent = count > 0 ? `✅ ${count}項目を自動入力しました` : '入力できる項目が見つかりませんでした';
+  r.style.color = count > 0 ? '#00b894' : '#d63031';
+  setTimeout(() => { r.textContent = ''; r.style.color = '#636e72'; }, 4000);
+});
+
+function parseInvoiceText(text) {
+  const fieldMap = {
+    '業者名': 'inv-vendor', '請求元': 'inv-vendor', '請求元会社名': 'inv-vendor',
+    '勘定科目': 'inv-category', '科目': 'inv-category',
+    '支払方法': 'inv-payment-method',
+    '期日': 'inv-due-date', '支払期限': 'inv-due-date',
+    '請求先': 'inv-facility', '施設': 'inv-facility', '施設名': 'inv-facility',
+    'エンティティ': 'inv-entity',
+    '取引日': 'inv-transaction-date', '請求日': 'inv-transaction-date',
+    '月': 'inv-month',
+    '金額': 'inv-amount', '請求金額': 'inv-amount', '税込合計': 'inv-amount', '合計金額': 'inv-amount',
+    '備考': 'inv-note', '摘要': 'inv-note', '内容': 'inv-note', '品目': 'inv-note',
+  };
+  let filled = 0;
+  text.split('\n').forEach(line => {
+    const m = line.match(/^([^:：]+)[:：]\s*(.+)$/);
+    if (!m) return;
+    const key = m[1].trim().replace(/[\s　]/g, '');
+    let value = m[2].trim();
+    const fieldId = fieldMap[key];
+    if (!fieldId) return;
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    if (fieldId === 'inv-amount' || fieldId.startsWith('inv-carry')) value = value.replace(/[¥￥,，円\s]/g, '');
+    if (el.tagName === 'SELECT') {
+      const found = Array.from(el.options).find(o => o.value === value || o.textContent.trim() === value);
+      if (found) { el.value = found.value; filled++; }
+    } else {
+      el.value = value;
+      filled++;
+    }
+  });
+  return filled;
+}
+
+// ─── 保存ファイル一覧モーダル ───
+let allInvoiceFiles = [];
+
+async function loadInvoiceFiles() {
+  try {
+    const files = await api('/api/keiri/invoice-files');
+    allInvoiceFiles = files;
+    renderInvoiceFiles(files);
+    document.getElementById('files-count').textContent = `${files.length}件`;
+  } catch (e) {
+    document.getElementById('invoice-files-list').innerHTML = `<div style="color:#d63031;padding:20px;">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+function renderInvoiceFiles(files) {
+  const container = document.getElementById('invoice-files-list');
+  if (!files.length) {
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:#636e72;">保存されたファイルはありません</div>';
+    return;
+  }
+
+  // 業者名でグループ化
+  const groups = {};
+  files.forEach(f => {
+    const v = f.vendor || '不明';
+    if (!groups[v]) groups[v] = [];
+    groups[v].push(f);
+  });
+
+  let html = '';
+  Object.entries(groups).forEach(([vendor, items]) => {
+    html += `<div style="margin-bottom:16px;">
+      <div style="font-weight:700;font-size:13px;color:#2d3436;background:#f0f2f5;padding:6px 10px;border-radius:6px;margin-bottom:6px;">
+        📁 ${vendor} <span style="font-weight:400;font-size:11px;color:#636e72;">(${items.length}件)</span>
+      </div>`;
+    items.forEach(f => {
+      const size = f.file_size ? `${Math.round(f.file_size / 1024)}KB` : '';
+      const date = f.uploaded_at ? f.uploaded_at.slice(0, 16).replace('T', ' ') : '';
+      const icon = f.mime_type === 'application/pdf' ? '📄' : '🖼';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:4px;background:#fff;flex-wrap:wrap;">
+        <span style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.original_name}">${icon} ${f.original_name}</span>
+        <span style="font-size:11px;color:#636e72;white-space:nowrap;">${size}</span>
+        <span style="font-size:11px;color:#636e72;white-space:nowrap;">${date}</span>
+        <a href="/api/keiri/invoice-files/${f.id}/view" target="_blank" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;">👁 表示</a>
+        <a href="/api/keiri/invoice-files/${f.id}/download" class="btn btn-primary" style="font-size:11px;padding:4px 10px;">⬇ DL</a>
+        <button class="btn btn-danger" style="font-size:11px;padding:4px 10px;" onclick="deleteInvoiceFile(${f.id}, this)">🗑</button>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+async function deleteInvoiceFile(id, btn) {
+  if (!confirm('このファイルを削除しますか？')) return;
+  btn.disabled = true;
+  try {
+    await api(`/api/keiri/invoice-files/${id}`, { method: 'DELETE' });
+    allInvoiceFiles = allInvoiceFiles.filter(f => f.id !== id);
+    renderInvoiceFiles(allInvoiceFiles);
+    document.getElementById('files-count').textContent = `${allInvoiceFiles.length}件`;
+    showToast('削除しました');
+  } catch (e) {
+    showToast('削除失敗: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-invoice-files').addEventListener('click', () => {
+  document.getElementById('invoice-files-modal').classList.add('show');
+  loadInvoiceFiles();
+});
+document.getElementById('invoice-files-modal-close').addEventListener('click', () => {
+  document.getElementById('invoice-files-modal').classList.remove('show');
+});
+document.getElementById('files-search').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = q ? allInvoiceFiles.filter(f => (f.vendor || '').toLowerCase().includes(q)) : allInvoiceFiles;
+  renderInvoiceFiles(filtered);
+  document.getElementById('files-count').textContent = `${filtered.length}件`;
+});
+
 document.getElementById('inv-modal-save').addEventListener('click', async () => {
   const data = {
     vendor: document.getElementById('inv-vendor').value,
@@ -2428,14 +2671,20 @@ document.getElementById('rules-tbody').addEventListener('click', (e) => {
   const currentText = td.textContent.trim();
   const currentVal = currentText === '（未設定）' ? '' : currentText;
 
+  let ruleFacilityDl = null;
   if (field === 'category') {
     input = document.createElement('select');
     input.innerHTML = '<option value="">（なし）</option>' + CATEGORIES.map(c => `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
     input.style.cssText = 'font-size:11px;padding:3px;width:130px;';
   } else if (field === 'facility') {
-    input = document.createElement('select');
-    input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === currentVal ? 'selected' : ''}>${f.name}</option>`).join('');
-    input.style.cssText = 'font-size:11px;padding:3px;width:120px;';
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentVal;
+    input.style.cssText = 'font-size:11px;padding:3px;width:140px;border:1px solid #0984e3;border-radius:4px;';
+    ruleFacilityDl = document.createElement('datalist');
+    ruleFacilityDl.id = 'keiri-rule-facility-dl';
+    ruleFacilityDl.innerHTML = FACILITIES.map(f => `<option value="${f.name}"></option>`).join('');
+    input.setAttribute('list', 'keiri-rule-facility-dl');
   } else {
     input = document.createElement('input');
     input.type = 'text';
@@ -2444,6 +2693,7 @@ document.getElementById('rules-tbody').addEventListener('click', (e) => {
   }
 
   td.textContent = '';
+  if (ruleFacilityDl) td.appendChild(ruleFacilityDl);
   td.appendChild(input);
   input.focus();
   if (input.select) input.select();
@@ -2502,26 +2752,28 @@ async function loadAccountsTable() {
     <tr data-id="${a.id}">
       <td>${a.name}</td>
       <td>${a.display_name || ''}</td>
+      <td style="color:#636e72;font-size:12px;">${a.account_number || ''}</td>
       <td>${a.sort_order}</td>
       <td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deleteAccount(${a.id})">削除</button></td>
     </tr>
   `).join('');
 }
 document.getElementById('btn-add-account').addEventListener('click', async () => {
-  const name = prompt('口座名:');
+  const name = prompt('口座名（例: リゾート親）:');
   if (!name) return;
   const display = prompt('表示名（省略可）:') || name;
+  const accountNumber = prompt('口座番号（省略可。例: 普通 1234567）:') || '';
   await api('/api/keiri/accounts', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ name, display_name: display })
+    body: JSON.stringify({ name, display_name: display, account_number: accountNumber })
   });
   loadAccountsTable();
   loadBankAccountTabs();
 });
 window.deleteAccount = async (id) => {
   if (!confirm('この口座を削除しますか？（取引データは残ります）')) return;
-  await api(`/api/accounts/${id}`, { method: 'DELETE' });
+  await api(`/api/keiri/accounts/${id}`, { method: 'DELETE' });
   loadAccountsTable();
   loadBankAccountTabs();
 };
