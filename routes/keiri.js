@@ -983,6 +983,31 @@ router.post('/invoices/upload/confirm', async (req, res) => {
 // ============================================================================
 // 請求書 CRUD
 // ============================================================================
+
+// 前月繰越自動計算：同業者・同施設の未払い分を最大3ヶ月分返す
+router.get('/invoices/carryover', async (req, res) => {
+  const { vendor, facility, month } = req.query;
+  if (!vendor || !month) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  const m = String(month).match(/(\d{1,2})月/);
+  if (!m) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  const monthNum = parseInt(m[1]);
+  const result = { carry_1: 0, carry_2: 0, carry_3: 0 };
+  for (let i = 1; i <= 3; i++) {
+    let prevNum = monthNum - i;
+    if (prevNum <= 0) prevNum += 12;
+    const prevMonth = `${prevNum}月`;
+    let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices WHERE vendor = ? AND month = ? AND status = '未'`;
+    const params = [vendor, prevMonth];
+    if (facility) { sql += ' AND facility = ?'; params.push(facility); }
+    const rows = await query(sql, params);
+    const total = Number(rows[0].total) || 0;
+    if (i === 1) result.carry_1 = total;
+    else if (i === 2) result.carry_2 = total;
+    else result.carry_3 = total;
+  }
+  res.json(result);
+});
+
 router.get('/invoices', async (req, res) => {
   const { status, facility, month, entity, year, search } = req.query;
   let sql = 'SELECT * FROM keiri_invoices WHERE 1=1';

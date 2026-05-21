@@ -2061,6 +2061,7 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
       // 1件：フォームに自動入力してユーザーが確認してから保存
       const count = applyInvoiceData(ok[0].data);
       status.textContent += `（${count}項目を自動入力）`;
+      await fetchCarryover();
     } else if (ok.length >= 2) {
       // 2件以上：全件を自動で請求書レコードとして登録
       let created = 0;
@@ -2137,6 +2138,26 @@ function applyInvoiceData(data) {
   });
   return filled;
 }
+
+// ─── 前月繰越自動計算 ───
+async function fetchCarryover() {
+  const vendor = document.getElementById('inv-vendor').value.trim();
+  const month  = document.getElementById('inv-month').value.trim();
+  if (!vendor || !month) return;
+  const facility = document.getElementById('inv-facility').value.trim();
+  try {
+    const params = new URLSearchParams({ vendor, month });
+    if (facility) params.set('facility', facility);
+    const data = await api(`/api/keiri/invoices/carryover?${params}`);
+    if (data.carry_1 > 0) document.getElementById('inv-carry-1').value = data.carry_1;
+    if (data.carry_2 > 0) document.getElementById('inv-carry-2').value = data.carry_2;
+    if (data.carry_3 > 0) document.getElementById('inv-carry-3').value = data.carry_3;
+  } catch (_) {}
+}
+
+// 業者名入力確定・月変更時に自動計算
+document.getElementById('inv-vendor').addEventListener('blur', fetchCarryover);
+document.getElementById('inv-month').addEventListener('change', fetchCarryover);
 
 // ─── テキスト貼り付け（サブ手段） ───
 document.getElementById('inv-paste-toggle').addEventListener('click', () => {
