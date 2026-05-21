@@ -766,6 +766,23 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 </div>
 
 <!-- ─── 請求書フォームモーダル ─── -->
+<!-- ─── 請求書統合確認モーダル ─── -->
+<div class="modal-overlay" id="merge-confirm-modal">
+  <div class="modal" style="max-width:520px;">
+    <h3 style="margin-bottom:12px;">📋 請求書の統合確認</h3>
+    <p style="margin-bottom:12px;line-height:1.6;">請求元と請求先が同じ請求書が<strong>2件</strong>あります。<br>統合しますか？</p>
+    <div style="background:#f0f4f8;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;line-height:1.8;">
+      <div><span style="color:#636e72;font-size:11px;">新しい月（統合先）</span><br><strong id="merge-inv-keep"></strong></div>
+      <div style="margin-top:8px;"><span style="color:#636e72;font-size:11px;">古い月（前月繰越へ移動 → 削除）</span><br><strong id="merge-inv-old"></strong></div>
+    </div>
+    <p style="font-size:11px;color:#636e72;line-height:1.6;margin-bottom:14px;">古い月の金額が新しい月の「前月繰越」に入ります。備考が異なる場合は両方の内容を記載します。</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="merge-confirm-no">キャンセル</button>
+      <button class="btn btn-success" id="merge-confirm-yes">統合する</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── 請求書ファイル保存一覧モーダル ─── -->
 <div class="modal-overlay" id="invoice-files-modal">
   <div class="modal" style="max-width:820px;width:95%;">
@@ -1827,6 +1844,12 @@ function startInlineEdit(td, inv, field, type) {
     });
     showToast('保存しました');
     await loadInvoices();
+    // 業者名 or 請求先が変わった場合は重複チェック
+    if (field === 'vendor' || field === 'facility') {
+      const vendor   = field === 'vendor'   ? String(newVal) : (inv.vendor   || '');
+      const facility = field === 'facility' ? String(newVal) : (inv.facility || '');
+      await checkInvoiceDuplicates(inv.id, vendor, facility);
+    }
   }
   input.addEventListener('blur', save);
   input.addEventListener('keydown', (e) => {
@@ -1835,6 +1858,53 @@ function startInlineEdit(td, inv, field, type) {
   });
   if (input.tagName === 'SELECT') input.addEventListener('change', save);
 }
+
+// ─── 請求書統合 ───
+let pendingMergeIds = [];
+
+async function checkInvoiceDuplicates(invId, vendor, facility) {
+  if (!vendor || !facility) return;
+  try {
+    const p = new URLSearchParams({ vendor, facility, excludeId: invId });
+    const dupes = await api(`/api/keiri/invoices/duplicates?${p}`);
+    if (!dupes.length) return;
+    const inv  = invoices.find(i => i.id === invId);
+    const dupe = dupes[0];
+    // 月番号で新旧判定してダイアログに表示
+    function mScore(x) {
+      const m = String(x.month || '').match(/(\d{1,2})月/);
+      if (m) return parseInt(m[1]);
+      const d = String(x.due_date || x.transaction_date || '').match(/(\d{1,2})[\/\-]/);
+      return d ? parseInt(d[1]) : 0;
+    }
+    const [keepInv, oldInv] = mScore(inv) >= mScore(dupe) ? [inv, dupe] : [dupe, inv];
+    document.getElementById('merge-inv-keep').textContent =
+      `${keepInv.month || keepInv.due_date || ''}　${keepInv.vendor} × ${keepInv.facility}　¥${yen(keepInv.amount || 0)}`;
+    document.getElementById('merge-inv-old').textContent =
+      `${oldInv.month  || oldInv.due_date  || ''}　${oldInv.vendor}  × ${oldInv.facility}　¥${yen(oldInv.amount  || 0)}`;
+    pendingMergeIds = [inv.id, dupe.id];
+    document.getElementById('merge-confirm-modal').classList.add('show');
+  } catch (_) {}
+}
+
+document.getElementById('merge-confirm-yes').addEventListener('click', async () => {
+  document.getElementById('merge-confirm-modal').classList.remove('show');
+  const [id1, id2] = pendingMergeIds;
+  pendingMergeIds = [];
+  await api('/api/keiri/invoices/merge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id1, id2 })
+  });
+  await loadInvoices();
+  await loadInvoiceMonthTabs();
+  showToast('統合しました');
+});
+
+document.getElementById('merge-confirm-no').addEventListener('click', () => {
+  document.getElementById('merge-confirm-modal').classList.remove('show');
+  pendingMergeIds = [];
+});
 
 // 請求書テーブル クリックハンドラ：金額セルはメニュー、それ以外は従来通り即インライン編集
 document.getElementById('invoice-tbody').addEventListener('click', (e) => {

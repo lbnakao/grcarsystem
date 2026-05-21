@@ -1066,6 +1066,54 @@ router.delete('/invoices/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 重複検出：同業者+同施設の他の請求書を返す
+router.get('/invoices/duplicates', async (req, res) => {
+  const { vendor, facility, excludeId } = req.query;
+  if (!vendor || !facility) return res.json([]);
+  let sql = `SELECT * FROM keiri_invoices WHERE vendor = ? AND facility = ?`;
+  const params = [vendor, facility];
+  if (excludeId) { sql += ' AND id != ?'; params.push(parseInt(excludeId)); }
+  sql += ' ORDER BY id';
+  res.json(await query(sql, params));
+});
+
+// 統合：古い月→新しい月の前月繰越に積み込み、備考をマージして古い方を削除
+router.post('/invoices/merge', async (req, res) => {
+  const { id1, id2 } = req.body;
+  if (!id1 || !id2) return res.status(400).json({ error: 'id1 and id2 required' });
+  const rows = await query('SELECT * FROM keiri_invoices WHERE id IN (?, ?)', [id1, id2]);
+  if (rows.length !== 2) return res.status(404).json({ error: 'invoices not found' });
+
+  function monthScore(inv) {
+    const m = String(inv.month || '').match(/(\d{1,2})月/);
+    if (m) return parseInt(m[1]);
+    const d = String(inv.due_date || inv.transaction_date || '').match(/(\d{1,2})[\/\-]/);
+    return d ? parseInt(d[1]) : 0;
+  }
+
+  // 月が大きい方を keep（新しい月）、小さい方を merge（古い月）
+  const [keep, merge] = monthScore(rows[0]) >= monthScore(rows[1])
+    ? [rows[0], rows[1]] : [rows[1], rows[0]];
+
+  // 古い月の金額連鎖を新しい月の繰越欄に積み込み
+  const newCarry1 = (merge.amount  || 0);
+  const newCarry2 = (merge.carry_1 || 0);
+  const newCarry3 = (merge.carry_2 || 0);
+
+  // 備考：同じなら1つ、違う場合は両方記載
+  const noteA = (keep.note  || '').trim();
+  const noteB = (merge.note || '').trim();
+  const newNote = noteA === noteB ? noteA : [noteA, noteB].filter(Boolean).join(' / ');
+
+  await run(
+    `UPDATE keiri_invoices SET carry_1=?, carry_2=?, carry_3=?, note=? WHERE id=?`,
+    [newCarry1, newCarry2, newCarry3, newNote, keep.id]
+  );
+  await run('DELETE FROM keiri_invoices WHERE id = ?', [merge.id]);
+  const updated = await query('SELECT * FROM keiri_invoices WHERE id = ?', [keep.id]);
+  res.json({ merged: updated[0] });
+});
+
 router.post('/invoices/bulk-delete', async (req, res) => {
   const { ids, filter } = req.body || {};
   let deleted = 0;
