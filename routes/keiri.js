@@ -985,19 +985,36 @@ router.post('/invoices/upload/confirm', async (req, res) => {
 // ============================================================================
 
 // 前月繰越自動計算：同業者・同施設の未払い分を最大3ヶ月分返す
+// 基準月は month("4月") → due_date("4/30" or "2026-04-30") → transaction_date の順で決定
 router.get('/invoices/carryover', async (req, res) => {
-  const { vendor, facility, month } = req.query;
-  if (!vendor || !month) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
-  const m = String(month).match(/(\d{1,2})月/);
-  if (!m) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
-  const monthNum = parseInt(m[1]);
+  const { vendor, facility, month, due_date, transaction_date } = req.query;
+  if (!vendor) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+
+  // 基準月番号を決定
+  let monthNum = 0;
+  for (const src of [month, due_date, transaction_date]) {
+    if (!src) continue;
+    const m = String(src).match(/(?:^|[-\/])0?(\d{1,2})(?:[月\/\-])/);
+    if (m) { monthNum = parseInt(m[1]); break; }
+  }
+  if (!monthNum) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+
   const result = { carry_1: 0, carry_2: 0, carry_3: 0 };
   for (let i = 1; i <= 3; i++) {
     let prevNum = monthNum - i;
     if (prevNum <= 0) prevNum += 12;
     const prevMonth = `${prevNum}月`;
-    let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices WHERE vendor = ? AND month = ? AND status = '未'`;
-    const params = [vendor, prevMonth];
+    const prevPad = String(prevNum).padStart(2, '0');
+    // month フィールド一致 OR 日付フィールドの月部分一致
+    let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices
+      WHERE vendor = ? AND status = '未' AND (
+        month = ? OR
+        due_date LIKE ? OR due_date LIKE ? OR
+        transaction_date LIKE ? OR transaction_date LIKE ?
+      )`;
+    const params = [vendor, prevMonth,
+      `${prevNum}/%`, `%-${prevPad}-%`,
+      `${prevNum}/%`, `%-${prevPad}-%`];
     if (facility) { sql += ' AND facility = ?'; params.push(facility); }
     const rows = await query(sql, params);
     const total = Number(rows[0].total) || 0;
