@@ -2057,10 +2057,43 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
     html += '</div>';
     if (ok.length + ng.length > 1 || ng.length > 0) resultsDiv.innerHTML = html;
 
-    // 成功が1件なら自動入力
     if (ok.length === 1) {
+      // 1件：フォームに自動入力してユーザーが確認してから保存
       const count = applyInvoiceData(ok[0].data);
       status.textContent += `（${count}項目を自動入力）`;
+    } else if (ok.length >= 2) {
+      // 2件以上：全件を自動で請求書レコードとして登録
+      let created = 0;
+      for (const r of ok) {
+        const d = r.data;
+        if (!d.vendor) continue;
+        try {
+          await api('/api/keiri/invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vendor: d.vendor || '',
+              category: d.category || '',
+              payment_method: d.payment_method || '',
+              due_date: d.due_date || '',
+              facility: d.facility || '',
+              entity: d.entity || currentInvoiceEntity || '',
+              transaction_date: d.transaction_date || '',
+              month: d.month || currentInvoiceMonth || '',
+              amount: Number(d.amount) || 0,
+              carry_1: 0, carry_2: 0, carry_3: 0,
+              note: d.note || '',
+            })
+          });
+          created++;
+        } catch (_) {}
+      }
+      if (created > 0) {
+        document.getElementById('invoice-modal').classList.remove('show');
+        await loadInvoices();
+        await loadInvoiceMonthTabs();
+        showToast(`${created}件の請求書を登録しました`);
+      }
     }
   } catch (err) {
     status.textContent = `❌ ${err.message}`;
