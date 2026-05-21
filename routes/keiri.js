@@ -1497,7 +1497,7 @@ const EXTRACT_PROMPT = `この請求書から以下の項目を抽出してJSON�
   "note": "品目・内容を30字以内で"
 }`;
 
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 
 async function callGeminiWithRetry(genAI, parts) {
   const MAX_RETRIES = 3;
