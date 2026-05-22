@@ -1184,7 +1184,13 @@ router.post('/invoices/undo', async (req, res) => {
 });
 
 router.get('/invoices/months', async (req, res) => {
-  const rows = await query(`SELECT DISTINCT month FROM keiri_invoices WHERE month IS NOT NULL AND month != '' ORDER BY month`);
+  const rows = await query(`SELECT DISTINCT month FROM keiri_invoices WHERE month IS NOT NULL AND month != ''`);
+  // "M月" 形式を数値でソート（1月→2月→…→12月の正しい順）
+  rows.sort((a, b) => {
+    const na = parseInt((a.month || '').replace('月', '')) || 0;
+    const nb = parseInt((b.month || '').replace('月', '')) || 0;
+    return na - nb;
+  });
   res.json(rows);
 });
 

@@ -2232,10 +2232,26 @@ async function fetchCarryover() {
 }
 
 // 業者名・月・支払期日・取引日が変わったら自動計算
+// 日付から月を自動セット（月フィールドが空 or 現在の選択月と一致する場合のみ上書き）
+function autoSetMonth(dateVal) {
+  const m = String(dateVal || '').match(/(?:^|-)0?(\d{1,2})[-\/]/);
+  if (!m) return;
+  const monthStr = `${parseInt(m[1])}月`;
+  const monthEl = document.getElementById('inv-month');
+  if (!monthEl.value || monthEl.value === currentInvoiceMonth) {
+    monthEl.value = monthStr;
+  }
+}
+document.getElementById('inv-due-date').addEventListener('change', e => {
+  autoSetMonth(e.target.value);
+  fetchCarryover();
+});
+document.getElementById('inv-transaction-date').addEventListener('change', e => {
+  autoSetMonth(e.target.value);
+  fetchCarryover();
+});
 document.getElementById('inv-vendor').addEventListener('blur', fetchCarryover);
 document.getElementById('inv-month').addEventListener('change', fetchCarryover);
-document.getElementById('inv-due-date').addEventListener('change', fetchCarryover);
-document.getElementById('inv-transaction-date').addEventListener('change', fetchCarryover);
 
 // ─── テキスト貼り付け（サブ手段） ───
 document.getElementById('inv-paste-toggle').addEventListener('click', () => {
