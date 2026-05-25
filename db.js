@@ -998,11 +998,14 @@ async function createKeiriTables() {
     }
   }
 
-  // 現場要望施設を追加（既存でも IGNORE で安全）
+  // 現場要望施設を追加（存在チェックしてから挿入 ─ PG/SQLite 共通）
   const requestedFacilities = ['リゾート', 'ビュー', 'デルーネ', '弥山', 'ほうらい', '本川', '温井', 'いこいの村', 'フォレスト', '竹原', '周防大島'];
   for (const name of requestedFacilities) {
-    const maxRow = await query("SELECT COALESCE(MAX(sort_order), -1) as m FROM keiri_facilities");
-    await run("INSERT OR IGNORE INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [name, Number(maxRow[0].m) + 1]);
+    const exists = await query("SELECT COUNT(*) as c FROM keiri_facilities WHERE name = ?", [name]);
+    if (Number(exists[0].c) === 0) {
+      const maxRow = await query("SELECT COALESCE(MAX(sort_order), -1) as m FROM keiri_facilities");
+      await run("INSERT INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [name, Number(maxRow[0].m) + 1]);
+    }
   }
 
   // 支払方法マスタ
