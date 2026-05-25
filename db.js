@@ -997,6 +997,38 @@ async function createKeiriTables() {
       await run("INSERT INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [name, Number(maxRow[0].m) + 1]);
     }
   }
+
+  // 現場要望施設を追加（既存でも IGNORE で安全）
+  const requestedFacilities = ['リゾート', 'ビュー', 'デルーネ', '弥山', 'ほうらい', '本川', '温井', 'いこいの村', 'フォレスト', '竹原', '周防大島'];
+  for (const name of requestedFacilities) {
+    const maxRow = await query("SELECT COALESCE(MAX(sort_order), -1) as m FROM keiri_facilities");
+    await run("INSERT OR IGNORE INTO keiri_facilities (name, sort_order) VALUES (?, ?)", [name, Number(maxRow[0].m) + 1]);
+  }
+
+  // 支払方法マスタ
+  await run(`
+    CREATE TABLE IF NOT EXISTS keiri_payment_methods (
+      id ${autoIncPK},
+      name TEXT NOT NULL UNIQUE,
+      color TEXT DEFAULT '#636e72',
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 支払方法の初期データ（空の場合のみ）
+  const pmCount = await query("SELECT COUNT(*) as c FROM keiri_payment_methods");
+  if (Number(pmCount[0].c) === 0) {
+    const defaultMethods = [
+      { name: '振替',     color: '#6c5ce7', sort_order: 1 },
+      { name: '振込',     color: '#d63031', sort_order: 2 },
+      { name: 'コンビニ', color: '#e17055', sort_order: 3 },
+      { name: 'クレジット', color: '#00b894', sort_order: 4 },
+      { name: '銀行',     color: '#0984e3', sort_order: 5 },
+    ];
+    for (const m of defaultMethods) {
+      await run("INSERT INTO keiri_payment_methods (name, color, sort_order) VALUES (?, ?, ?)", [m.name, m.color, m.sort_order]);
+    }
+  }
 }
 
 // ===== 初期データ =====

@@ -361,6 +361,38 @@ router.delete('/facilities/:id', async (req, res) => {
 });
 
 // ============================================================================
+// 支払方法マスタ
+// ============================================================================
+router.get('/payment-methods', async (req, res) => {
+  const rows = await query('SELECT * FROM keiri_payment_methods ORDER BY sort_order, id');
+  res.json(rows);
+});
+router.post('/payment-methods', async (req, res) => {
+  const { name, color, sort_order } = req.body;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  try {
+    const id = await runInsert('INSERT INTO keiri_payment_methods (name, color, sort_order) VALUES (?, ?, ?)',
+      [name, color || '#636e72', sort_order || 99]);
+    res.json({ id });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+router.patch('/payment-methods/:id', async (req, res) => {
+  const { name, color, sort_order } = req.body;
+  const upd = [], val = [];
+  if (name !== undefined) { upd.push('name = ?'); val.push(name); }
+  if (color !== undefined) { upd.push('color = ?'); val.push(color); }
+  if (sort_order !== undefined) { upd.push('sort_order = ?'); val.push(sort_order); }
+  if (upd.length === 0) return res.status(400).json({ error: 'no fields' });
+  val.push(req.params.id);
+  await run(`UPDATE keiri_payment_methods SET ${upd.join(', ')} WHERE id = ?`, val);
+  res.json({ ok: true });
+});
+router.delete('/payment-methods/:id', async (req, res) => {
+  await run('DELETE FROM keiri_payment_methods WHERE id = ?', [req.params.id]);
+  res.json({ ok: true });
+});
+
+// ============================================================================
 // 勘定科目マスタ（固定）
 // ============================================================================
 const CATEGORIES = [
@@ -556,7 +588,7 @@ router.post('/bank/upload/confirm', async (req, res) => {
          t.description || '', categorizer.extractPattern(t.description || ''), t.vendor_name || '', t.category || '',
          t.facility || '', t.is_cleared || '', t.note1 || '', t.note2 || '', t.month || null, t.year || null, t.auto_categorized || 0]);
       inserted++;
-      if (learn && t.description && ((t.category && t.auto_categorized === 0) || t.vendor_name)) {
+      if (learn && t.withdrawal > 0 && t.description && ((t.category && t.auto_categorized === 0) || t.vendor_name)) {
         await categorizer.learnRule(t.description, t.account, t.category || '', t.facility || '', t.vendor_name || '');
         learned++;
       }
@@ -600,7 +632,7 @@ router.patch('/bank/transactions/:id', async (req, res) => {
   await run(`UPDATE keiri_bank_transactions SET ${upd.join(', ')} WHERE id = ?`, val);
 
   let learnedRuleId = null, propagatedCount = 0;
-  if (learn && (category !== undefined || facility !== undefined || vendor_name !== undefined)) {
+  if (learn && current.withdrawal > 0 && (category !== undefined || facility !== undefined || vendor_name !== undefined)) {
     const newCategory = category !== undefined ? category : current.category;
     const newFacility = facility !== undefined ? facility : current.facility;
     const newVendor = vendor_name !== undefined ? vendor_name : current.vendor_name;

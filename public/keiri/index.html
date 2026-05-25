@@ -453,6 +453,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="sub-tab active" data-settings="rules">支払先の自動認識ルール</button>
       <button class="sub-tab" data-settings="accounts">銀行口座の登録</button>
       <button class="sub-tab" data-settings="facilities">施設・物件の登録</button>
+      <button class="sub-tab" data-settings="payments">支払方法の設定</button>
       <button class="sub-tab" data-settings="reset" style="color:#d63031;">⚠ 全データリセット</button>
     </div>
 
@@ -507,6 +508,30 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             </tr>
           </thead>
           <tbody id="accounts-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 支払方法の設定 -->
+    <div class="sub-section" id="settings-payments">
+      <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
+        請求書の「支払方法」列に表示するラベルと色を管理します。追加・削除・色の変更が可能です。
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-success" id="btn-add-payment-method">＋ 支払方法を追加する</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>支払方法名</th>
+              <th>色</th>
+              <th>プレビュー</th>
+              <th>並び順</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="payment-methods-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -831,8 +856,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <div class="form-row"><label>業者名</label><input id="inv-vendor" type="text"></div>
       <div class="form-row"><label>勘定科目</label><select id="inv-category"></select></div>
       <div class="form-row"><label>支払方法</label><select id="inv-payment-method">
-        <option value="">（なし）</option><option>振替</option><option>振込</option>
-        <option>コンビニ</option><option>クレジット</option><option>銀行</option>
+        <option value="">（なし）</option>
       </select></div>
       <div class="form-row"><label>期日</label><input id="inv-due-date" type="date"></div>
       <div class="form-row"><label>請求先（施設）</label><select id="inv-facility"></select></div>
@@ -841,7 +865,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
         <option>フォレスト</option><option>グリーンシャワー</option><option>周防大島</option>
         <option>モーテル</option><option>レジデンス</option><option>ココユニバース</option>
       </select></div>
-      <div class="form-row"><label>取引日</label><input id="inv-transaction-date" type="text" placeholder="例: 2/16"></div>
+      <div class="form-row"><label>取引日</label><input id="inv-transaction-date" type="date"></div>
       <div class="form-row"><label>月</label><input id="inv-month" type="text" placeholder="例: 2月"></div>
       <div class="form-row"><label>金額</label><input id="inv-amount" type="number" value="0"></div>
       <div class="form-row"><label>前月繰越</label><input id="inv-carry-1" type="number" value="0"></div>
@@ -866,6 +890,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 let CATEGORIES = [];
 let ACCOUNTS = [];
 let FACILITIES = [];
+let PAYMENT_METHODS = [];
 let currentBankAccount = '';
 let currentInvoiceEntity = '';
 let currentInvoiceMonth = '';
@@ -960,6 +985,7 @@ async function init() {
   try { CATEGORIES = await api('/api/keiri/categories'); } catch(e) { console.error('categories:', e); CATEGORIES = []; }
   try { await loadAccounts(); } catch(e) { console.error('accounts:', e); }
   try { await loadFacilities(); } catch(e) { console.error('facilities:', e); }
+  try { await loadPaymentMethods(); } catch(e) { console.error('paymentMethods:', e); }
   try { populateInvoiceCategoryDropdown(); } catch(e) { console.error('invCatDropdown:', e); }
   try { await loadBankAccountTabs(); } catch(e) { console.error('bankAcctTabs:', e); }
   try { await loadInvoiceEntityTabs(); } catch(e) { console.error('invEntityTabs:', e); }
@@ -981,6 +1007,20 @@ async function loadFacilities() {
   // 請求書フォームの施設
   const invFac = document.getElementById('inv-facility');
   invFac.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+}
+
+async function loadPaymentMethods() {
+  PAYMENT_METHODS = await api('/api/keiri/payment-methods');
+  // 請求書フォームの支払方法を動的に更新
+  const sel = document.getElementById('inv-payment-method');
+  sel.innerHTML = '<option value="">（なし）</option>' + PAYMENT_METHODS.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+}
+
+function paymentMethodBadge(name) {
+  if (!name) return '';
+  const pm = PAYMENT_METHODS.find(p => p.name === name);
+  const color = pm ? pm.color : '#636e72';
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${color};color:#fff;">${name}</span>`;
 }
 
 function populateInvoiceCategoryDropdown() {
@@ -1057,6 +1097,9 @@ function renderBankTable() {
     else rowClass = 'manual-categorized';
     if (t.is_cleared === '済') rowClass += ' cleared';
 
+    const isRiskTx = /残高不足|引落不能|振替不能/.test(t.description || '') || t.category === '租税公課';
+    const riskIcon = isRiskTx ? ' <span style="color:#d63031;font-size:11px;font-weight:700;cursor:default;" title="残高不足・引落不能">⚠</span>' : '';
+
     return `<tr class="${rowClass}" data-id="${t.id}">
       <td>${t.tx_date || ''}</td>
       <td class="amount ${t.withdrawal > 0 ? 'withdrawal' : 'zero'}">${yen(t.withdrawal)}</td>
@@ -1066,7 +1109,7 @@ function renderBankTable() {
       <td class="editable" data-field="vendor_name" data-type="text" style="font-weight:600;">${t.vendor_name || '<span style="color:#bbb;">未入力</span>'}</td>
       <td class="editable" data-field="category" data-type="select-category">${t.category || '<span style="color:#bbb;">未入力</span>'}</td>
       <td class="editable" data-field="facility" data-type="select-facility">${t.facility || '<span style="color:#bbb;">未入力</span>'}</td>
-      <td class="editable" data-field="is_cleared" data-type="select-cleared">${t.is_cleared || ''}</td>
+      <td class="editable" data-field="is_cleared" data-type="select-cleared">${t.is_cleared || ''}${riskIcon}</td>
       <td class="editable" data-field="note1" data-type="text">${t.note1 || ''}</td>
     </tr>`;
   }).join('');
@@ -1116,7 +1159,7 @@ document.getElementById('bank-tbody').addEventListener('click', (e) => {
     input.setAttribute('list', 'keiri-facility-dl');
   } else if (type === 'select-cleared') {
     input = document.createElement('select');
-    input.innerHTML = `<option value="">（未）</option><option value="済" ${current === '済' ? 'selected' : ''}>済</option>`;
+    input.innerHTML = `<option value=""></option><option value="済" ${current === '済' ? 'selected' : ''}>済</option>`;
   } else {
     input = document.createElement('input');
     input.type = 'text';
@@ -1689,10 +1732,10 @@ function renderInvoiceTable() {
       <td>${sb}${carryBadge}</td>
       <td class="editable" data-field="vendor" data-type="text">${inv.vendor || ''}</td>
       <td class="editable" data-field="category" data-type="select-category">${inv.category || ''}</td>
-      <td class="editable" data-field="payment_method" data-type="select-payment">${inv.payment_method || ''}</td>
+      <td class="editable" data-field="payment_method" data-type="select-payment" data-value="${inv.payment_method || ''}">${paymentMethodBadge(inv.payment_method)}</td>
       <td class="editable" data-field="due_date" data-type="text">${inv.due_date || ''}</td>
       <td class="editable" data-field="facility" data-type="select-facility">${inv.facility || ''}</td>
-      <td class="editable" data-field="transaction_date" data-type="text">${inv.transaction_date || ''}</td>
+      <td class="editable" data-field="transaction_date" data-type="date-input">${inv.transaction_date || ''}</td>
       <td class="editable amount" data-field="amount" data-type="number">${strikeOrValue(inv.amount, inv.amount_cleared)}</td>
       <td class="editable amount" data-field="carry_1" data-type="number">${strikeOrValue(inv.carry_1, inv.carry_1_cleared)}</td>
       <td class="editable amount" data-field="carry_2" data-type="number">${strikeOrValue(inv.carry_2, inv.carry_2_cleared)}</td>
@@ -1811,9 +1854,13 @@ function startInlineEdit(td, inv, field, type) {
   } else if (type === 'select-facility') {
     input = document.createElement('select');
     input.innerHTML = '<option value="">（なし）</option>' + FACILITIES.map(f => `<option value="${f.name}" ${f.name === current ? 'selected' : ''}>${f.name}</option>`).join('');
+  } else if (type === 'date-input') {
+    input = document.createElement('input');
+    input.type = 'date';
+    input.value = current;
   } else if (type === 'select-payment') {
     input = document.createElement('select');
-    input.innerHTML = ['', '振替', '振込', 'コンビニ', 'クレジット', '銀行'].map(p => `<option value="${p}" ${p === current ? 'selected' : ''}>${p || '（なし）'}</option>`).join('');
+    input.innerHTML = [{ name: '' }, ...PAYMENT_METHODS].map(p => `<option value="${p.name}" ${p.name === current ? 'selected' : ''}>${p.name || '（なし）'}</option>`).join('');
   } else if (type === 'number') {
     input = document.createElement('input');
     input.type = 'number';
@@ -2790,6 +2837,7 @@ document.querySelectorAll('[data-settings]').forEach(t => {
     if (t.dataset.settings === 'rules') loadRules();
     if (t.dataset.settings === 'accounts') loadAccountsTable();
     if (t.dataset.settings === 'facilities') loadFacilitiesTable();
+    if (t.dataset.settings === 'payments') loadPaymentMethodsTable();
     if (t.dataset.settings === 'reset') loadResetCounts();
   });
 });
@@ -3019,6 +3067,44 @@ window.deleteFacility = async (id) => {
   if (!confirm('この施設を削除しますか？')) return;
   await api(`/api/facilities/${id}`, { method: 'DELETE' });
   loadFacilitiesTable();
+};
+
+async function loadPaymentMethodsTable() {
+  await loadPaymentMethods();
+  document.getElementById('payment-methods-tbody').innerHTML = PAYMENT_METHODS.map(p => `
+    <tr data-id="${p.id}">
+      <td>${p.name}</td>
+      <td><input type="color" value="${p.color}" style="width:48px;height:28px;border:none;cursor:pointer;padding:0;" onchange="updatePaymentMethodColor(${p.id}, this.value)"></td>
+      <td><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:${p.color};color:#fff;">${p.name}</span></td>
+      <td>${p.sort_order}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="deletePaymentMethod(${p.id})">削除</button></td>
+    </tr>
+  `).join('');
+}
+window.updatePaymentMethodColor = async (id, color) => {
+  await api(`/api/keiri/payment-methods/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ color })
+  });
+  await loadPaymentMethods();
+  showToast('色を更新しました');
+};
+document.getElementById('btn-add-payment-method').addEventListener('click', async () => {
+  const name = prompt('支払方法名（例: 現金）:');
+  if (!name) return;
+  const color = prompt('色（例: #0984e3）:', '#636e72') || '#636e72';
+  await api('/api/keiri/payment-methods', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name, color })
+  });
+  loadPaymentMethodsTable();
+});
+window.deletePaymentMethod = async (id) => {
+  if (!confirm('この支払方法を削除しますか？')) return;
+  await api(`/api/keiri/payment-methods/${id}`, { method: 'DELETE' });
+  loadPaymentMethodsTable();
 };
 
 // =============================================================================
