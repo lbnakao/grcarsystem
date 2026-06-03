@@ -427,6 +427,36 @@ async function createFundsTables() {
     )
   `);
 
+  // ===== 白井システム統合：別名マスタ・振込口座マスタ =====
+
+  // 別名（エイリアス）マスタ：各システムの表記 → 正本ID へ解決
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_name_aliases (
+      id ${autoIncPK},
+      kind TEXT NOT NULL,
+      alias TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      source TEXT DEFAULT '',
+      created_at ${nowDefault},
+      UNIQUE(kind, alias)
+    )
+  `);
+
+  // 振込口座マスタ（入金管理.xlsx「マスタ情報」由来）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_bank_accounts (
+      id ${autoIncPK},
+      label TEXT NOT NULL,
+      bank TEXT DEFAULT '',
+      branch TEXT DEFAULT '',
+      account_no TEXT DEFAULT '',
+      holder TEXT DEFAULT '',
+      company_id INTEGER,
+      memo TEXT DEFAULT '',
+      created_at ${nowDefault}
+    )
+  `);
+
   // 売上入力（OTA別／施設別／月別）
   await run(`
     CREATE TABLE IF NOT EXISTS funds_sales_entries (
