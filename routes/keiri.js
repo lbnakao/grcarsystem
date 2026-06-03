@@ -979,36 +979,58 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
 router.post('/invoices/upload/confirm', async (req, res) => {
   const { invoices: items, skip_duplicates = true } = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: 'invoices array required' });
-  let inserted = 0, skipped = 0;
+  let inserted = 0, updated = 0, skipped = 0;
   try {
     for (const inv of items) {
-      // 重複判定：エンティティ + 業者 + 月 + 年 + 当月金額 + 各繰越金額 がすべて一致する行
+      // 重複判定キー：エンティティ + 業者 + 月 + 年 + 施設（金額は除外）
+      // 一致行がある場合：金額が違えば「更新」、すべて同じなら「スキップ」
+      let existing = [];
       if (skip_duplicates) {
-        const dup = await query(
-          `SELECT id FROM keiri_invoices
-           WHERE COALESCE(entity,'') = ?
-             AND COALESCE(vendor,'') = ?
-             AND COALESCE(month,'') = ?
-             AND COALESCE(year, 0) = ?
-             AND COALESCE(facility,'') = ?
-             AND COALESCE(amount, 0) = ?
-             AND COALESCE(carry_1, 0) = ?
-             AND COALESCE(carry_2, 0) = ?
-             AND COALESCE(carry_3, 0) = ?`,
+        existing = await query(
+          `SELECT id, amount, carry_1, carry_2, carry_3,
+                  category, payment_method, due_date, transaction_date, note
+             FROM keiri_invoices
+            WHERE COALESCE(entity,'') = ?
+              AND COALESCE(vendor,'') = ?
+              AND COALESCE(month,'') = ?
+              AND COALESCE(year, 0) = ?
+              AND COALESCE(facility,'') = ?`,
           [
             inv.entity || '', inv.vendor || '', inv.month || '',
             inv.year || 0, inv.facility || '',
-            inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0
           ]
         );
-        if (dup.length > 0) { skipped++; continue; }
+      }
+      if (existing.length > 0) {
+        const e = existing[0];
+        const sameAmounts = (e.amount || 0) === (inv.amount || 0)
+          && (e.carry_1 || 0) === (inv.carry_1 || 0)
+          && (e.carry_2 || 0) === (inv.carry_2 || 0)
+          && (e.carry_3 || 0) === (inv.carry_3 || 0);
+        if (sameAmounts) { skipped++; continue; }
+        // 金額が違うので最新値で上書き更新（消込フラグは触らない）
+        await run(`UPDATE keiri_invoices SET
+                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?,
+                     category = COALESCE(NULLIF(?, ''), category),
+                     payment_method = COALESCE(NULLIF(?, ''), payment_method),
+                     due_date = COALESCE(NULLIF(?, ''), due_date),
+                     transaction_date = COALESCE(NULLIF(?, ''), transaction_date),
+                     note = COALESCE(NULLIF(?, ''), note)
+                   WHERE id = ?`,
+          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0,
+           inv.category || '', inv.payment_method || '', inv.due_date || '',
+           inv.transaction_date || '', inv.note || '', e.id]);
+        // 消込状態を金額に合わせて再計算
+        await recalcInvoiceStatus(e.id);
+        updated++;
+        continue;
       }
       await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
         [inv.vendor || '', inv.category || '', inv.payment_method || '', inv.due_date || '', inv.facility || '', inv.entity || '',
          inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.month || '', inv.year || null, inv.note || '']);
       inserted++;
     }
-    res.json({ ok: true, inserted, skipped });
+    res.json({ ok: true, inserted, updated, skipped });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1058,7 +1080,7 @@ router.get('/invoices/carryover', async (req, res) => {
 });
 
 router.get('/invoices', async (req, res) => {
-  const { status, facility, month, entity, year, search } = req.query;
+  const { status, facility, month, entity, year, search, payment_method } = req.query;
   let sql = 'SELECT * FROM keiri_invoices WHERE 1=1';
   const params = [];
   if (status) { sql += ' AND status = ?'; params.push(status); }
@@ -1067,6 +1089,7 @@ router.get('/invoices', async (req, res) => {
   if (entity) { sql += ' AND entity = ?'; params.push(entity); }
   if (year) { sql += ' AND year = ?'; params.push(parseInt(year)); }
   if (search) { sql += ' AND vendor LIKE ?'; params.push('%' + search + '%'); }
+  if (payment_method) { sql += ' AND payment_method = ?'; params.push(payment_method); }
   sql += ' ORDER BY due_date, vendor';
   res.json(await query(sql, params));
 });

@@ -396,6 +396,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
         <option value="一部済">一部だけ支払い済み</option>
       </select>
       <select id="invoice-filter-facility"><option value="">全ての施設</option></select>
+      <select id="invoice-filter-payment-method"><option value="">全ての支払方法</option></select>
       <input type="text" id="invoice-filter-search" placeholder="業者名で検索...">
     </div>
 
@@ -410,7 +411,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <th>請求元（業者名）</th>
             <th>勘定科目</th>
             <th>支払方法</th>
-            <th>支払期日</th>
+            <th class="sortable" data-sort="due_date" title="クリックで昇順/降順を切替">支払期日<span class="sort-arrow">⇅</span></th>
             <th>請求先（施設）</th>
             <th class="sortable" data-sort="transaction_date" title="クリックで昇順/降順を切替">取引日<span class="sort-arrow">⇅</span></th>
             <th>今月金額</th>
@@ -1014,6 +1015,8 @@ async function loadPaymentMethods() {
   // 請求書フォームの支払方法を動的に更新
   const sel = document.getElementById('inv-payment-method');
   sel.innerHTML = '<option value="">（なし）</option>' + PAYMENT_METHODS.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  // 請求書一覧のフィルタも更新
+  populateInvoicePaymentMethodFilter();
 }
 
 function paymentMethodBadge(name) {
@@ -1661,9 +1664,11 @@ async function loadInvoices() {
   const params = new URLSearchParams();
   const status = document.getElementById('invoice-filter-status').value;
   const facility = document.getElementById('invoice-filter-facility').value;
+  const paymentMethod = document.getElementById('invoice-filter-payment-method')?.value || '';
   const search = document.getElementById('invoice-filter-search').value;
   if (status) params.set('status', status);
   if (facility) params.set('facility', facility);
+  if (paymentMethod) params.set('payment_method', paymentMethod);
   if (currentInvoiceMonth) params.set('month', currentInvoiceMonth);
   if (currentInvoiceEntity) params.set('entity', currentInvoiceEntity);
   if (search) params.set('search', search);
@@ -1672,9 +1677,19 @@ async function loadInvoices() {
   renderInvoiceSummary();
 }
 
+function populateInvoicePaymentMethodFilter() {
+  const sel = document.getElementById('invoice-filter-payment-method');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">全ての支払方法</option>' +
+    PAYMENT_METHODS.map(p => `<option value="${p.name}" ${p.name === current ? 'selected' : ''}>${p.name}</option>`).join('');
+}
+
 function renderInvoiceTable() {
   // ソート適用（render毎に最新の invoices をソート）
   invoices = sortByKey(invoices, invoiceSort.key, invoiceSort.dir);
+  // 消込済(status='済')は常に末尾へ
+  invoices.sort((a, b) => (a.status === '済' ? 1 : 0) - (b.status === '済' ? 1 : 0));
   applySortHeaderStyle('#page-invoices', invoiceSort.key, invoiceSort.dir);
 
   const tbody = document.getElementById('invoice-tbody');
@@ -1890,6 +1905,17 @@ function startInlineEdit(td, inv, field, type) {
       body: JSON.stringify({ [field]: newVal })
     });
     showToast('保存しました');
+    // 取引日を新規入力したら自動消込の確認（既に消込済はスキップ）
+    if (field === 'transaction_date' && newVal && inv.status !== '済') {
+      if (confirm(`取引日「${newVal}」を入力しました。\nこの請求書を「支払済み（消込）」にしますか？`)) {
+        await api('/api/keiri/invoices/clear', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ ids: [inv.id], clear_type: 'all' }),
+        });
+        showToast('✓ 消込しました', 'success');
+      }
+    }
     await loadInvoices();
     // 業者名 or 請求先が変わった場合は重複チェック
     if (field === 'vendor' || field === 'facility') {
@@ -1997,8 +2023,8 @@ document.getElementById('invoice-check-all').addEventListener('change', (e) => {
 });
 
 // 請求書フィルタ
-['invoice-filter-status', 'invoice-filter-facility'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadInvoices);
+['invoice-filter-status', 'invoice-filter-facility', 'invoice-filter-payment-method'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', loadInvoices);
 });
 document.getElementById('invoice-filter-search').addEventListener('input', () => {
   clearTimeout(window.__invSearchT);
@@ -2570,10 +2596,15 @@ document.getElementById('invoice-upload-confirm').addEventListener('click', asyn
     });
     if (res.error) { showToast(res.error, 'error'); return; }
     const took = formatSeconds((Date.now() - t0) / 1000);
-    const skipMsg = (res.skipped && res.skipped > 0) ? ` / 重複スキップ ${res.skipped}件` : '';
-    showToast(`✓ 保存:${res.inserted}件${skipMsg}（${took}）`, 'success');
-    if (res.inserted === 0 && res.skipped > 0) {
-      alert(`同じ請求書がすべて既に登録されていたため、${res.skipped}件すべてスキップしました。\n（請求元/月/年/施設/金額が一致する行は重複とみなして二重登録を防いでいます）`);
+    const upd = res.updated || 0;
+    const skp = res.skipped || 0;
+    const updMsg = upd > 0 ? ` / 上書き更新 ${upd}件` : '';
+    const skipMsg = skp > 0 ? ` / スキップ ${skp}件` : '';
+    showToast(`✓ 新規:${res.inserted}件${updMsg}${skipMsg}（${took}）`, 'success');
+    if (res.inserted === 0 && upd === 0 && skp > 0) {
+      alert(`既存と同一の請求書のため、${skp}件すべてスキップしました。`);
+    } else if (upd > 0 || skp > 0) {
+      alert(`保存完了\n・新規登録：${res.inserted}件\n・既存を上書き更新：${upd}件（同じ業者×施設×月の行で金額が違ったもの）\n・スキップ：${skp}件（既存と完全に同じ内容）`);
     }
     document.getElementById('invoice-upload-modal').classList.remove('show');
     pendingInvoiceUpload = null;
