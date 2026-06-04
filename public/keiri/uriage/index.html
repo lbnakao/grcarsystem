@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全体売上収支｜グローバルリゾート</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:#f0f2f5;color:#2d3436;font-size:12px}
+.nav{background:#1F4E79;color:#fff;padding:12px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
+.nav-title{font-size:17px;font-weight:700}.nav-sub{font-size:11px;opacity:.85}
+.nav-spacer{flex:1}
+.nav-link{color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(255,255,255,.12);font-size:12px}
+.nav-link:hover{background:rgba(255,255,255,.25)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;padding:12px 22px;background:#fff;position:sticky;top:46px;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.tab{padding:6px 12px;border:2px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit}
+.tab:hover{border-color:#0984e3}
+.tab.active{background:#1F4E79;color:#fff;border-color:#1F4E79;font-weight:700}
+.wrap{padding:16px 22px;overflow:auto}
+.panel{display:none}.panel.active{display:block}
+.msg{padding:40px 22px;color:#707070}
+table{border-collapse:collapse;background:#fff;font-size:12px}
+td,th{border:1px solid #cfd6dd;padding:3px 8px;vertical-align:top}
+td:not(.num){white-space:pre-line;max-width:140px;word-break:break-word;line-height:1.5}
+td.num{white-space:nowrap;text-align:right;vertical-align:middle;font-variant-numeric:tabular-nums}
+td.neg{color:#c0392b}
+tr:first-child td{background:#1F4E79;color:#fff;font-weight:700;text-align:center;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="nav">
+  <span class="nav-title">📊 全体売上収支</span>
+  <span class="nav-sub">2026年度 ／ 施設別（白井システム）</span>
+  <span class="nav-spacer"></span>
+  <a class="nav-link" href="/keiri/funds/">資金管理へ</a>
+  <a class="nav-link" href="/keiri/">経理トップ</a>
+</div>
+<div class="tabs" id="tabs"></div>
+<div class="wrap"><div id="content" class="msg">読み込み中…</div></div>
+<script>
+async function load(){
+  let res;
+  try { res = await fetch('/api/funds/uriage-shushi'); }
+  catch(e){ document.getElementById('content').textContent='通信エラー: '+e.message; return; }
+  if(res.status===401){ location.href='/login.html'; return; }
+  if(!res.ok){ document.getElementById('content').textContent='読み込み失敗 ('+res.status+')'; return; }
+  const data = await res.json();
+  const sheets = data.sheets||[];
+  document.getElementById('tabs').innerHTML = sheets.map((s,i)=>
+    '<button class="tab'+(i===0?' active':'')+'" onclick="sel('+i+')">'+s.name+'</button>').join('');
+  document.getElementById('content').innerHTML = sheets.map((s,i)=>
+    '<div class="panel'+(i===0?' active':'')+'" id="p'+i+'">'+s.html+'</div>').join('');
+  // 数値セルを右寄せ＋マイナス赤
+  document.querySelectorAll('.panel td').forEach(td=>{
+    const t=td.textContent.trim().replace(/[,¥　\s]/g,'');
+    if(t!=='' && /^-?\d+(\.\d+)?$/.test(t)){ td.classList.add('num'); if(parseFloat(t)<0) td.classList.add('neg'); }
+  });
+}
+function sel(i){
+  document.querySelectorAll('.tab').forEach((b,j)=>b.classList.toggle('active',j===i));
+  document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('active',j===i));
+}
+load();
+</script>
+</body>
+</html>
