@@ -74,7 +74,12 @@ async function load(){
     DATA[r.facility].expense[r.year_month]=r.expense;
   }
   order.sort((a,b)=>DATA[a].sort-DATA[b].sort);
-  cur = order[0];
+  if(order.length===0){
+    document.getElementById('tabs').innerHTML='';
+    document.getElementById('content').innerHTML='<div class="msg">まだデータがありません。<br>右上の「📥 Excelから取込」を押すと、全体売上収支Excelから読み込みます。</div>';
+    return;
+  }
+  if(!cur || !DATA[cur]) cur = order[0];
   document.getElementById('tabs').innerHTML = order.map(k=>
     '<button class="tab" data-f="'+encodeURIComponent(k)+'">'+k+'</button>').join('');
   document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{cur=decodeURIComponent(b.dataset.f);render();});
