@@ -390,6 +390,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div class="month-tabs" id="invoice-month-tabs"></div>
 
     <div class="filter-bar">
+      <select id="invoice-filter-year"><option value="">全ての年</option></select>
       <select id="invoice-filter-status">
         <option value="">すべて表示</option>
         <option value="未">未払い（消込されていないもの）</option>
@@ -992,6 +993,7 @@ async function init() {
   try { await loadBankAccountTabs(); } catch(e) { console.error('bankAcctTabs:', e); }
   try { await loadInvoiceEntityTabs(); } catch(e) { console.error('invEntityTabs:', e); }
   try { await loadInvoiceMonthTabs(); } catch(e) { console.error('invMonthTabs:', e); }
+  try { await loadInvoiceYearFilter(); } catch(e) { console.error('invYearFilter:', e); }
   try { await loadSummaryMonthTabs(); } catch(e) { console.error('sumMonthTabs:', e); }
   try { await loadBankTransactions(); } catch(e) { console.error('bankTx:', e); }
   try { await loadInvoices(); } catch(e) { console.error('invoices:', e); }
@@ -1647,9 +1649,9 @@ async function loadInvoiceEntityTabs() {
 }
 
 async function loadInvoiceMonthTabs() {
-  const months = await api('/api/keiri/invoices/months');
   const tabs = document.getElementById('invoice-month-tabs');
-  const monthList = ['', ...months.map(m => m.month)];
+  // 「すべて」 + 1〜12月 を常に表示（先々の月や年またぎでも事前にタブから登録可能）
+  const monthList = ['', ...Array.from({length: 12}, (_, i) => `${i + 1}月`)];
   tabs.innerHTML = monthList.map(m => `<button class="month-tab ${m === currentInvoiceMonth ? 'active' : ''}" data-month="${m}">${m || 'すべて'}</button>`).join('');
   tabs.querySelectorAll('.month-tab').forEach(t => {
     t.addEventListener('click', () => {
@@ -1666,16 +1668,32 @@ async function loadInvoices() {
   const status = document.getElementById('invoice-filter-status').value;
   const facility = document.getElementById('invoice-filter-facility').value;
   const paymentMethod = document.getElementById('invoice-filter-payment-method')?.value || '';
+  const year = document.getElementById('invoice-filter-year')?.value || '';
   const search = document.getElementById('invoice-filter-search').value;
   if (status) params.set('status', status);
   if (facility) params.set('facility', facility);
   if (paymentMethod) params.set('payment_method', paymentMethod);
+  if (year) params.set('year', year);
   if (currentInvoiceMonth) params.set('month', currentInvoiceMonth);
   if (currentInvoiceEntity) params.set('entity', currentInvoiceEntity);
   if (search) params.set('search', search);
   invoices = await api('/api/keiri/invoices?' + params);
   renderInvoiceTable();
   renderInvoiceSummary();
+}
+
+async function loadInvoiceYearFilter() {
+  const sel = document.getElementById('invoice-filter-year');
+  if (!sel) return;
+  let years = [];
+  try { years = await api('/api/keiri/invoices/years'); } catch (e) {}
+  const thisYear = new Date().getFullYear();
+  // 既存データの年 + 当年・前年・翌年を補完して重複排除・昇順
+  const yearSet = new Set([...years.map(Number), thisYear - 1, thisYear, thisYear + 1]);
+  const yearList = [...yearSet].filter(y => y > 0).sort((a, b) => a - b);
+  const current = sel.value || String(thisYear);
+  sel.innerHTML = '<option value="">全ての年</option>' +
+    yearList.map(y => `<option value="${y}" ${String(y) === String(current) ? 'selected' : ''}>${y}年</option>`).join('');
 }
 
 function populateInvoicePaymentMethodFilter() {
@@ -2024,7 +2042,7 @@ document.getElementById('invoice-check-all').addEventListener('change', (e) => {
 });
 
 // 請求書フィルタ
-['invoice-filter-status', 'invoice-filter-facility', 'invoice-filter-payment-method'].forEach(id => {
+['invoice-filter-status', 'invoice-filter-facility', 'invoice-filter-payment-method', 'invoice-filter-year'].forEach(id => {
   document.getElementById(id)?.addEventListener('change', loadInvoices);
 });
 document.getElementById('invoice-filter-search').addEventListener('input', () => {
@@ -2612,6 +2630,7 @@ document.getElementById('invoice-upload-confirm').addEventListener('click', asyn
     await loadInvoices();
     await loadInvoiceMonthTabs();
     await loadInvoiceEntityTabs();
+    await loadInvoiceYearFilter();
   } catch (err) {
     console.error('invoice-upload-confirm failed:', err);
     showToast('保存に失敗しました: ' + (err && err.message ? err.message : '不明なエラー'), 'error');

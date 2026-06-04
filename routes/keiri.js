@@ -1238,6 +1238,13 @@ router.post('/invoices/undo', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 既存データに含まれる年の一覧（請求書一覧の年フィルタ用）
+router.get('/invoices/years', async (req, res) => {
+  const rows = await query(`SELECT DISTINCT year FROM keiri_invoices WHERE year IS NOT NULL`);
+  const years = rows.map(r => Number(r.year)).filter(y => y > 0).sort((a, b) => a - b);
+  res.json(years);
+});
+
 router.get('/invoices/months', async (req, res) => {
   const rows = await query(`SELECT DISTINCT month FROM keiri_invoices WHERE month IS NOT NULL AND month != ''`);
   // "M月" 形式を数値でソート（1月→2月→…→12月の正しい順）
