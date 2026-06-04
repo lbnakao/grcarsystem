@@ -457,6 +457,21 @@ async function createFundsTables() {
     )
   `);
 
+  // 全体売上収支（白井システム）— 施設×月の 売上/経費（Web編集可能・追加のみ）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_uriage_entries (
+      id ${autoIncPK},
+      facility TEXT NOT NULL,
+      dept TEXT DEFAULT '',
+      year_month TEXT NOT NULL,
+      sales INTEGER DEFAULT 0,
+      expense INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      updated_at ${nowDefault},
+      UNIQUE(facility, year_month)
+    )
+  `);
+
   // 初期シード（マスタのみ。デモデータは投入しない）
   await seedFundsMasters();
   // await seedFundsDemoData();  // 正式データ移行のため無効化

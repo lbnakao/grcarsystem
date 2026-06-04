@@ -1028,4 +1028,37 @@ router.get('/uriage-shushi', async (req, res) => {
   }
 });
 
+// 全体売上収支（編集版）— 施設×月の売上/経費を取得
+router.get('/uriage', async (req, res) => {
+  try {
+    const rows = await query(
+      "SELECT facility, dept, year_month, sales, expense, sort_order FROM funds_uriage_entries ORDER BY sort_order, year_month"
+    );
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 全体売上収支（編集版）— 1セル（施設×月）を保存（upsert）
+router.put('/uriage', async (req, res) => {
+  try {
+    const { facility, year_month } = req.body || {};
+    if (!facility || !year_month) return res.status(400).json({ error: 'facility と year_month は必須です' });
+    const sales = toInt(req.body.sales);
+    const expense = toInt(req.body.expense);
+    const ex = await query("SELECT id FROM funds_uriage_entries WHERE facility=? AND year_month=?", [facility, year_month]);
+    if (ex.length) {
+      await run("UPDATE funds_uriage_entries SET sales=?, expense=? WHERE facility=? AND year_month=?",
+        [sales, expense, facility, year_month]);
+    } else {
+      await run("INSERT INTO funds_uriage_entries (facility, year_month, sales, expense) VALUES (?,?,?,?)",
+        [facility, year_month, sales, expense]);
+    }
+    res.json({ ok: true, sales, expense });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
