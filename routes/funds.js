@@ -1015,4 +1015,17 @@ router.post('/reseed-masters', async (req, res) => {
   }
 });
 
+// ============================================================================
+// 全体売上収支（白井システム）— 各シートを忠実HTMLで返す（読み取り専用・Phase1）
+//   既存テーブルには一切触れない。assets/uriage_shushi.xlsx を都度パース。
+// ============================================================================
+router.get('/uriage-shushi', async (req, res) => {
+  try {
+    const { renderSheets } = require('../lib/uriage_shushi');
+    res.json({ ok: true, sheets: renderSheets() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
