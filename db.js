@@ -502,6 +502,20 @@ async function createFundsTables() {
     )
   `);
 
+  // 全体売上収支（白井システム）詳細指標 — 施設×月×指標（Excel卒業・全指標編集可能）
+  await run(`
+    CREATE TABLE IF NOT EXISTS funds_uriage_metrics (
+      id ${autoIncPK},
+      facility TEXT NOT NULL,
+      year_month TEXT NOT NULL,
+      metric TEXT NOT NULL,
+      value TEXT DEFAULT '0',
+      fac_order INTEGER DEFAULT 0,
+      updated_at ${nowDefault},
+      UNIQUE(facility, year_month, metric)
+    )
+  `);
+
   // 初期シード（マスタのみ。デモデータは投入しない）
   await seedFundsMasters();
   // await seedFundsDemoData();  // 正式データ移行のため無効化

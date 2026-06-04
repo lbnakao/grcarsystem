@@ -8,43 +8,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Noto Sans JP',sans-serif;background:#f0f2f5;color:#2d3436;font-size:13px}
-.nav{background:#1F4E79;color:#fff;padding:12px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
+.nav{background:#1F4E79;color:#fff;padding:12px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20}
 .nav-title{font-size:17px;font-weight:700}.nav-sub{font-size:11px;opacity:.85}
 .nav-spacer{flex:1}
-.nav-link{color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(255,255,255,.12);font-size:12px}
+.nav-link{color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(255,255,255,.12);font-size:12px;border:none;cursor:pointer;font-family:inherit}
 .nav-link:hover{background:rgba(255,255,255,.25)}
-.save-badge{font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,.18);min-width:90px;text-align:center}
+.save-badge{font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,.18);min-width:84px;text-align:center}
 .save-badge.ok{background:#1e8449}.save-badge.err{background:#c0392b}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;padding:12px 22px;background:#fff;position:sticky;top:46px;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.06)}
 .tab{padding:6px 12px;border:2px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit}
-.tab:hover{border-color:#0984e3}
-.tab.active{background:#1F4E79;color:#fff;border-color:#1F4E79;font-weight:700}
+.tab:hover{border-color:#0984e3}.tab.active{background:#1F4E79;color:#fff;border-color:#1F4E79;font-weight:700}
 .wrap{padding:16px 22px}
 h2{font-size:16px;color:#1F4E79;margin:4px 0 12px}
 .cards{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.card{background:#fff;border-radius:8px;padding:12px 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);min-width:160px}
-.card .k{font-size:11px;color:#707070}.card .v{font-size:20px;font-weight:700;margin-top:3px}
+.card{background:#fff;border-radius:8px;padding:10px 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);min-width:150px}
+.card .k{font-size:11px;color:#707070}.card .v{font-size:19px;font-weight:700;margin-top:3px}
 table{border-collapse:collapse;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-th,td{border:1px solid #e1e4e8;padding:4px 6px;text-align:right;white-space:nowrap}
+th,td{border:1px solid #e1e4e8;padding:3px 6px;text-align:right;white-space:nowrap}
 th{background:#1F4E79;color:#fff;font-weight:700;text-align:center}
-td.label{text-align:left;font-weight:700;background:#f2f4f7;min-width:90px}
-input.cell{width:92px;border:1px solid transparent;background:transparent;text-align:right;font-family:inherit;font-size:13px;padding:3px 4px;border-radius:4px;font-variant-numeric:tabular-nums}
+td.label{text-align:left;font-weight:700;background:#f2f4f7;min-width:96px}
+td.grp{background:#eef3f8;color:#1F4E79;font-weight:700;text-align:left}
+input.cell{width:88px;border:1px solid transparent;background:transparent;text-align:right;font-family:inherit;font-size:13px;padding:3px 4px;border-radius:4px;font-variant-numeric:tabular-nums}
 input.cell:hover{border-color:#cfd6dd}
 input.cell:focus{outline:none;border-color:#0984e3;background:#eaf3fb}
-input.cell.sales{color:#1F4E79}input.cell.expense{color:#636e72}
 td.net{font-weight:700}.neg{color:#c0392b}
 td.tot{background:#fff8dc;font-weight:700;font-variant-numeric:tabular-nums}
 .hint{font-size:11px;color:#707070;margin:10px 0 0}
-.msg{padding:40px 22px;color:#707070}
+.msg{padding:40px 22px;color:#707070;line-height:1.7}
 </style>
 </head>
 <body>
 <div class="nav">
   <span class="nav-title">📊 全体売上収支（編集）</span>
-  <span class="nav-sub">2026年度 ／ 施設別</span>
+  <span class="nav-sub">2026年度 ／ 施設別・指標別</span>
   <span class="nav-spacer"></span>
   <span class="save-badge" id="badge">　</span>
-  <button class="nav-link" id="btn-import" style="border:none;cursor:pointer;font-family:inherit" title="assets/uriage_shushi.xlsx から取り込み直します（編集は上書きされます）">📥 Excelから取込</button>
+  <button class="nav-link" id="btn-import" title="Excelから取り込み直します（編集は上書き）">📥 Excelから取込</button>
   <a class="nav-link" href="/keiri/funds/">資金管理へ</a>
   <a class="nav-link" href="/keiri/">経理トップ</a>
 </div>
@@ -53,112 +52,102 @@ td.tot{background:#fff8dc;font-weight:700;font-variant-numeric:tabular-nums}
 <script>
 const MONTHS = Array.from({length:12},(_,i)=>(i+1)+'月');
 const YMS = Array.from({length:12},(_,i)=>'2026-'+String(i+1).padStart(2,'0'));
+const MONEY = new Set(['目標売上','売上実績','客室売上','飲食売上','レジ売上','昨年売上','経費予測','経費実績','客室単価','客単価']);
+const COUNT = new Set(['販売客室数','利用人数']);
+const RATE  = new Set(['稼働率']);
+const num = v => parseFloat(String(v==null?'':v).replace(/[,¥\s]/g,''))||0;
 const yen = n => (n<0?'▲':'')+'¥'+Math.abs(Math.round(n)).toLocaleString();
 const sum = a => a.reduce((x,y)=>x+(+y||0),0);
-let DATA = {}; // facility -> { dept, sort, sales:{ym:val}, expense:{ym:val} }
-let order = [];
-let cur = null;
+let DATA={}, order=[], METRIC_ORDER=[], cur=null;
 
-function badge(text, cls){ const b=document.getElementById('badge'); b.textContent=text; b.className='save-badge'+(cls?' '+cls:''); if(cls==='ok') setTimeout(()=>{b.textContent='　';b.className='save-badge';},1500); }
+function badge(t,c){ const b=document.getElementById('badge'); b.textContent=t; b.className='save-badge'+(c?' '+c:''); if(c==='ok') setTimeout(()=>{b.textContent='　';b.className='save-badge';},1400); }
 
 async function load(){
-  let res;
-  try{ res = await fetch('/api/funds/uriage'); }catch(e){ document.getElementById('content').textContent='通信エラー'; return; }
+  let res; try{ res=await fetch('/api/funds/uriage-metrics'); }catch(e){ document.getElementById('content').textContent='通信エラー'; return; }
   if(res.status===401){ location.href='/login.html'; return; }
   if(!res.ok){ document.getElementById('content').textContent='読み込み失敗 ('+res.status+')'; return; }
-  const j = await res.json();
+  const j=await res.json();
+  METRIC_ORDER=j.metricOrder||[];
   DATA={}; order=[];
   for(const r of j.rows){
-    if(!DATA[r.facility]){ DATA[r.facility]={dept:r.dept,sort:r.sort_order,sales:{},expense:{}}; order.push(r.facility); }
-    DATA[r.facility].sales[r.year_month]=r.sales;
-    DATA[r.facility].expense[r.year_month]=r.expense;
+    if(!DATA[r.facility]){ DATA[r.facility]={ord:r.fac_order,m:{}}; order.push(r.facility); }
+    DATA[r.facility].m[r.metric]=DATA[r.facility].m[r.metric]||{};
+    DATA[r.facility].m[r.metric][r.year_month]=r.value;
   }
-  order.sort((a,b)=>DATA[a].sort-DATA[b].sort);
+  order.sort((a,b)=>DATA[a].ord-DATA[b].ord);
   if(order.length===0){
     document.getElementById('tabs').innerHTML='';
     document.getElementById('content').innerHTML='<div class="msg">まだデータがありません。<br>右上の「📥 Excelから取込」を押すと、全体売上収支Excelから読み込みます。</div>';
     return;
   }
-  if(!cur || !DATA[cur]) cur = order[0];
-  document.getElementById('tabs').innerHTML = order.map(k=>
-    '<button class="tab" data-f="'+encodeURIComponent(k)+'">'+k+'</button>').join('');
+  if(!cur||!DATA[cur]) cur=order[0];
+  document.getElementById('tabs').innerHTML=order.map(k=>'<button class="tab" data-f="'+encodeURIComponent(k)+'">'+k+'</button>').join('');
   document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{cur=decodeURIComponent(b.dataset.f);render();});
   render();
 }
 
+function val(metric,ym){ const m=DATA[cur].m[metric]; return m? num(m[ym]) : 0; }
+function rowTotal(metric){ if(RATE.has(metric)) return null; return sum(YMS.map(ym=>val(metric,ym))); }
+
 function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',decodeURIComponent(b.dataset.f)===cur));
-  const f = DATA[cur];
-  const salesArr = YMS.map(ym=>+f.sales[ym]||0);
-  const expArr = YMS.map(ym=>+f.expense[ym]||0);
-  const sTot=sum(salesArr), eTot=sum(expArr), nTot=sTot-eTot;
-  let h = '<h2>'+cur+' の月別収支（売上・経費を直接編集できます）</h2>';
-  h += '<div class="cards">'+
-    '<div class="card"><div class="k">年間 売上</div><div class="v" id="kpiS" style="color:#1F4E79">'+yen(sTot)+'</div></div>'+
-    '<div class="card"><div class="k">年間 経費</div><div class="v" id="kpiE" style="color:#636e72">'+yen(eTot)+'</div></div>'+
-    '<div class="card"><div class="k">差引収支</div><div class="v" id="kpiN" style="color:'+(nTot<0?'#c0392b':'#1e8449')+'">'+yen(nTot)+'</div></div>'+
-    '</div>';
-  h += '<table><thead><tr><th style="text-align:left">項目</th>'+MONTHS.map(m=>'<th>'+m+'</th>').join('')+'<th>計</th></tr></thead><tbody>';
-  // 売上行
-  h += '<tr><td class="label">売上</td>'+YMS.map((ym,i)=>
-    '<td><input class="cell sales" data-k="sales" data-ym="'+ym+'" value="'+(salesArr[i]||'')+'"></td>').join('')+
-    '<td class="tot" id="totS">'+yen(sTot)+'</td></tr>';
-  // 経費行
-  h += '<tr><td class="label">経費</td>'+YMS.map((ym,i)=>
-    '<td><input class="cell expense" data-k="expense" data-ym="'+ym+'" value="'+(expArr[i]||'')+'"></td>').join('')+
-    '<td class="tot" id="totE">'+yen(eTot)+'</td></tr>';
-  // 差引行（計算）
-  h += '<tr><td class="label">差引収支</td>'+YMS.map((ym,i)=>{const v=salesArr[i]-expArr[i];return '<td class="net '+(v<0?'neg':'')+'" data-net="'+ym+'">'+(v?yen(v):'-')+'</td>';}).join('')+
-    '<td class="tot '+(nTot<0?'neg':'')+'" id="totN">'+yen(nTot)+'</td></tr>';
-  h += '</tbody></table>';
-  h += '<p class="hint">数値を変更してEnterまたはセル外をクリックで自動保存されます。差引収支・合計は自動計算です。</p>';
-  document.getElementById('content').innerHTML = h;
+  const sales=YMS.map(ym=>val('売上実績',ym)), exp=YMS.map(ym=>val('経費実績',ym));
+  const sT=sum(sales),eT=sum(exp),nT=sT-eT;
+  let h='<h2>'+cur+' の月別 詳細（各指標を直接編集できます）</h2>';
+  h+='<div class="cards">'+
+    '<div class="card"><div class="k">年間 売上実績</div><div class="v" style="color:#1F4E79">'+yen(sT)+'</div></div>'+
+    '<div class="card"><div class="k">年間 経費実績</div><div class="v" style="color:#636e72">'+yen(eT)+'</div></div>'+
+    '<div class="card"><div class="k">差引収支</div><div class="v" style="color:'+(nT<0?'#c0392b':'#1e8449')+'">'+yen(nT)+'</div></div></div>';
+  h+='<table><thead><tr><th style="text-align:left">指標</th>'+MONTHS.map(m=>'<th>'+m+'</th>').join('')+'<th>計</th></tr></thead><tbody>';
+  for(const metric of METRIC_ORDER){
+    h+='<tr><td class="label">'+metric+'</td>'+YMS.map(ym=>{
+      const v=val(metric,ym);
+      const disp = RATE.has(metric) ? (v?v:'') : (v?Math.round(v):'');
+      return '<td><input class="cell" data-m="'+metric+'" data-ym="'+ym+'" value="'+disp+'"></td>';
+    }).join('');
+    const t=rowTotal(metric);
+    h+='<td class="tot">'+(t==null?'-':(MONEY.has(metric)?yen(t):Math.round(t).toLocaleString()))+'</td></tr>';
+  }
+  // 差引収支（自動）
+  h+='<tr><td class="label">差引収支</td>'+YMS.map((ym,i)=>{const v=sales[i]-exp[i];return '<td class="net '+(v<0?'neg':'')+'">'+(v?yen(v):'-')+'</td>';}).join('')+
+    '<td class="tot '+(nT<0?'neg':'')+'">'+yen(nT)+'</td></tr>';
+  h+='</tbody></table>';
+  h+='<p class="hint">数値を変更してEnter／セル外クリックで自動保存されます。稼働率は小数（例 0.43＝43%）。差引収支・各合計は自動計算です。</p>';
+  document.getElementById('content').innerHTML=h;
   document.querySelectorAll('input.cell').forEach(inp=>{
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } });
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); }});
     inp.addEventListener('blur',()=>onEdit(inp));
   });
 }
 
-function recompute(){
-  const f=DATA[cur];
-  const salesArr=YMS.map(ym=>+f.sales[ym]||0), expArr=YMS.map(ym=>+f.expense[ym]||0);
-  YMS.forEach((ym,i)=>{ const cell=document.querySelector('[data-net="'+ym+'"]'); if(cell){ const v=salesArr[i]-expArr[i]; cell.textContent=v?yen(v):'-'; cell.className='net '+(v<0?'neg':''); }});
-  const sTot=sum(salesArr),eTot=sum(expArr),nTot=sTot-eTot;
-  document.getElementById('totS').textContent=yen(sTot);
-  document.getElementById('totE').textContent=yen(eTot);
-  const tn=document.getElementById('totN'); tn.textContent=yen(nTot); tn.className='tot '+(nTot<0?'neg':'');
-  document.getElementById('kpiS').textContent=yen(sTot);
-  document.getElementById('kpiE').textContent=yen(eTot);
-  const kn=document.getElementById('kpiN'); kn.textContent=yen(nTot); kn.style.color=nTot<0?'#c0392b':'#1e8449';
-}
-
 async function onEdit(inp){
-  const ym=inp.dataset.ym, kind=inp.dataset.k;
+  const metric=inp.dataset.m, ym=inp.dataset.ym;
   const raw=inp.value.replace(/[,¥\s]/g,'');
-  const val=raw===''?0:parseInt(raw,10);
-  if(isNaN(val)){ inp.value=DATA[cur][kind][ym]||''; return; }
-  if(val===(+DATA[cur][kind][ym]||0)){ return; } // 変化なし
-  DATA[cur][kind][ym]=val;
-  recompute();
+  if(raw!=='' && isNaN(Number(raw))){ inp.value=''; return; }
+  const cur0 = DATA[cur].m[metric] ? (DATA[cur].m[metric][ym]||'') : '';
+  if(String(num(raw))===String(num(cur0))) return;
+  DATA[cur].m[metric]=DATA[cur].m[metric]||{};
+  DATA[cur].m[metric][ym]=raw;
+  render(); // 合計・差引を再計算
   badge('保存中…');
   try{
-    const res=await fetch('/api/funds/uriage',{method:'PUT',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({facility:cur,year_month:ym,sales:DATA[cur].sales[ym]||0,expense:DATA[cur].expense[ym]||0})});
-    if(res.ok) badge('✓ 保存しました','ok'); else badge('保存失敗','err');
+    const res=await fetch('/api/funds/uriage-metrics',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({facility:cur,year_month:ym,metric,value:raw})});
+    badge(res.ok?'✓ 保存しました':'保存失敗', res.ok?'ok':'err');
   }catch(e){ badge('通信エラー','err'); }
 }
-document.getElementById('btn-import').addEventListener('click', async () => {
-  // データが無ければそのまま取込、あれば上書き確認
-  let res = await fetch('/api/funds/uriage/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  let j = await res.json();
-  if (j.skipped) {
-    if (!confirm('既にデータがあります。Excelから取り込み直すと、Web上の編集内容は上書きされます。よろしいですか？')) return;
+
+document.getElementById('btn-import').addEventListener('click', async ()=>{
+  let res=await fetch('/api/funds/uriage/import',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  let j=await res.json();
+  if(j.skipped){
+    if(!confirm('既にデータがあります。Excelから取り込み直すと、Web上の編集内容は上書きされます。よろしいですか？')) return;
     badge('取込中…');
-    res = await fetch('/api/funds/uriage/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
-    j = await res.json();
+    res=await fetch('/api/funds/uriage/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({force:true})});
+    j=await res.json();
   }
-  if (j.ok && !j.skipped) { badge('✓ 取込完了', 'ok'); await load(); }
-  else if (j.error) badge('取込失敗', 'err');
+  if(j.ok && !j.skipped){ badge('✓ 取込完了','ok'); await load(); }
+  else if(j.error) badge('取込失敗','err');
 });
 load();
 </script>
