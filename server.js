@@ -114,6 +114,12 @@ app.get('/keiri/funds/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'keiri', 'funds', 'index.html'));
 });
 
+// 全体売上収支ビュー（白井システム・Phase1／追加のみ）
+app.get('/keiri/uriage', (req, res) => res.redirect('/keiri/uriage/'));
+app.get('/keiri/uriage/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'keiri', 'uriage', 'index.html'));
+});
+
 // 組織体制図ハブ（静的ファイル）
 app.get('/org-chart', (req, res) => res.redirect('/org-chart/'));
 app.get('/org-chart/', (req, res) => {
