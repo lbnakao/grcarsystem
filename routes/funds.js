@@ -1061,4 +1061,33 @@ router.put('/uriage', async (req, res) => {
   }
 });
 
+// 全体売上収支（編集版）— assets/uriage_shushi.xlsx から取り込み（管理用）
+//   既にデータがあればスキップ。{force:true} で全削除→再取込。
+router.post('/uriage/import', async (req, res) => {
+  try {
+    const force = !!(req.body && req.body.force);
+    const existing = await query("SELECT COUNT(*) AS c FROM funds_uriage_entries");
+    if (Number(existing[0].c) > 0 && !force) {
+      return res.json({ ok: true, skipped: true, count: Number(existing[0].c) });
+    }
+    if (force) await run("DELETE FROM funds_uriage_entries");
+    const { parseEntries } = require('../lib/uriage_shushi');
+    const { facs, order } = parseEntries();
+    const YEAR = 2026;
+    let n = 0;
+    for (let oi = 0; oi < order.length; oi++) {
+      const f = facs[order[oi]];
+      for (let m = 0; m < 12; m++) {
+        const ym = `${YEAR}-${String(m + 1).padStart(2, '0')}`;
+        await run("INSERT INTO funds_uriage_entries (facility, dept, year_month, sales, expense, sort_order) VALUES (?,?,?,?,?,?)",
+          [order[oi], f.dept, ym, f.sales[m], f.expense[m], oi]);
+        n++;
+      }
+    }
+    res.json({ ok: true, facilities: order.length, rows: n });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

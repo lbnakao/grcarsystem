@@ -1,43 +1,10 @@
 // 全体売上収支Excel → funds_uriage_entries（施設×月の売上/経費）へ取り込み
 // 既に行があればスキップ（Web編集を上書きしないため）。 実行: node scripts/import_uriage.js [--force]
-const path = require('path');
-const XLSX = require('xlsx');
 const { initDatabase, query, run } = require('../db');
+const { parseEntries } = require('../lib/uriage_shushi');
 
-const FILE = path.join(__dirname, '..', 'assets', 'uriage_shushi.xlsx');
 const YEAR = 2026;
-const norm = s => String(s || '').replace(/[\s　]/g, '');
-const skipMeibo = /売上合計|経費合計|^合計$|リゾート|レジデンス|不明金/;
-
-function parse() {
-  const wb = XLSX.readFile(FILE, { cellDates: true });
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['グローバルリゾート全体収支'], { header: 1, blankrows: false });
-  let dept = '', facility = '', section = '', groupHasMeibo = false;
-  const facs = {}; const order = [];
-  const rec = (k, d) => { if (!facs[k]) { facs[k] = { dept: d, sales: Array(12).fill(0), expense: Array(12).fill(0) }; order.push(k); } return facs[k]; };
-  for (let i = 2; i <= 58 && i < rows.length; i++) {
-    const r = rows[i]; if (!r) continue;
-    if (r[0]) dept = String(r[0]).trim();
-    if (r[1]) { facility = String(r[1]).replace(/[　\s]+/g, ' ').trim(); groupHasMeibo = false; }
-    const inn = norm(r[2]);
-    if (inn.includes('売上')) section = 'sales';
-    else if (inn.includes('経費')) section = 'expense';
-    else if (inn.includes('差引')) section = 'net';
-    const meibo = String(r[3] || '').replace(/[　\s]+/g, ' ').trim();
-    const months = Array.from({ length: 12 }, (_, k) => { const v = r[4 + k]; return (typeof v === 'number' && isFinite(v)) ? Math.round(v) : 0; });
-    if (meibo) {
-      if (skipMeibo.test(meibo)) continue;
-      groupHasMeibo = true;
-      if (section === 'sales' || section === 'expense') rec(meibo, dept)[section] = months;
-    } else {
-      if (groupHasMeibo) continue;
-      if (section !== 'sales' && section !== 'expense') continue;
-      if (/合計|不明/.test(facility)) continue;
-      rec(facility, dept)[section] = months;
-    }
-  }
-  return { facs, order };
-}
+const parse = () => parseEntries();
 
 (async () => {
   await initDatabase();
