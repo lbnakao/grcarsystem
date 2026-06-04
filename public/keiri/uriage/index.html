@@ -44,6 +44,7 @@ td.tot{background:#fff8dc;font-weight:700;font-variant-numeric:tabular-nums}
   <span class="nav-sub">2026年度 ／ 施設別</span>
   <span class="nav-spacer"></span>
   <span class="save-badge" id="badge">　</span>
+  <button class="nav-link" id="btn-import" style="border:none;cursor:pointer;font-family:inherit" title="assets/uriage_shushi.xlsx から取り込み直します（編集は上書きされます）">📥 Excelから取込</button>
   <a class="nav-link" href="/keiri/funds/">資金管理へ</a>
   <a class="nav-link" href="/keiri/">経理トップ</a>
 </div>
@@ -141,6 +142,19 @@ async function onEdit(inp){
     if(res.ok) badge('✓ 保存しました','ok'); else badge('保存失敗','err');
   }catch(e){ badge('通信エラー','err'); }
 }
+document.getElementById('btn-import').addEventListener('click', async () => {
+  // データが無ければそのまま取込、あれば上書き確認
+  let res = await fetch('/api/funds/uriage/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  let j = await res.json();
+  if (j.skipped) {
+    if (!confirm('既にデータがあります。Excelから取り込み直すと、Web上の編集内容は上書きされます。よろしいですか？')) return;
+    badge('取込中…');
+    res = await fetch('/api/funds/uriage/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+    j = await res.json();
+  }
+  if (j.ok && !j.skipped) { badge('✓ 取込完了', 'ok'); await load(); }
+  else if (j.error) badge('取込失敗', 'err');
+});
 load();
 </script>
 </body>
