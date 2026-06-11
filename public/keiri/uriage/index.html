@@ -43,7 +43,9 @@ td.tot{background:#fff8dc;font-weight:700;font-variant-numeric:tabular-nums}
   <span class="nav-sub">2026年度 ／ 施設別・指標別</span>
   <span class="nav-spacer"></span>
   <span class="save-badge" id="badge">　</span>
-  <button class="nav-link" id="btn-import" title="Excelから取り込み直します（編集は上書き）">📥 Excelから取込</button>
+  <button class="nav-link" id="btn-upload" title="コアキャスト／アイパスの書き出しファイルをアップロードして自動取込">📤 予約システムから取込</button>
+  <input type="file" id="file-input" multiple accept=".xls,.xlsx,.csv" style="display:none">
+  <button class="nav-link" id="btn-import" title="全体売上収支Excelから取り込み直します（編集は上書き）">📥 売上収支Excel取込</button>
   <a class="nav-link" href="/keiri/funds/">資金管理へ</a>
   <a class="nav-link" href="/keiri/">経理トップ</a>
 </div>
@@ -148,6 +150,27 @@ document.getElementById('btn-import').addEventListener('click', async ()=>{
   }
   if(j.ok && !j.skipped){ badge('✓ 取込完了','ok'); await load(); }
   else if(j.error) badge('取込失敗','err');
+});
+
+// 予約システム（コアキャスト/アイパス）書き出しファイルのアップロード取込
+document.getElementById('btn-upload').addEventListener('click',()=>document.getElementById('file-input').click());
+document.getElementById('file-input').addEventListener('change', async (ev)=>{
+  const files=ev.target.files; if(!files||!files.length) return;
+  const fd=new FormData(); const names=[]; for(const f of files){ fd.append('files',f); names.push(f.name); }
+  fd.append('filenames', JSON.stringify(names));
+  badge('取込中…');
+  try{
+    const res=await fetch('/api/funds/uriage/import-files',{method:'POST',body:fd});
+    const j=await res.json();
+    if(j.ok){
+      const ok=(j.entries||[]).map(e=>e.facility+' '+e.year_month);
+      const ng=(j.results||[]).filter(r=>!r.ok);
+      let msg='✅ 取り込みました（'+j.saved+'項目）\n'+ok.map(s=>'・'+s).join('\n');
+      if(ng.length) msg+='\n\n⚠ 取り込めなかったファイル:\n'+ng.map(r=>'・'+r.name+'：'+r.message).join('\n');
+      badge('✓ 取込完了','ok'); alert(msg); await load();
+    } else { badge('取込失敗','err'); alert('失敗: '+(j.error||'')); }
+  }catch(e){ badge('通信エラー','err'); alert('通信エラー: '+e.message); }
+  ev.target.value='';
 });
 load();
 </script>

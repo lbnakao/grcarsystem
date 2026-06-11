@@ -1119,4 +1119,41 @@ router.post('/uriage/import', async (req, res) => {
   }
 });
 
+// 全体売上収支（指標版）— 予約システム書き出しファイルをアップロードして取込
+//   コアキャスト日別.xls / メニュー別.xls / アイパス帳票集計.csv / 科目別売上.csv に対応
+router.post('/uriage/import-files', upload.array('files', 40), async (req, res) => {
+  try {
+    const { mergeFiles } = require('../lib/reservation_import');
+    // ブラウザが送る正しいUTF-8ファイル名（filenames）を優先。無ければmulterのoriginalnameを復元。
+    let names = [];
+    try { names = JSON.parse(req.body && req.body.filenames || '[]'); } catch (_) {}
+    const files = (req.files || []).map((f, i) => {
+      let name = names[i];
+      if (!name) { name = f.originalname; try { const u = Buffer.from(name, 'latin1').toString('utf8'); if (!/�/.test(u)) name = u; } catch (_) {} }
+      return { name, buffer: f.buffer };
+    });
+    if (files.length === 0) return res.status(400).json({ error: 'ファイルがありません' });
+    const { entries, results } = mergeFiles(files);
+
+    let saved = 0;
+    for (const e of entries) {
+      // 施設の表示順（既存があれば流用、無ければ末尾）
+      const ord0 = await query("SELECT fac_order FROM funds_uriage_metrics WHERE facility=? LIMIT 1", [e.facility]);
+      let ord;
+      if (ord0.length) ord = ord0[0].fac_order;
+      else { const mx = await query("SELECT MAX(fac_order) AS m FROM funds_uriage_metrics"); ord = (Number(mx[0] && mx[0].m) || 0) + 1; }
+      for (const [metric, value] of Object.entries(e.metrics)) {
+        const v = String(Math.round(Number(value) * 10000) / 10000);
+        const ex = await query("SELECT id FROM funds_uriage_metrics WHERE facility=? AND year_month=? AND metric=?", [e.facility, e.year_month, metric]);
+        if (ex.length) await run("UPDATE funds_uriage_metrics SET value=? WHERE facility=? AND year_month=? AND metric=?", [v, e.facility, e.year_month, metric]);
+        else await run("INSERT INTO funds_uriage_metrics (facility, year_month, metric, value, fac_order) VALUES (?,?,?,?,?)", [e.facility, e.year_month, metric, v, ord]);
+        saved++;
+      }
+    }
+    res.json({ ok: true, saved, entries: entries.map(e => ({ facility: e.facility, year_month: e.year_month, metrics: Object.keys(e.metrics).length })), results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
