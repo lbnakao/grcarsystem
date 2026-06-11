@@ -1458,6 +1458,9 @@ document.getElementById('upload-confirm').addEventListener('click', async () => 
     }
     document.getElementById('upload-modal').classList.remove('show');
     pendingUpload = null;
+    // 月・年フィルタをリセットして新しいデータが確実に表示されるようにする
+    document.getElementById('bank-filter-month').value = '';
+    document.getElementById('bank-filter-year').value = '';
     await loadBankTransactions();
   } catch (err) {
     console.error('upload-confirm failed:', err);
@@ -2231,6 +2234,9 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
         const d = r.data;
         if (!d.vendor) continue;
         try {
+          const dDue = d.due_date || '';
+          const dTx  = d.transaction_date || '';
+          const dYear = (dDue || dTx).slice(0, 4);
           await api('/api/keiri/invoices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2238,11 +2244,12 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
               vendor: d.vendor || '',
               category: d.category || '',
               payment_method: d.payment_method || '',
-              due_date: d.due_date || '',
+              due_date: dDue,
               facility: d.facility || '',
               entity: d.entity || currentInvoiceEntity || '',
-              transaction_date: d.transaction_date || '',
+              transaction_date: dTx,
               month: d.month || currentInvoiceMonth || '',
+              year: dYear ? parseInt(dYear) : new Date().getFullYear(),
               amount: Number(d.amount) || 0,
               carry_1: 0, carry_2: 0, carry_3: 0,
               note: d.note || '',
@@ -2498,15 +2505,19 @@ document.getElementById('files-search').addEventListener('input', (e) => {
 });
 
 document.getElementById('inv-modal-save').addEventListener('click', async () => {
+  const dueDateVal = document.getElementById('inv-due-date').value || '';
+  const txDateVal  = document.getElementById('inv-transaction-date').value || '';
+  const yearFromDate = (dueDateVal || txDateVal).slice(0, 4);
   const data = {
     vendor: document.getElementById('inv-vendor').value,
     category: document.getElementById('inv-category').value,
     payment_method: document.getElementById('inv-payment-method').value,
-    due_date: document.getElementById('inv-due-date').value,
+    due_date: dueDateVal,
     facility: document.getElementById('inv-facility').value,
     entity: document.getElementById('inv-entity').value,
-    transaction_date: document.getElementById('inv-transaction-date').value,
+    transaction_date: txDateVal,
     month: document.getElementById('inv-month').value,
+    year: yearFromDate ? parseInt(yearFromDate) : new Date().getFullYear(),
     amount: Number(document.getElementById('inv-amount').value) || 0,
     carry_1: Number(document.getElementById('inv-carry-1').value) || 0,
     carry_2: Number(document.getElementById('inv-carry-2').value) || 0,
@@ -2514,11 +2525,12 @@ document.getElementById('inv-modal-save').addEventListener('click', async () => 
     note: document.getElementById('inv-note').value,
   };
   if (!data.vendor) { showToast('業者名は必須です', 'error'); return; }
-  await api('/api/keiri/invoices', {
+  const result = await api('/api/keiri/invoices', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data)
   });
+  if (result && result.error) { showToast('保存に失敗しました: ' + result.error, 'error'); return; }
   document.getElementById('invoice-modal').classList.remove('show');
   await loadInvoices();
   await loadInvoiceMonthTabs();
