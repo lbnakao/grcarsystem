@@ -453,7 +453,8 @@ function detectIncompatibleExcel(workbook, filename) {
 // ============================================================================
 router.post('/bank/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-  const filename = req.file.originalname || 'upload';
+  // multerはファイル名をLatin-1として保持するため、UTF-8に再デコードする
+  const filename = Buffer.from(req.file.originalname || 'upload', 'latin1').toString('utf8');
   const isExcel = /\.(xlsx|xls)$/i.test(filename);
   const accountFromForm = req.body.account || '';
 
@@ -887,7 +888,7 @@ router.post('/rules/seed-vendors', async (req, res) => {
 // ============================================================================
 router.post('/invoices/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-  const filename = req.file.originalname || 'upload';
+  const filename = Buffer.from(req.file.originalname || 'upload', 'latin1').toString('utf8');
   if (!/\.(xlsx|xls)$/i.test(filename)) return res.status(400).json({ error: 'Excelファイル（.xlsx/.xls）をアップロードしてください' });
 
   let defaultMonth = '';
