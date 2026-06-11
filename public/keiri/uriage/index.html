@@ -60,7 +60,8 @@ const RATE  = new Set(['稼働率']);
 const num = v => parseFloat(String(v==null?'':v).replace(/[,¥\s]/g,''))||0;
 const yen = n => (n<0?'▲':'')+'¥'+Math.abs(Math.round(n)).toLocaleString();
 const sum = a => a.reduce((x,y)=>x+(+y||0),0);
-let DATA={}, order=[], METRIC_ORDER=[], cur=null;
+let DATA={}, order=[], METRIC_ORDER=[], METRIC_DEFS=[], cur=null;
+const pct = v => ((v||v===0) ? (v*100).toFixed(1)+'%' : '');
 
 function badge(t,c){ const b=document.getElementById('badge'); b.textContent=t; b.className='save-badge'+(c?' '+c:''); if(c==='ok') setTimeout(()=>{b.textContent='　';b.className='save-badge';},1400); }
 
@@ -70,6 +71,7 @@ async function load(){
   if(!res.ok){ document.getElementById('content').textContent='読み込み失敗 ('+res.status+')'; return; }
   const j=await res.json();
   METRIC_ORDER=j.metricOrder||[];
+  METRIC_DEFS=j.metricDefs||[];
   DATA={}; order=[];
   for(const r of j.rows){
     if(!DATA[r.facility]){ DATA[r.facility]={ord:r.fac_order,m:{}}; order.push(r.facility); }
@@ -89,32 +91,33 @@ async function load(){
 }
 
 function val(metric,ym){ const m=DATA[cur].m[metric]; return m? num(m[ym]) : 0; }
-function rowTotal(metric){ if(RATE.has(metric)) return null; return sum(YMS.map(ym=>val(metric,ym))); }
+function calc(def,ym){ if(!def.f) return val(def.k,ym); const a=val(def.f[1],ym),b=val(def.f[2],ym); if(def.f[0]==='/') return b?a/b:0; if(def.f[0]==='-') return a-b; return 0; }
+function cellFmt(t,v){ if(t==='pct') return pct(v); if(t==='rate') return v?(Math.round(v*10000)/10000):'-'; if(t==='count') return v?Math.round(v).toLocaleString():'-'; return v?yen(v):'-'; }
+function rowTotal(def){ if(def.t==='rate'||def.t==='pct') return null; return sum(YMS.map(ym=> def.f?calc(def,ym):val(def.k,ym))); }
 
 function render(){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',decodeURIComponent(b.dataset.f)===cur));
-  const sales=YMS.map(ym=>val('売上実績',ym)), exp=YMS.map(ym=>val('経費実績',ym));
-  const sT=sum(sales),eT=sum(exp),nT=sT-eT;
-  let h='<h2>'+cur+' の月別 詳細（各指標を直接編集できます）</h2>';
+  const sT=sum(YMS.map(ym=>val('売上実績',ym))), eT=sum(YMS.map(ym=>val('経費実績',ym))), nT=sT-eT;
+  let h='<h2>'+cur+' の月別 詳細（エクセル完全再現／入力欄は直接編集）</h2>';
   h+='<div class="cards">'+
     '<div class="card"><div class="k">年間 売上実績</div><div class="v" style="color:#1F4E79">'+yen(sT)+'</div></div>'+
     '<div class="card"><div class="k">年間 経費実績</div><div class="v" style="color:#636e72">'+yen(eT)+'</div></div>'+
     '<div class="card"><div class="k">差引収支</div><div class="v" style="color:'+(nT<0?'#c0392b':'#1e8449')+'">'+yen(nT)+'</div></div></div>';
   h+='<table><thead><tr><th style="text-align:left">指標</th>'+MONTHS.map(m=>'<th>'+m+'</th>').join('')+'<th>計</th></tr></thead><tbody>';
-  for(const metric of METRIC_ORDER){
-    h+='<tr><td class="label">'+metric+'</td>'+YMS.map(ym=>{
-      const v=val(metric,ym);
-      const disp = RATE.has(metric) ? (v?v:'') : (v?Math.round(v):'');
-      return '<td><input class="cell" data-m="'+metric+'" data-ym="'+ym+'" value="'+disp+'"></td>';
+  let lastG=null;
+  for(const def of METRIC_DEFS){
+    if(def.g!==lastG){ h+='<tr><td class="grp" colspan="14">'+def.g+'</td></tr>'; lastG=def.g; }
+    h+='<tr><td class="label">'+def.k+(def.f?' <span style="font-weight:400;color:#aaa;font-size:10px">自動</span>':'')+'</td>';
+    h+=YMS.map(ym=>{
+      if(def.f){ const v=calc(def,ym); return '<td class="net '+(v<0?'neg':'')+'">'+cellFmt(def.t,v)+'</td>'; }
+      const v=val(def.k,ym); const disp = def.t==='rate' ? (v?v:'') : (v?Math.round(v):'');
+      return '<td><input class="cell" data-m="'+def.k+'" data-ym="'+ym+'" value="'+disp+'"></td>';
     }).join('');
-    const t=rowTotal(metric);
-    h+='<td class="tot">'+(t==null?'-':(MONEY.has(metric)?yen(t):Math.round(t).toLocaleString()))+'</td></tr>';
+    const t=rowTotal(def);
+    h+='<td class="tot '+((t!=null&&t<0)?'neg':'')+'">'+(t==null?'-':(def.t==='count'?Math.round(t).toLocaleString():yen(t)))+'</td></tr>';
   }
-  // 差引収支（自動）
-  h+='<tr><td class="label">差引収支</td>'+YMS.map((ym,i)=>{const v=sales[i]-exp[i];return '<td class="net '+(v<0?'neg':'')+'">'+(v?yen(v):'-')+'</td>';}).join('')+
-    '<td class="tot '+(nT<0?'neg':'')+'">'+yen(nT)+'</td></tr>';
   h+='</tbody></table>';
-  h+='<p class="hint">数値を変更してEnter／セル外クリックで自動保存されます。稼働率は小数（例 0.43＝43%）。差引収支・各合計は自動計算です。</p>';
+  h+='<p class="hint">入力欄を変更してEnter／セル外クリックで自動保存。「自動」行・各合計は自動計算です。稼働率は小数（0.43＝43%）。空欄は未入力です。</p>';
   document.getElementById('content').innerHTML=h;
   document.querySelectorAll('input.cell').forEach(inp=>{
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); }});

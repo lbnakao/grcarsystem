@@ -1064,11 +1064,11 @@ router.put('/uriage', async (req, res) => {
 // 全体売上収支（指標版）— 施設×月×指標を取得
 router.get('/uriage-metrics', async (req, res) => {
   try {
-    const { METRIC_ORDER } = require('../lib/uriage_shushi');
+    const { METRIC_ORDER, METRIC_DEFS } = require('../lib/uriage_shushi');
     const rows = await query(
       "SELECT facility, year_month, metric, value, fac_order FROM funds_uriage_metrics ORDER BY fac_order, facility"
     );
-    res.json({ ok: true, rows, metricOrder: METRIC_ORDER });
+    res.json({ ok: true, rows, metricOrder: METRIC_ORDER, metricDefs: METRIC_DEFS });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
