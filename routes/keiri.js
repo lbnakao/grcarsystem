@@ -54,6 +54,8 @@ function parseDate(s) {
   if (!s) return null;
   let m = s.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
   if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+  m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
   m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = s.match(/^[RrＲ令和]\s*(\d+)[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
