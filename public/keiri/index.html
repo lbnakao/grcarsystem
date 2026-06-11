@@ -604,6 +604,28 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 
 </div>
 
+<!-- ─── 口座選択モーダル（アップロード前） ─── -->
+<div class="modal-overlay" id="account-select-modal">
+  <div class="modal medium">
+    <h3>📂 口座を選択してください</h3>
+    <p style="font-size:13px;color:#636e72;margin-bottom:16px;">CSVをどの口座として取り込みますか？</p>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">口座名</label>
+      <select id="account-select-existing" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <option value="">── 新しい口座を入力 ──</option>
+      </select>
+    </div>
+    <div id="account-select-new-wrap" style="margin-bottom:16px;display:none;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">新規口座名</label>
+      <input id="account-select-new-name" type="text" placeholder="例：モーテル" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="account-select-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="account-select-ok">ファイルを選択 →</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── アップロードプレビューモーダル ─── -->
 <div class="modal-overlay" id="upload-modal">
   <div class="modal large">
@@ -1320,14 +1342,52 @@ async function loadBankPivot() {
 }
 
 // アップロード
-document.getElementById('btn-bank-upload').addEventListener('click', () => {
+let pendingUploadAccount = '';
+
+// 口座選択モーダルの表示・非表示
+function openAccountSelectModal() {
+  const sel = document.getElementById('account-select-existing');
+  sel.innerHTML = '<option value="">── 新しい口座を入力 ──</option>' +
+    ACCOUNTS.map(a => `<option value="${a.name}">${a.display_name || a.name}</option>`).join('');
+  // 現在選択中の口座があればデフォルト選択
+  if (currentBankAccount) {
+    sel.value = currentBankAccount;
+  }
+  sel.dispatchEvent(new Event('change'));
+  document.getElementById('account-select-modal').classList.add('show');
+}
+
+document.getElementById('account-select-existing').addEventListener('change', function() {
+  const wrap = document.getElementById('account-select-new-wrap');
+  wrap.style.display = this.value === '' ? 'block' : 'none';
+});
+
+document.getElementById('account-select-cancel').addEventListener('click', () => {
+  document.getElementById('account-select-modal').classList.remove('show');
+});
+
+document.getElementById('account-select-ok').addEventListener('click', () => {
+  const sel = document.getElementById('account-select-existing');
+  const newName = document.getElementById('account-select-new-name').value.trim();
+  if (sel.value === '') {
+    if (!newName) { alert('口座名を入力してください'); return; }
+    pendingUploadAccount = newName;
+  } else {
+    pendingUploadAccount = sel.value;
+  }
+  document.getElementById('account-select-modal').classList.remove('show');
   document.getElementById('bank-file-input').click();
+});
+
+document.getElementById('btn-bank-upload').addEventListener('click', () => {
+  openAccountSelectModal();
 });
 document.getElementById('bank-file-input').addEventListener('change', async (e) => {
   if (!e.target.files[0]) return;
   const file = e.target.files[0];
   const fd = new FormData();
   fd.append('file', file);
+  if (pendingUploadAccount) fd.append('account', pendingUploadAccount);
   showToast('アップロード中...');
   try {
     const res = await fetch('/api/keiri/bank/upload', { method: 'POST', body: fd });
@@ -1340,6 +1400,10 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
       }
       return;
     }
+    // 選択した口座名で全トランザクションの account を上書き
+    if (pendingUploadAccount && data.transactions) {
+      data.transactions.forEach(t => { t.account = pendingUploadAccount; });
+    }
     pendingUpload = data;
     showUploadPreview(data);
   } catch (err) {
@@ -1349,6 +1413,10 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
 });
 
 function showUploadPreview(data) {
+  // プレビューのタイトルに口座名を表示
+  const titleEl = document.querySelector('#upload-modal h3');
+  if (titleEl) titleEl.textContent = `📂 アップロードプレビュー — ${pendingUploadAccount || data.transactions?.[0]?.account || ''}`;
+
   const stats = data.stats;
   const estSec = estimateSaveSeconds(stats.total);
   const estEl = document.getElementById('upload-estimate');
