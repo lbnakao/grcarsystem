@@ -309,6 +309,11 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 
     <!-- 口座サブタブ -->
     <div class="sub-tabs" id="bank-account-tabs"></div>
+    <div id="bank-account-actions" style="display:none;margin:4px 0 6px;">
+      <button id="btn-delete-account-data" class="btn btn-danger" style="font-size:11px;padding:4px 12px;">
+        🗑 このタブのデータを全削除
+      </button>
+    </div>
 
     <!-- 月フィルタ -->
     <div class="filter-bar">
@@ -1053,9 +1058,16 @@ async function loadBankAccountTabs() {
       tabs.querySelectorAll('.sub-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       currentBankAccount = t.dataset.account;
+      updateBankAccountActions();
       loadBankTransactions();
     });
   });
+  updateBankAccountActions();
+}
+
+function updateBankAccountActions() {
+  const el = document.getElementById('bank-account-actions');
+  if (el) el.style.display = currentBankAccount ? 'block' : 'none';
 }
 
 async function loadBankTransactions() {
@@ -3185,6 +3197,24 @@ function setupEvents() {
       if (tab.dataset.page === 'settings') loadRules();
       if (tab.dataset.page === 'help') loadHelp();
     });
+  });
+
+  // 口座データ一括削除ボタン
+  document.getElementById('btn-delete-account-data').addEventListener('click', async () => {
+    if (!currentBankAccount) return;
+    const accountLabel = currentBankAccount;
+    const txRes = await api('/api/keiri/bank/transactions?account=' + encodeURIComponent(accountLabel));
+    const count = Array.isArray(txRes) ? txRes.length : 0;
+    if (!confirm(`「${accountLabel}」の取引データ ${count} 件と口座情報を完全に削除します。\nこの操作は元に戻せません。よろしいですか？`)) return;
+    const result = await api('/api/keiri/bank/account?name=' + encodeURIComponent(accountLabel), { method: 'DELETE' });
+    if (result && result.ok) {
+      showToast(`「${accountLabel}」のデータを削除しました（${result.deleted} 件）`);
+      currentBankAccount = '';
+      await loadBankAccountTabs();
+      await loadBankTransactions();
+    } else {
+      showToast('削除に失敗しました', 'error');
+    }
   });
 }
 

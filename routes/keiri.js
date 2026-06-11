@@ -327,6 +327,10 @@ router.patch('/accounts/:id', async (req, res) => {
   res.json({ ok: true });
 });
 router.delete('/accounts/:id', async (req, res) => {
+  const acc = await query('SELECT name FROM keiri_bank_accounts WHERE id = ?', [req.params.id]);
+  if (acc.length > 0) {
+    await run('DELETE FROM keiri_bank_transactions WHERE account = ?', [acc[0].name]);
+  }
   await run('DELETE FROM keiri_bank_accounts WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 });
@@ -746,6 +750,16 @@ router.get('/bank/pivot', async (req, res) => {
 router.delete('/bank/batch/:batchId', async (req, res) => {
   await run('DELETE FROM keiri_bank_transactions WHERE batch_id = ?', [req.params.batchId]);
   res.json({ ok: true });
+});
+
+// 口座ごと削除（取引データ＋口座マスタ）
+router.delete('/bank/account', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const txCount = await query('SELECT COUNT(*) as c FROM keiri_bank_transactions WHERE account = ?', [name]);
+  await run('DELETE FROM keiri_bank_transactions WHERE account = ?', [name]);
+  await run('DELETE FROM keiri_bank_accounts WHERE name = ?', [name]);
+  res.json({ ok: true, deleted: Number(txCount[0].c) });
 });
 
 // ============================================================================
