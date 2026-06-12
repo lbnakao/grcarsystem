@@ -12,7 +12,7 @@
   .header { color: #fff; text-align: center; margin-bottom: 40px; }
   .header h1 { font-weight: 700; font-size: 28px; margin-bottom: 8px; }
   .header .user { font-size: 14px; opacity: 0.9; }
-  .menu { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; }
   .menu-card {
     background: #fff; border-radius: 16px; padding: 40px 32px; cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
@@ -22,6 +22,7 @@
   .menu-card .icon { font-size: 64px; margin-bottom: 16px; }
   .menu-card.cars .icon { color: #e17055; }
   .menu-card.keiri .icon { color: #0984e3; }
+  .menu-card.shift .icon { color: #00b894; }
   .menu-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #2d3436; }
   .menu-card p { color: #636e72; font-size: 13px; margin: 0; }
   .logout-btn { position: absolute; top: 24px; right: 24px; background: rgba(255,255,255,0.15); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
@@ -33,42 +34,78 @@
   <button class="logout-btn" id="logoutBtn"><i class="bi bi-box-arrow-right"></i> ログアウト</button>
   <div class="wrap">
     <div class="header">
-      <h1>🏢 GR 管理システム</h1>
+      <h1>🏢 グローバルリゾートポータル</h1>
       <div class="user" id="userName">ログイン中...</div>
       <div style="font-size:13px;margin-top:8px;opacity:0.85;">使いたいシステムを選んでください</div>
     </div>
-    <div class="menu">
-      <button class="menu-card cars" onclick="location.href='/'">
-        <div class="icon"><i class="bi bi-car-front-fill"></i></div>
-        <h2>🚗 社用車予約</h2>
-        <p>車両の予約・返却・カレンダー管理</p>
-      </button>
-      <button class="menu-card keiri" onclick="location.href='/keiri/'">
-        <div class="icon"><i class="bi bi-calculator-fill"></i></div>
-        <h2>📊 経理システム</h2>
-        <p>通帳・請求書・消込管理</p>
-      </button>
-    </div>
+    <div class="menu" id="menu"></div>
   </div>
 
   <script>
+    // ▼▼ シフト労務管理システムのURL（Render等のデプロイ先）をここに設定してください ▼▼
+    //    例: 'https://gr-shift.onrender.com'
+    //    まだ未公開の場合は空文字 '' のままにしておくと「準備中」表示になります。
+    const SHIFT_APP_URL = '';
+    // ▲▲ ここまで ▲▲
+
     (async function() {
       try {
         const res = await fetch('/api/auth/me');
         if (!res.ok) { location.href = '/login'; return; }
         const d = await res.json();
-        document.getElementById('userName').textContent = d.user.name + ' さん（' + d.user.employee_id + '）';
-        // 権限がなければリダイレクト（通常は管理者だけがここに来る）
-        // admin でもなく keiri_access も無ければ車両専用
-        if (d.user.role !== 'admin' && !d.user.keiri_access) {
-          location.href = '/';
-          return;
+        const u = d.user;
+        document.getElementById('userName').textContent = u.name + ' さん（' + u.employee_id + '）';
+
+        const isAdmin = u.role === 'admin';
+        const canKeiri = isAdmin || !!u.keiri_access;
+
+        // 権限が何も無ければ車両予約へ直行
+        if (!isAdmin && !canKeiri) { location.href = '/'; return; }
+
+        const menu = document.getElementById('menu');
+        const cards = [];
+
+        // 社用車予約（管理者）
+        if (isAdmin) {
+          cards.push(`
+            <button class="menu-card cars" onclick="location.href='/'">
+              <div class="icon"><i class="bi bi-car-front-fill"></i></div>
+              <h2>🚗 社用車予約</h2>
+              <p>車両の予約・返却・カレンダー管理</p>
+            </button>`);
         }
-        // 経理専用なら経理へ直行
-        if (d.user.role !== 'admin' && d.user.keiri_access) {
-          location.href = '/keiri/';
-          return;
+
+        // 経理システム（管理者 or 経理アクセス権）
+        if (canKeiri) {
+          cards.push(`
+            <button class="menu-card keiri" onclick="location.href='/keiri/'">
+              <div class="icon"><i class="bi bi-calculator-fill"></i></div>
+              <h2>📊 経理システム</h2>
+              <p>通帳・請求書・消込管理</p>
+            </button>`);
         }
+
+        // シフト労務管理システム（経理を選べる人に表示）
+        if (canKeiri) {
+          if (SHIFT_APP_URL) {
+            cards.push(`
+              <button class="menu-card shift" onclick="window.open('${SHIFT_APP_URL}', '_blank')">
+                <div class="icon"><i class="bi bi-calendar2-week-fill"></i></div>
+                <h2>🗓️ シフト労務管理システム</h2>
+                <p>シフト作成・勤怠・労務管理</p>
+              </button>`);
+          } else {
+            cards.push(`
+              <button class="menu-card shift" style="opacity:0.6;cursor:not-allowed"
+                      onclick="alert('シフト労務管理システムは現在準備中です。')">
+                <div class="icon"><i class="bi bi-calendar2-week-fill"></i></div>
+                <h2>🗓️ シフト労務管理システム</h2>
+                <p>シフト作成・勤怠・労務管理（準備中）</p>
+              </button>`);
+          }
+        }
+
+        menu.innerHTML = cards.join('');
       } catch (e) { location.href = '/login'; }
     })();
     document.getElementById('logoutBtn').addEventListener('click', async () => {
