@@ -415,7 +415,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
           <tr>
             <th><input type="checkbox" id="invoice-check-all"></th>
             <th>状態</th>
-            <th>請求元（業者名）</th>
+            <th class="sortable" data-sort="vendor" title="クリックで昇順/降順を切替">請求元（業者名）<span class="sort-arrow">⇅</span></th>
             <th>勘定科目</th>
             <th>支払方法</th>
             <th class="sortable" data-sort="due_date" title="クリックで昇順/降順を切替">支払期日<span class="sort-arrow">⇅</span></th>
