@@ -951,12 +951,14 @@ function flagAsDuplicate(id) {
   saveDupIds();
   updateDupCount();
   renderInvoiceTable();
+  renderInvoiceSummary();
 }
 function unflagDuplicate(id) {
   duplicateInvoiceIds.delete(id);
   saveDupIds();
   updateDupCount();
   renderInvoiceTable();
+  renderInvoiceSummary();
 }
 function updateDupCount() {
   const el = document.getElementById('dup-count');
@@ -986,23 +988,46 @@ function autoDetectDuplicates() {
   let added = 0;
   for (const rows of Object.values(groups)) {
     if (rows.length < 2) continue;
+    // 金額が重複している行のクラスタを検出（推移的に結合）
+    const unionFind = rows.map((_, i) => i);
+    const find = i => { while (unionFind[i] !== i) { unionFind[i] = unionFind[unionFind[i]]; i = unionFind[i]; } return i; };
+    const unite = (a, b) => { unionFind[find(a)] = find(b); };
     for (let i = 0; i < rows.length; i++) {
       const ai = new Set(fields.map(f => rows[i][f]).filter(v => v && v > 0));
-      if (!ai.size) continue;
       for (let j = i + 1; j < rows.length; j++) {
         const aj = new Set(fields.map(f => rows[j][f]).filter(v => v && v > 0));
-        const overlap = [...ai].some(v => aj.has(v));
-        if (overlap) {
-          if (!duplicateInvoiceIds.has(rows[i].id)) { duplicateInvoiceIds.add(rows[i].id); added++; }
-          if (!duplicateInvoiceIds.has(rows[j].id)) { duplicateInvoiceIds.add(rows[j].id); added++; }
-        }
+        if ([...ai].some(v => aj.has(v))) unite(i, j);
+      }
+    }
+    // クラスタごとに「最新＝繰越数が最も多い行」を1件だけ残し、それ以外を重複フラグ
+    const clusters = {};
+    rows.forEach((r, i) => {
+      const root = find(i);
+      if (!clusters[root]) clusters[root] = [];
+      clusters[root].push(r);
+    });
+    for (const cluster of Object.values(clusters)) {
+      if (cluster.length < 2) continue;
+      // 繰越数（非ゼロフィールド数）降順 → 同数なら日付降順
+      cluster.sort((a, b) => {
+        const ac = fields.filter(f => a[f] && a[f] > 0).length;
+        const bc = fields.filter(f => b[f] && b[f] > 0).length;
+        if (bc !== ac) return bc - ac;
+        const ad = a.transaction_date || a.due_date || '';
+        const bd = b.transaction_date || b.due_date || '';
+        return bd.localeCompare(ad);
+      });
+      // 先頭（最新・最多）を除き、残りを重複リストへ
+      for (let k = 1; k < cluster.length; k++) {
+        if (!duplicateInvoiceIds.has(cluster[k].id)) { duplicateInvoiceIds.add(cluster[k].id); added++; }
       }
     }
   }
   saveDupIds();
   updateDupCount();
   renderInvoiceTable();
-  showToast(added > 0 ? `${added}件の重複候補を検出して重複リストへ移動しました` : '重複候補は見つかりませんでした', added > 0 ? 'info' : 'info');
+  renderInvoiceSummary();
+  showToast(added > 0 ? `${added}件の重複候補を検出（最新データは残し古い行を移動）` : '重複候補は見つかりませんでした', 'info');
 }
 
 // 列ソート状態（key=ソートキー文字列, dir='asc'|'desc'）
@@ -1970,18 +1995,19 @@ function renderInvoiceTable() {
 }
 
 function renderInvoiceSummary() {
-  const monthLabel = currentInvoiceMonth || 'すべて';
-  // 今月金額のみ集計（繰越は各月の行に含まれるため「すべて」では二重計上になる）
-  const total = invoices.reduce((s, i) => s + (i.amount || 0), 0);
-  const pending = invoices.filter(i => !i.amount_cleared);
+  // 重複リストの行は常に除外して集計（重複は金額を水増しするため）
+  const base = invoices.filter(i => !duplicateInvoiceIds.has(i.id));
+  const total = base.reduce((s, i) => s + (i.amount || 0), 0);
+  const pending = base.filter(i => !i.amount_cleared);
   const pendingTotal = pending.reduce((s, i) => s + (i.amount || 0), 0);
-  const cleared = invoices.filter(i => i.status === '済').length;
-  const delayed = invoices.filter(i => (i.carry_1 || 0) > 0 || (i.carry_2 || 0) > 0 || (i.carry_3 || 0) > 0).length;
+  const cleared = base.filter(i => i.status === '済').length;
+  const delayed = base.filter(i => (i.carry_1 || 0) > 0 || (i.carry_2 || 0) > 0 || (i.carry_3 || 0) > 0).length;
   const labelSuffix = currentInvoiceMonth ? `（${currentInvoiceMonth}分）` : '（累計）';
+  const dupNote = duplicateInvoiceIds.size > 0 ? `<span style="font-size:10px;color:#636e72;">※重複リスト(${duplicateInvoiceIds.size}件)を除く</span>` : '';
   document.getElementById('invoice-summary-cards').innerHTML = `
-    <div class="summary-card"><div class="label">請求総額${labelSuffix}</div><div class="value blue">¥${yen(total)}</div></div>
+    <div class="summary-card"><div class="label">請求総額${labelSuffix}${dupNote}</div><div class="value blue">¥${yen(total)}</div></div>
     <div class="summary-card"><div class="label">未払い残高${labelSuffix}</div><div class="value red">¥${yen(pendingTotal)}</div></div>
-    <div class="summary-card"><div class="label">消込済</div><div class="value green">${cleared}/${invoices.length}件</div></div>
+    <div class="summary-card"><div class="label">消込済</div><div class="value green">${cleared}/${base.length}件</div></div>
     <div class="summary-card"><div class="label">繰越あり</div><div class="value orange">${delayed}件</div></div>
   `;
 }
