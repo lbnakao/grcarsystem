@@ -1007,7 +1007,7 @@ router.post('/invoices/upload/confirm', async (req, res) => {
       let existing = [];
       if (skip_duplicates) {
         existing = await query(
-          `SELECT id, amount, carry_1, carry_2, carry_3,
+          `SELECT id, amount, carry_1, carry_2, carry_3, carry_4, carry_5, carry_6,
                   category, payment_method, due_date, transaction_date, note
              FROM keiri_invoices
             WHERE COALESCE(entity,'') = ?
@@ -1026,18 +1026,21 @@ router.post('/invoices/upload/confirm', async (req, res) => {
         const sameAmounts = (e.amount || 0) === (inv.amount || 0)
           && (e.carry_1 || 0) === (inv.carry_1 || 0)
           && (e.carry_2 || 0) === (inv.carry_2 || 0)
-          && (e.carry_3 || 0) === (inv.carry_3 || 0);
+          && (e.carry_3 || 0) === (inv.carry_3 || 0)
+          && (e.carry_4 || 0) === (inv.carry_4 || 0)
+          && (e.carry_5 || 0) === (inv.carry_5 || 0)
+          && (e.carry_6 || 0) === (inv.carry_6 || 0);
         if (sameAmounts) { skipped++; continue; }
         // 金額が違うので最新値で上書き更新（消込フラグは触らない）
         await run(`UPDATE keiri_invoices SET
-                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?,
+                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?, carry_4 = ?, carry_5 = ?, carry_6 = ?,
                      category = COALESCE(NULLIF(?, ''), category),
                      payment_method = COALESCE(NULLIF(?, ''), payment_method),
                      due_date = COALESCE(NULLIF(?, ''), due_date),
                      transaction_date = COALESCE(NULLIF(?, ''), transaction_date),
                      note = COALESCE(NULLIF(?, ''), note)
                    WHERE id = ?`,
-          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0,
+          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.carry_4 || 0, inv.carry_5 || 0, inv.carry_6 || 0,
            inv.category || '', inv.payment_method || '', inv.due_date || '',
            inv.transaction_date || '', inv.note || '', e.id]);
         // 消込状態を金額に合わせて再計算
@@ -1045,9 +1048,9 @@ router.post('/invoices/upload/confirm', async (req, res) => {
         updated++;
         continue;
       }
-      await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
+      await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, carry_5, carry_6, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
         [inv.vendor || '', inv.category || '', inv.payment_method || '', inv.due_date || '', inv.facility || '', inv.entity || '',
-         inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.month || '', inv.year || null, inv.note || '']);
+         inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.carry_4 || 0, inv.carry_5 || 0, inv.carry_6 || 0, inv.month || '', inv.year || null, inv.note || '']);
       inserted++;
     }
     res.json({ ok: true, inserted, updated, skipped });
@@ -1220,7 +1223,7 @@ router.post('/invoices/bulk-delete', async (req, res) => {
 router.post('/invoices/clear', async (req, res) => {
   const { ids, clear_type } = req.body;
   if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids required' });
-  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared', carry_4: 'carry_4_cleared', carry_5: 'carry_5_cleared', carry_6: 'carry_6_cleared' };
   try {
     for (const id of ids) {
       const rows = await query('SELECT * FROM keiri_invoices WHERE id = ?', [id]);
@@ -1231,6 +1234,9 @@ router.post('/invoices/clear', async (req, res) => {
           carry_1_cleared = CASE WHEN carry_1 > 0 THEN 1 ELSE carry_1_cleared END,
           carry_2_cleared = CASE WHEN carry_2 > 0 THEN 1 ELSE carry_2_cleared END,
           carry_3_cleared = CASE WHEN carry_3 > 0 THEN 1 ELSE carry_3_cleared END,
+          carry_4_cleared = CASE WHEN carry_4 > 0 THEN 1 ELSE carry_4_cleared END,
+          carry_5_cleared = CASE WHEN carry_5 > 0 THEN 1 ELSE carry_5_cleared END,
+          carry_6_cleared = CASE WHEN carry_6 > 0 THEN 1 ELSE carry_6_cleared END,
           cleared_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
       } else {
         const flag = flagMap[clear_type];
@@ -1247,7 +1253,7 @@ router.post('/invoices/clear', async (req, res) => {
 router.post('/invoices/undo', async (req, res) => {
   const { id, clear_type } = req.body;
   // 単一フィールドだけ取り消す場合
-  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared', carry_4: 'carry_4_cleared', carry_5: 'carry_5_cleared', carry_6: 'carry_6_cleared' };
   if (clear_type && flagMap[clear_type]) {
     const flag = flagMap[clear_type];
     await run(`UPDATE keiri_invoices SET ${flag}=0, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
@@ -1257,7 +1263,7 @@ router.post('/invoices/undo', async (req, res) => {
     return res.json({ ok: true });
   }
   // 全フィールドをまとめて取消
-  await run(`UPDATE keiri_invoices SET amount_cleared=0, carry_1_cleared=0, carry_2_cleared=0, carry_3_cleared=0, status='未', cleared_at=NULL, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
+  await run(`UPDATE keiri_invoices SET amount_cleared=0, carry_1_cleared=0, carry_2_cleared=0, carry_3_cleared=0, carry_4_cleared=0, carry_5_cleared=0, carry_6_cleared=0, status='未', cleared_at=NULL, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
   await run(`UPDATE keiri_bank_transactions SET is_cleared = '', matched_invoice_id = NULL WHERE matched_invoice_id = ?`, [id]);
   res.json({ ok: true });
 });
@@ -1377,15 +1383,19 @@ router.post('/bank/auto-vendor', async (req, res) => {
 router.post('/match/auto-clear', async (req, res) => {
   const dry_run = !!req.body?.dry_run;
   const bankTxs = await query(`SELECT * FROM keiri_bank_transactions
-                               WHERE withdrawal > 0 AND matched_invoice_id IS NULL AND is_cleared != '済'
-                                 AND vendor_name != '' AND vendor_name IS NOT NULL`);
+                               WHERE withdrawal > 0 AND matched_invoice_id IS NULL AND is_cleared != '済'`);
   const pendingInvoices = await query(`SELECT * FROM keiri_invoices WHERE status != '済'`);
 
-  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared', carry_4: 'carry_4_cleared', carry_5: 'carry_5_cleared', carry_6: 'carry_6_cleared' };
   const cleared = [];
   const usedInvoiceField = new Set(); // 同一請求の同一フィールドを二重消込しない
 
   for (const tx of bankTxs) {
+    // 会社名は保存済み優先、無ければ摘要から推定（自動消込は sim>=0.8 が必須なので空のままだと結局拾われない）
+    const bankVendor = (tx.vendor_name && String(tx.vendor_name).trim())
+      ? String(tx.vendor_name).trim()
+      : inferVendorFromDescription(tx.description);
+    if (!bankVendor) continue;
     // 金額一致する未消込の請求を探す
     const cands = [];
     for (const inv of pendingInvoices) {
@@ -1394,12 +1404,15 @@ router.post('/match/auto-clear', async (req, res) => {
         ['carry_1', inv.carry_1, inv.carry_1_cleared],
         ['carry_2', inv.carry_2, inv.carry_2_cleared],
         ['carry_3', inv.carry_3, inv.carry_3_cleared],
+        ['carry_4', inv.carry_4, inv.carry_4_cleared],
+        ['carry_5', inv.carry_5, inv.carry_5_cleared],
+        ['carry_6', inv.carry_6, inv.carry_6_cleared],
       ];
       for (const [field, v, c] of pairs) {
         if (v > 0 && !c && v === tx.withdrawal) {
           const key = inv.id + '|' + field;
           if (usedInvoiceField.has(key)) continue;
-          const sim = vendorSimilarity(tx.vendor_name, inv.vendor);
+          const sim = vendorSimilarity(bankVendor, inv.vendor);
           if (sim >= 0.8) {
             cands.push({ inv, field, sim });
           }
@@ -1433,7 +1446,7 @@ router.post('/match/auto-clear', async (req, res) => {
     cleared.push({
       bank_tx_id: tx.id, invoice_id: pick.inv.id,
       tx_date: tx.tx_date, withdrawal: tx.withdrawal,
-      bank_vendor: tx.vendor_name, inv_vendor: pick.inv.vendor,
+      bank_vendor: bankVendor, inv_vendor: pick.inv.vendor,
       similarity: Math.round(pick.sim * 100), clear_type: pick.field,
     });
   }
@@ -1450,14 +1463,22 @@ router.post('/match/auto', async (req, res) => {
   const diag = { bank_total: bankTxs.length, invoice_total: pendingInvoices.length, no_vendor_name: 0, no_amount_match: 0, matched_high: 0, matched_medium: 0, matched_low: 0 };
 
   for (const tx of bankTxs) {
-    if (!tx.vendor_name || !String(tx.vendor_name).trim()) { diag.no_vendor_name++; continue; }
+    // 会社名は「保存済み vendor_name」優先、無ければ摘要から推定してフォールバック
+    const bankVendor = (tx.vendor_name && String(tx.vendor_name).trim())
+      ? String(tx.vendor_name).trim()
+      : inferVendorFromDescription(tx.description);
     const byAmount = pendingInvoices.filter(inv => {
-      const pairs = [[inv.amount, inv.amount_cleared], [inv.carry_1, inv.carry_1_cleared], [inv.carry_2, inv.carry_2_cleared], [inv.carry_3, inv.carry_3_cleared]];
+      const pairs = [
+        [inv.amount, inv.amount_cleared],
+        [inv.carry_1, inv.carry_1_cleared], [inv.carry_2, inv.carry_2_cleared], [inv.carry_3, inv.carry_3_cleared],
+        [inv.carry_4, inv.carry_4_cleared], [inv.carry_5, inv.carry_5_cleared], [inv.carry_6, inv.carry_6_cleared],
+      ];
       const amts = pairs.filter(([v, c]) => v > 0 && !c).map(([v]) => v);
       return amts.includes(tx.withdrawal);
     });
     if (byAmount.length === 0) { diag.no_amount_match++; continue; }
-    const bankVendor = tx.vendor_name;
+    // 会社名が全く取れない場合、金額が1件だけに一致するなら低確度で拾う。複数候補は判別不能としてスキップ
+    if (!bankVendor && byAmount.length > 1) { diag.no_vendor_name++; continue; }
     const scored = byAmount.map(inv => {
       const sim = vendorSimilarity(bankVendor, inv.vendor);
       const catOk = categoriesMatch(tx.category, inv.category);
@@ -1468,6 +1489,8 @@ router.post('/match/auto', async (req, res) => {
       else if (sim >= 0.5 && catOk) confidence = 'high';
       else if (sim >= 0.5) confidence = 'medium';
       else if (catOk && facOk) confidence = 'medium';
+      // 会社名が取れない（金額のみ一致）は要確認のため低確度に固定
+      if (!bankVendor) confidence = 'low';
       return { inv, sim, catOk, facOk, score, confidence };
     });
     scored.sort((a, b) => b.score - a.score);
@@ -1478,6 +1501,9 @@ router.post('/match/auto', async (req, res) => {
     else if (best.inv.carry_1 === tx.withdrawal && !best.inv.carry_1_cleared) clearType = 'carry_1';
     else if (best.inv.carry_2 === tx.withdrawal && !best.inv.carry_2_cleared) clearType = 'carry_2';
     else if (best.inv.carry_3 === tx.withdrawal && !best.inv.carry_3_cleared) clearType = 'carry_3';
+    else if (best.inv.carry_4 === tx.withdrawal && !best.inv.carry_4_cleared) clearType = 'carry_4';
+    else if (best.inv.carry_5 === tx.withdrawal && !best.inv.carry_5_cleared) clearType = 'carry_5';
+    else if (best.inv.carry_6 === tx.withdrawal && !best.inv.carry_6_cleared) clearType = 'carry_6';
     matches.push({ bank_tx: tx, invoice: best.inv, clear_type: clearType, confidence: best.confidence, alternatives: byAmount.length - 1, similarity: Math.round(best.sim * 100) });
     diag['matched_' + best.confidence]++;
   }
@@ -1488,7 +1514,7 @@ router.post('/match/auto', async (req, res) => {
 
 router.post('/match/confirm', async (req, res) => {
   const { confirmations } = req.body;
-  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared' };
+  const flagMap = { amount: 'amount_cleared', carry_1: 'carry_1_cleared', carry_2: 'carry_2_cleared', carry_3: 'carry_3_cleared', carry_4: 'carry_4_cleared', carry_5: 'carry_5_cleared', carry_6: 'carry_6_cleared' };
   try {
     for (const c of confirmations) {
       const invRows = await query('SELECT * FROM keiri_invoices WHERE id = ?', [c.invoice_id]);
@@ -1499,6 +1525,9 @@ router.post('/match/confirm', async (req, res) => {
           carry_1_cleared = CASE WHEN carry_1 > 0 THEN 1 ELSE carry_1_cleared END,
           carry_2_cleared = CASE WHEN carry_2 > 0 THEN 1 ELSE carry_2_cleared END,
           carry_3_cleared = CASE WHEN carry_3 > 0 THEN 1 ELSE carry_3_cleared END,
+          carry_4_cleared = CASE WHEN carry_4 > 0 THEN 1 ELSE carry_4_cleared END,
+          carry_5_cleared = CASE WHEN carry_5 > 0 THEN 1 ELSE carry_5_cleared END,
+          carry_6_cleared = CASE WHEN carry_6 > 0 THEN 1 ELSE carry_6_cleared END,
           cleared_at = CURRENT_TIMESTAMP, matched_bank_tx_id = ? WHERE id = ?`, [c.bank_tx_id || null, c.invoice_id]);
       } else {
         const flag = flagMap[c.clear_type];

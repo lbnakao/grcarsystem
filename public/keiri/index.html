@@ -729,6 +729,9 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
           <option value="carry_1">前月繰越分だけを支払い済みにする</option>
           <option value="carry_2">前々月繰越分だけを支払い済みにする</option>
           <option value="carry_3">前々々月繰越分だけを支払い済みにする</option>
+          <option value="carry_4">4か月前の繰越分だけを支払い済みにする</option>
+          <option value="carry_5">5か月前の繰越分だけを支払い済みにする</option>
+          <option value="carry_6">6か月以上前の繰越分だけを支払い済みにする</option>
           <option value="all">全部まとめて支払い済みにする</option>
         </select>
       </div>
@@ -2082,7 +2085,7 @@ function renderInvoiceSummary() {
 // =============================================================================
 // 金額セル用：クリック時に「消込／取消／金額変更」のアクションメニューを表示
 // =============================================================================
-const FIELD_LABEL = { amount: '今月分', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越' };
+const FIELD_LABEL = { amount: '今月分', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越', carry_4: '4か月前', carry_5: '5か月前', carry_6: '6か月以上' };
 let amountMenuTarget = null; // { td, invoiceId, field, value, isCleared }
 
 function hideAmountMenu() {
@@ -2364,7 +2367,7 @@ document.getElementById('invoice-clear-cancel').addEventListener('click', () => 
 
 document.getElementById('invoice-clear-exec').addEventListener('click', async () => {
   const clearType = document.getElementById('invoice-clear-type').value;
-  const labels = { amount: '当月金額', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越', all: '全額' };
+  const labels = { amount: '当月金額', carry_1: '前月繰越', carry_2: '前々月繰越', carry_3: '前々々月繰越', carry_4: '4か月前', carry_5: '5か月前', carry_6: '6か月以上', all: '全額' };
   await api('/api/keiri/invoices/clear', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -3136,7 +3139,7 @@ function renderMatchTable(matches) {
       low: '<span style="color:#e17055;font-weight:700;">△ 低</span>',
     };
     const conf = confMap[m.confidence] || '';
-    const labels = { amount: '当月', carry_1: '前月繰越', carry_2: '前々繰越', carry_3: '前々々月' };
+    const labels = { amount: '当月', carry_1: '前月繰越', carry_2: '前々繰越', carry_3: '前々々月', carry_4: '4か月前', carry_5: '5か月前', carry_6: '6か月以上' };
     const checked = m.confidence !== 'low' ? 'checked' : '';
     const simInfo = m.similarity !== undefined ? `<span style="font-size:10px;color:#636e72;">業者名類似度 ${m.similarity}%</span>` : '';
     const altInfo = m.alternatives ? `<span style="font-size:10px;color:#e17055;">（他${m.alternatives}候補）</span>` : '';
