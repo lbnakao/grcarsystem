@@ -386,6 +386,8 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:6px 12px;background:#fff8e1;border:1px solid #f9ca24;border-radius:6px;flex-wrap:wrap;">
       <button class="btn" onclick="autoDetectDuplicates()" style="background:#f9ca24;color:#2d3436;font-size:12px;padding:5px 12px;font-weight:700;">🔍 重複を自動検出</button>
       <button class="btn" id="btn-toggle-dup-view" onclick="toggleDuplicateView()" style="font-size:12px;padding:5px 12px;">📋 重複リスト（<span id="dup-count">0</span>件）</button>
+      <button class="btn" id="btn-unflag-selected" onclick="unflagSelectedDuplicates()" style="display:none;background:#00b894;color:#fff;font-size:12px;padding:5px 12px;font-weight:700;">↩ 選択を一斉に元に戻す</button>
+      <button class="btn" id="btn-unflag-all" onclick="unflagAllDuplicates()" style="display:none;font-size:12px;padding:5px 12px;">↩ すべて元に戻す</button>
       <span id="dup-view-indicator" style="display:none;color:#e17055;font-weight:700;font-size:12px;">⚠ 重複リスト表示中 — 通常の請求は非表示になっています</span>
     </div>
 
@@ -966,6 +968,46 @@ function unflagDuplicate(id) {
   renderInvoiceTable();
   renderInvoiceSummary();
 }
+// 重複リストで選択中の行を一斉に通常リストへ戻す
+function unflagSelectedDuplicates() {
+  // 重複リストに入っている＝今表示中の選択行のみ対象
+  const targets = [...selectedInvoices].filter(id => duplicateInvoiceIds.has(id));
+  if (targets.length === 0) { showToast('戻す対象が選択されていません', 'info'); return; }
+  targets.forEach(id => duplicateInvoiceIds.delete(id));
+  selectedInvoices.clear();
+  saveDupIds();
+  updateDupCount();
+  updateDupActionButtons();
+  renderInvoiceTable();
+  renderInvoiceSummary();
+  showToast(`${targets.length}件を通常リストへ戻しました`, 'success');
+}
+// 重複リスト全件を通常リストへ戻す
+function unflagAllDuplicates() {
+  if (duplicateInvoiceIds.size === 0) return;
+  if (!confirm(`重複リストの${duplicateInvoiceIds.size}件をすべて通常リストへ戻します。よろしいですか？`)) return;
+  const n = duplicateInvoiceIds.size;
+  duplicateInvoiceIds.clear();
+  selectedInvoices.clear();
+  saveDupIds();
+  updateDupCount();
+  updateDupActionButtons();
+  renderInvoiceTable();
+  renderInvoiceSummary();
+  showToast(`${n}件をすべて通常リストへ戻しました`, 'success');
+}
+// 重複ビュー専用ボタンの表示・活性を更新
+function updateDupActionButtons() {
+  const selBtn = document.getElementById('btn-unflag-selected');
+  const allBtn = document.getElementById('btn-unflag-all');
+  if (selBtn) selBtn.style.display = isDuplicateView ? '' : 'none';
+  if (allBtn) allBtn.style.display = (isDuplicateView && duplicateInvoiceIds.size > 0) ? '' : 'none';
+  if (selBtn) {
+    const n = [...selectedInvoices].filter(id => duplicateInvoiceIds.has(id)).length;
+    selBtn.disabled = n === 0;
+    selBtn.textContent = n > 0 ? `↩ 選択中の${n}件を一斉に元に戻す` : '↩ 選択を一斉に元に戻す';
+  }
+}
 function updateDupCount() {
   const el = document.getElementById('dup-count');
   if (el) el.textContent = duplicateInvoiceIds.size;
@@ -978,20 +1020,32 @@ function toggleDuplicateView() {
   const btn = document.getElementById('btn-toggle-dup-view');
   if (ind) ind.style.display = isDuplicateView ? '' : 'none';
   if (btn) btn.textContent = isDuplicateView ? '✕ 通常表示に戻す' : `📋 重複リスト（${duplicateInvoiceIds.size}件）`;
+  selectedInvoices.clear();
   updateDupCount();
+  updateDupActionButtons();
   renderInvoiceTable();
 }
+// 業者名を正規化（「（2ヶ月分）」等の注記・空白を除いて同一業者をまとめる）
+function normalizeVendorKey(vendor) {
+  return (vendor || '')
+    // 末尾／途中の「（N ヶ月分）」「(Nか月分)」「【…】」等の注記を除去
+    .replace(/[（(【\[][^）)】\]]*([ヶカか]月分|まとめ|合算|分)[^）)】\]]*[）)】\]]/g, '')
+    .replace(/[（(][0-9０-９]+[）)]/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+}
 function autoDetectDuplicates() {
-  const fields = ['amount', 'carry_1', 'carry_2', 'carry_3', 'carry_4'];
-  // 業者名でグループ化
+  const fields = ['amount', 'carry_1', 'carry_2', 'carry_3', 'carry_4', 'carry_5', 'carry_6'];
+  // 業者名（正規化）でグループ化 — 「富田肥料」と「富田肥料（3ヶ月分）」を同一視
   const groups = {};
   for (const inv of invoices) {
-    const key = (inv.vendor || '').trim().toLowerCase();
+    const key = normalizeVendorKey(inv.vendor);
     if (!key) continue;
     if (!groups[key]) groups[key] = [];
     groups[key].push(inv);
   }
-  let added = 0;
+  let added = 0, removed = 0;
   for (const rows of Object.values(groups)) {
     if (rows.length < 2) continue;
     // 金額が重複している行のクラスタを検出（推移的に結合）
@@ -1023,7 +1077,9 @@ function autoDetectDuplicates() {
         const bd = b.transaction_date || b.due_date || '';
         return bd.localeCompare(ad);
       });
-      // 先頭（最新・最多）を除き、残りを重複リストへ
+      // 先頭（最新・最多）は正規行として残す。誤って重複入りしていたら戻す
+      if (duplicateInvoiceIds.has(cluster[0].id)) { duplicateInvoiceIds.delete(cluster[0].id); removed++; }
+      // 残り（古い行）を重複リストへ
       for (let k = 1; k < cluster.length; k++) {
         if (!duplicateInvoiceIds.has(cluster[k].id)) { duplicateInvoiceIds.add(cluster[k].id); added++; }
       }
@@ -1031,9 +1087,13 @@ function autoDetectDuplicates() {
   }
   saveDupIds();
   updateDupCount();
+  updateDupActionButtons();
   renderInvoiceTable();
   renderInvoiceSummary();
-  showToast(added > 0 ? `${added}件の重複候補を検出（最新データは残し古い行を移動）` : '重複候補は見つかりませんでした', 'info');
+  const msg = (added > 0 || removed > 0)
+    ? `重複候補${added}件を移動${removed > 0 ? `／最新${removed}件を正規リストへ復帰` : ''}（最新データは残し古い行を移動）`
+    : '重複候補は見つかりませんでした';
+  showToast(msg, 'info');
 }
 
 // 列ソート状態（key=ソートキー文字列, dir='asc'|'desc'）
@@ -2256,6 +2316,7 @@ document.getElementById('invoice-tbody').addEventListener('change', (e) => {
     const id = Number(e.target.dataset.id);
     if (e.target.checked) selectedInvoices.add(id); else selectedInvoices.delete(id);
     updateInvoiceActionButtons();
+    updateDupActionButtons();
   }
 });
 document.getElementById('invoice-check-all').addEventListener('change', (e) => {
@@ -2265,6 +2326,7 @@ document.getElementById('invoice-check-all').addEventListener('change', (e) => {
     if (e.target.checked) selectedInvoices.add(id); else selectedInvoices.delete(id);
   });
   updateInvoiceActionButtons();
+  updateDupActionButtons();
 });
 
 // 請求書フィルタ
