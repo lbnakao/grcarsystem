@@ -382,6 +382,13 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <button class="btn btn-danger" id="btn-invoice-delete-filter" style="font-size:11px;padding:5px 12px;opacity:0.8;">今表示中の請求を一括削除...</button>
     </div>
 
+    <!-- 重複チェックバー -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:6px 12px;background:#fff8e1;border:1px solid #f9ca24;border-radius:6px;flex-wrap:wrap;">
+      <button class="btn" onclick="autoDetectDuplicates()" style="background:#f9ca24;color:#2d3436;font-size:12px;padding:5px 12px;font-weight:700;">🔍 重複を自動検出</button>
+      <button class="btn" id="btn-toggle-dup-view" onclick="toggleDuplicateView()" style="font-size:12px;padding:5px 12px;">📋 重複リスト（<span id="dup-count">0</span>件）</button>
+      <span id="dup-view-indicator" style="display:none;color:#e17055;font-weight:700;font-size:12px;">⚠ 重複リスト表示中 — 通常の請求は非表示になっています</span>
+    </div>
+
     <div style="font-size:11px;color:#636e72;margin-bottom:8px;">
       💡 <strong>1件ずつ消込する</strong>：表の金額（今月分・前月繰越…）を<strong>直接クリック</strong>すると「✓ 消込にする / ✎ 金額を変更」のメニューが出ます。<br>
       💡 <strong>まとめて消込する</strong>：「🔄 通帳と照合して消込」または「⚡ 完全一致を自動消込」で複数件を一括処理できます。<br>
@@ -932,6 +939,72 @@ let selectedInvoices = new Set();
 let pendingUpload = null;
 let matchData = [];
 
+// 重複管理（localStorageで永続化）
+let duplicateInvoiceIds = new Set(JSON.parse(localStorage.getItem('keiri_dup_ids') || '[]'));
+let isDuplicateView = false;
+
+function saveDupIds() {
+  localStorage.setItem('keiri_dup_ids', JSON.stringify([...duplicateInvoiceIds]));
+}
+function flagAsDuplicate(id) {
+  duplicateInvoiceIds.add(id);
+  saveDupIds();
+  updateDupCount();
+  renderInvoiceTable();
+}
+function unflagDuplicate(id) {
+  duplicateInvoiceIds.delete(id);
+  saveDupIds();
+  updateDupCount();
+  renderInvoiceTable();
+}
+function updateDupCount() {
+  const el = document.getElementById('dup-count');
+  if (el) el.textContent = duplicateInvoiceIds.size;
+  const btn = document.getElementById('btn-toggle-dup-view');
+  if (btn) btn.style.background = isDuplicateView ? '#e17055' : (duplicateInvoiceIds.size > 0 ? '#fdcb6e' : '');
+}
+function toggleDuplicateView() {
+  isDuplicateView = !isDuplicateView;
+  const ind = document.getElementById('dup-view-indicator');
+  const btn = document.getElementById('btn-toggle-dup-view');
+  if (ind) ind.style.display = isDuplicateView ? '' : 'none';
+  if (btn) btn.textContent = isDuplicateView ? '✕ 通常表示に戻す' : `📋 重複リスト（${duplicateInvoiceIds.size}件）`;
+  updateDupCount();
+  renderInvoiceTable();
+}
+function autoDetectDuplicates() {
+  const fields = ['amount', 'carry_1', 'carry_2', 'carry_3', 'carry_4'];
+  // 業者名でグループ化
+  const groups = {};
+  for (const inv of invoices) {
+    const key = (inv.vendor || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(inv);
+  }
+  let added = 0;
+  for (const rows of Object.values(groups)) {
+    if (rows.length < 2) continue;
+    for (let i = 0; i < rows.length; i++) {
+      const ai = new Set(fields.map(f => rows[i][f]).filter(v => v && v > 0));
+      if (!ai.size) continue;
+      for (let j = i + 1; j < rows.length; j++) {
+        const aj = new Set(fields.map(f => rows[j][f]).filter(v => v && v > 0));
+        const overlap = [...ai].some(v => aj.has(v));
+        if (overlap) {
+          if (!duplicateInvoiceIds.has(rows[i].id)) { duplicateInvoiceIds.add(rows[i].id); added++; }
+          if (!duplicateInvoiceIds.has(rows[j].id)) { duplicateInvoiceIds.add(rows[j].id); added++; }
+        }
+      }
+    }
+  }
+  saveDupIds();
+  updateDupCount();
+  renderInvoiceTable();
+  showToast(added > 0 ? `${added}件の重複候補を検出して重複リストへ移動しました` : '重複候補は見つかりませんでした', added > 0 ? 'info' : 'info');
+}
+
 // 列ソート状態（key=ソートキー文字列, dir='asc'|'desc'）
 let bankSort = { key: 'tx_date', dir: 'desc' };
 let invoiceSort = { key: 'transaction_date', dir: 'asc' };
@@ -1025,6 +1098,7 @@ async function init() {
   try { await loadSummaryMonthTabs(); } catch(e) { console.error('sumMonthTabs:', e); }
   try { await loadBankTransactions(); } catch(e) { console.error('bankTx:', e); }
   try { await loadInvoices(); } catch(e) { console.error('invoices:', e); }
+  updateDupCount();
 }
 
 async function loadAccounts() {
@@ -1799,6 +1873,14 @@ function renderInvoiceTable() {
   const showTotal = !currentInvoiceMonth;
   document.getElementById('invoice-total-th').style.display = showTotal ? '' : 'none';
 
+  // 重複ビュー切替に合わせて表示件数バッジ更新
+  updateDupCount();
+
+  // 重複フィルタリング
+  const displayInvoices = isDuplicateView
+    ? invoices.filter(inv => duplicateInvoiceIds.has(inv.id))
+    : invoices.filter(inv => !duplicateInvoiceIds.has(inv.id));
+
   const tbody = document.getElementById('invoice-tbody');
 
   // 遅延月数でレベル判定（支払いが遅れている月数が多いほど濃い赤）
@@ -1827,7 +1909,7 @@ function renderInvoiceTable() {
     return t;
   }
 
-  tbody.innerHTML = invoices.map(inv => {
+  tbody.innerHTML = displayInvoices.map(inv => {
     const carryTotal = carryTotalOf(inv);
     const lvl = carryLevelByMonths(inv);
     let rowClass = '';
@@ -1864,9 +1946,13 @@ function renderInvoiceTable() {
     const carry4Badge = (inv.carry_4 || 0) > 0
       ? `<span style="display:block;font-size:10px;font-weight:700;color:#e17055;" title="4か月以上前の未払い合計">📛4か月前以上 ¥${yen(inv.carry_4)}</span>`
       : '';
+    // 重複ボタン
+    const dupBtn = isDuplicateView
+      ? `<br><button onclick="unflagDuplicate(${inv.id})" style="font-size:9px;padding:1px 5px;margin-top:3px;background:#00b894;color:#fff;border:none;border-radius:3px;cursor:pointer;">↩ 戻す</button>`
+      : `<br><button onclick="flagAsDuplicate(${inv.id})" style="font-size:9px;padding:1px 5px;margin-top:3px;background:#fdcb6e;color:#2d3436;border:none;border-radius:3px;cursor:pointer;">→ 重複へ</button>`;
     return `<tr class="${rowClass}" data-id="${inv.id}">
       <td><input type="checkbox" data-id="${inv.id}" ${checked}></td>
-      <td>${sb}${carryBadge}</td>
+      <td>${sb}${carryBadge}${dupBtn}</td>
       <td class="editable" data-field="vendor" data-type="text">${inv.vendor || ''}</td>
       <td class="editable" data-field="category" data-type="select-category">${inv.category || ''}</td>
       <td class="editable" data-field="payment_method" data-type="select-payment" data-value="${inv.payment_method || ''}">${paymentMethodBadge(inv.payment_method)}</td>
