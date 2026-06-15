@@ -285,6 +285,8 @@ async function migrateSchema() {
   // 経理モジュール用テーブル群（keiri_ プレフィックスで既存テーブルと分離）
   await createKeiriTables();
   await addColumnIfMissing('keiri_bank_accounts', 'account_number', "TEXT DEFAULT ''");
+  await addColumnIfMissing('keiri_invoices', 'carry_4', 'REAL DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_4_cleared', 'INTEGER DEFAULT 0');
   await addColumnIfMissing('keiri_invoice_files', 'facility', "TEXT DEFAULT ''");
 
   // 資金管理（社長Excel v8 のアプリ化）用テーブル群

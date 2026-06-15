@@ -276,7 +276,7 @@ async function predictVendorName(description, account = '') {
 
 // ─── 請求書ステータスを再計算 ───
 async function recalcInvoiceStatus(id) {
-  const rows = await query('SELECT amount, carry_1, carry_2, carry_3, amount_cleared, carry_1_cleared, carry_2_cleared, carry_3_cleared FROM keiri_invoices WHERE id = ?', [id]);
+  const rows = await query('SELECT amount, carry_1, carry_2, carry_3, carry_4, amount_cleared, carry_1_cleared, carry_2_cleared, carry_3_cleared, carry_4_cleared FROM keiri_invoices WHERE id = ?', [id]);
   if (rows.length === 0) return;
   const r = rows[0];
   const pairs = [
@@ -284,6 +284,7 @@ async function recalcInvoiceStatus(id) {
     [r.carry_1 || 0, r.carry_1_cleared],
     [r.carry_2 || 0, r.carry_2_cleared],
     [r.carry_3 || 0, r.carry_3_cleared],
+    [r.carry_4 || 0, r.carry_4_cleared],
   ];
   const nonZero = pairs.filter(([v]) => v > 0);
   let newStatus;
@@ -951,7 +952,7 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
       }
       if (headerIdx < 0) continue;
       const header = rows[headerIdx];
-      const cm = { vendor: -1, category: -1, payMethod: -1, dueDate: -1, facility: -1, txDate: -1, amount: -1, carry1: -1, carry2: -1, carry3: -1, note: -1 };
+      const cm = { vendor: -1, category: -1, payMethod: -1, dueDate: -1, facility: -1, txDate: -1, amount: -1, carry1: -1, carry2: -1, carry3: -1, carry4: -1, note: -1 };
       for (let i = 0; i < header.length; i++) {
         const h = String(header[i] || '').trim();
         if (!h) continue;
@@ -965,6 +966,7 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
         else if (cm.carry1 < 0 && /前月繰越/.test(h)) cm.carry1 = i;
         else if (cm.carry2 < 0 && /前々.*繰越|前々月/.test(h)) cm.carry2 = i;
         else if (cm.carry3 < 0 && /前々々|3.*繰越/.test(h)) cm.carry3 = i;
+        else if (cm.carry4 < 0 && /4.*繰越|４か月|前々々々/.test(h)) cm.carry4 = i;
         else if (cm.note < 0 && /備考/.test(h)) cm.note = i;
       }
       for (let i = headerIdx + 1; i < rows.length; i++) {
@@ -977,12 +979,13 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
         const carry1 = toInt(get(cm.carry1));
         const carry2 = toInt(get(cm.carry2));
         const carry3 = toInt(get(cm.carry3));
-        if (amount === 0 && carry1 === 0 && carry2 === 0 && carry3 === 0) continue;
+        const carry4 = toInt(get(cm.carry4));
+        if (amount === 0 && carry1 === 0 && carry2 === 0 && carry3 === 0 && carry4 === 0) continue;
         allInvoices.push({
           vendor, category: toStr(get(cm.category)), payment_method: toStr(get(cm.payMethod)),
           due_date: parseDate(get(cm.dueDate)) || '', facility: toStr(get(cm.facility)),
           entity, transaction_date: parseDate(get(cm.txDate)) || '',
-          amount, carry_1: carry1, carry_2: carry2, carry_3: carry3, month, year, note: toStr(get(cm.note)),
+          amount, carry_1: carry1, carry_2: carry2, carry_3: carry3, carry_4: carry4, month, year, note: toStr(get(cm.note)),
         });
       }
     }
@@ -1004,7 +1007,7 @@ router.post('/invoices/upload/confirm', async (req, res) => {
       let existing = [];
       if (skip_duplicates) {
         existing = await query(
-          `SELECT id, amount, carry_1, carry_2, carry_3,
+          `SELECT id, amount, carry_1, carry_2, carry_3, carry_4,
                   category, payment_method, due_date, transaction_date, note
              FROM keiri_invoices
             WHERE COALESCE(entity,'') = ?
@@ -1023,18 +1026,19 @@ router.post('/invoices/upload/confirm', async (req, res) => {
         const sameAmounts = (e.amount || 0) === (inv.amount || 0)
           && (e.carry_1 || 0) === (inv.carry_1 || 0)
           && (e.carry_2 || 0) === (inv.carry_2 || 0)
-          && (e.carry_3 || 0) === (inv.carry_3 || 0);
+          && (e.carry_3 || 0) === (inv.carry_3 || 0)
+          && (e.carry_4 || 0) === (inv.carry_4 || 0);
         if (sameAmounts) { skipped++; continue; }
         // 金額が違うので最新値で上書き更新（消込フラグは触らない）
         await run(`UPDATE keiri_invoices SET
-                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?,
+                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?, carry_4 = ?,
                      category = COALESCE(NULLIF(?, ''), category),
                      payment_method = COALESCE(NULLIF(?, ''), payment_method),
                      due_date = COALESCE(NULLIF(?, ''), due_date),
                      transaction_date = COALESCE(NULLIF(?, ''), transaction_date),
                      note = COALESCE(NULLIF(?, ''), note)
                    WHERE id = ?`,
-          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0,
+          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.carry_4 || 0,
            inv.category || '', inv.payment_method || '', inv.due_date || '',
            inv.transaction_date || '', inv.note || '', e.id]);
         // 消込状態を金額に合わせて再計算
@@ -1042,9 +1046,9 @@ router.post('/invoices/upload/confirm', async (req, res) => {
         updated++;
         continue;
       }
-      await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
+      await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
         [inv.vendor || '', inv.category || '', inv.payment_method || '', inv.due_date || '', inv.facility || '', inv.entity || '',
-         inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.month || '', inv.year || null, inv.note || '']);
+         inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.carry_4 || 0, inv.month || '', inv.year || null, inv.note || '']);
       inserted++;
     }
     res.json({ ok: true, inserted, updated, skipped });
@@ -1055,11 +1059,11 @@ router.post('/invoices/upload/confirm', async (req, res) => {
 // 請求書 CRUD
 // ============================================================================
 
-// 前月繰越自動計算：同業者・同施設の未払い分を最大3ヶ月分返す
+// 前月繰越自動計算：同業者・同施設の未払い分を最大3ヶ月 + 4か月以上前の合計を返す
 // 基準月は month("4月") → due_date("4/30" or "2026-04-30") → transaction_date の順で決定
 router.get('/invoices/carryover', async (req, res) => {
   const { vendor, facility, month, due_date, transaction_date } = req.query;
-  if (!vendor) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  if (!vendor) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0 });
 
   // 基準月番号を決定
   let monthNum = 0;
@@ -1068,15 +1072,15 @@ router.get('/invoices/carryover', async (req, res) => {
     const m = String(src).match(/(?:^|[-\/])0?(\d{1,2})(?:[月\/\-])/);
     if (m) { monthNum = parseInt(m[1]); break; }
   }
-  if (!monthNum) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  if (!monthNum) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0 });
 
-  const result = { carry_1: 0, carry_2: 0, carry_3: 0 };
+  const result = { carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0 };
+  // 直近3ヶ月は個別に
   for (let i = 1; i <= 3; i++) {
     let prevNum = monthNum - i;
     if (prevNum <= 0) prevNum += 12;
     const prevMonth = `${prevNum}月`;
     const prevPad = String(prevNum).padStart(2, '0');
-    // month フィールド一致 OR 日付フィールドの月部分一致
     let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices
       WHERE vendor = ? AND status = '未' AND (
         month = ? OR
@@ -1093,6 +1097,27 @@ router.get('/invoices/carryover', async (req, res) => {
     else if (i === 2) result.carry_2 = total;
     else result.carry_3 = total;
   }
+  // 4か月以上前は合算してcarry_4に
+  let carry4 = 0;
+  for (let i = 4; i <= 24; i++) {
+    let prevNum = monthNum - i;
+    while (prevNum <= 0) prevNum += 12;
+    const prevMonth = `${prevNum}月`;
+    const prevPad = String(prevNum).padStart(2, '0');
+    let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices
+      WHERE vendor = ? AND status = '未' AND (
+        month = ? OR
+        due_date LIKE ? OR due_date LIKE ? OR
+        transaction_date LIKE ? OR transaction_date LIKE ?
+      )`;
+    const params = [vendor, prevMonth,
+      `${prevNum}/%`, `%-${prevPad}-%`,
+      `${prevNum}/%`, `%-${prevPad}-%`];
+    if (facility) { sql += ' AND facility = ?'; params.push(facility); }
+    const rows = await query(sql, params);
+    carry4 += Number(rows[0].total) || 0;
+  }
+  result.carry_4 = carry4;
   res.json(result);
 });
 
@@ -1112,15 +1137,15 @@ router.get('/invoices', async (req, res) => {
 });
 
 router.post('/invoices', async (req, res) => {
-  const { vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note } = req.body;
-  const id = await runInsert(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
+  const { vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, month, year, note } = req.body;
+  const id = await runInsert(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
     [vendor || '（新規）', category || '', payment_method || '', due_date || '', facility || '', entity || '',
-     transaction_date || '', amount || 0, carry_1 || 0, carry_2 || 0, carry_3 || 0, month || '', year || null, note || '']);
+     transaction_date || '', amount || 0, carry_1 || 0, carry_2 || 0, carry_3 || 0, carry_4 || 0, month || '', year || null, note || '']);
   res.json({ id });
 });
 
 router.patch('/invoices/:id', async (req, res) => {
-  const allowed = ['vendor', 'category', 'payment_method', 'due_date', 'facility', 'entity', 'transaction_date', 'amount', 'carry_1', 'carry_2', 'carry_3', 'month', 'year', 'note', 'status', 'amount_cleared', 'carry_1_cleared', 'carry_2_cleared', 'carry_3_cleared'];
+  const allowed = ['vendor', 'category', 'payment_method', 'due_date', 'facility', 'entity', 'transaction_date', 'amount', 'carry_1', 'carry_2', 'carry_3', 'carry_4', 'month', 'year', 'note', 'status', 'amount_cleared', 'carry_1_cleared', 'carry_2_cleared', 'carry_3_cleared', 'carry_4_cleared'];
   const upd = [], val = [];
   for (const [k, v] of Object.entries(req.body)) {
     if (allowed.includes(k)) { upd.push(`${k} = ?`); val.push(v); }
