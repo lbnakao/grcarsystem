@@ -421,8 +421,8 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <th class="sortable" data-sort="due_date" title="クリックで昇順/降順を切替">支払期日<span class="sort-arrow">⇅</span></th>
             <th>請求先（施設）</th>
             <th class="sortable" data-sort="transaction_date" title="クリックで昇順/降順を切替">取引日<span class="sort-arrow">⇅</span></th>
-            <th style="background:#1a3a5c;">合計金額</th>
-            <th>今月金額</th>
+            <th id="invoice-total-th" style="background:#1a3a5c;">合計金額</th>
+            <th class="sortable" data-sort="amount" title="クリックで昇順/降順を切替">今月金額<span class="sort-arrow">⇅</span></th>
             <th>前月</th>
             <th>前々月</th>
             <th>３か月前</th>
@@ -1795,6 +1795,10 @@ function renderInvoiceTable() {
   invoices.sort((a, b) => (a.status === '済' ? 1 : 0) - (b.status === '済' ? 1 : 0));
   applySortHeaderStyle('#page-invoices', invoiceSort.key, invoiceSort.dir);
 
+  // 合計金額列は「すべて」タブのみ表示
+  const showTotal = !currentInvoiceMonth;
+  document.getElementById('invoice-total-th').style.display = showTotal ? '' : 'none';
+
   const tbody = document.getElementById('invoice-tbody');
 
   // 遅延月数でレベル判定（支払いが遅れている月数が多いほど濃い赤）
@@ -1869,7 +1873,7 @@ function renderInvoiceTable() {
       <td class="editable" data-field="due_date" data-type="text">${inv.due_date || ''}</td>
       <td class="editable" data-field="facility" data-type="select-facility">${inv.facility || ''}</td>
       <td class="editable" data-field="transaction_date" data-type="date-input">${inv.transaction_date || ''}</td>
-      <td class="amount" style="background:#f0f4ff;border-left:2px solid #1a3a5c;">${totalDisplay}</td>
+      ${showTotal ? `<td class="amount" style="background:#f0f4ff;border-left:2px solid #1a3a5c;">${totalDisplay}</td>` : ''}
       <td class="editable amount" data-field="amount" data-type="number">${strikeOrValue(inv.amount, inv.amount_cleared)}</td>
       <td class="editable amount" data-field="carry_1" data-type="number">${strikeOrValue(inv.carry_1, inv.carry_1_cleared)}</td>
       <td class="editable amount" data-field="carry_2" data-type="number">${strikeOrValue(inv.carry_2, inv.carry_2_cleared)}</td>
