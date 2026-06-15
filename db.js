@@ -286,6 +286,12 @@ async function migrateSchema() {
   await createKeiriTables();
   await addColumnIfMissing('keiri_bank_accounts', 'account_number', "TEXT DEFAULT ''");
   await addColumnIfMissing('keiri_invoice_files', 'facility', "TEXT DEFAULT ''");
+  await addColumnIfMissing('keiri_invoices', 'carry_4', 'REAL DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_4_cleared', 'INTEGER DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_5', 'REAL DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_5_cleared', 'INTEGER DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_6', 'REAL DEFAULT 0');
+  await addColumnIfMissing('keiri_invoices', 'carry_6_cleared', 'INTEGER DEFAULT 0');
 
   // 資金管理（社長Excel v8 のアプリ化）用テーブル群
   await createFundsTables();

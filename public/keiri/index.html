@@ -433,6 +433,9 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <th>前月</th>
             <th>前々月</th>
             <th>３か月前</th>
+            <th>４か月前</th>
+            <th>５か月前</th>
+            <th>６か月以上</th>
             <th>備考</th>
           </tr>
         </thead>
@@ -906,9 +909,12 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
       <div class="form-row"><label>取引日</label><input id="inv-transaction-date" type="date"></div>
       <div class="form-row"><label>月</label><input id="inv-month" type="text" placeholder="例: 2月"></div>
       <div class="form-row"><label>金額</label><input id="inv-amount" type="number" value="0"></div>
-      <div class="form-row"><label>前月繰越</label><input id="inv-carry-1" type="number" value="0"></div>
-      <div class="form-row"><label>前々繰越</label><input id="inv-carry-2" type="number" value="0"></div>
-      <div class="form-row"><label>前々々月</label><input id="inv-carry-3" type="number" value="0"></div>
+      <div class="form-row"><label>前月（1か月前）</label><input id="inv-carry-1" type="number" value="0"></div>
+      <div class="form-row"><label>前々月（2か月前）</label><input id="inv-carry-2" type="number" value="0"></div>
+      <div class="form-row"><label>3か月前</label><input id="inv-carry-3" type="number" value="0"></div>
+      <div class="form-row"><label>4か月前</label><input id="inv-carry-4" type="number" value="0"></div>
+      <div class="form-row"><label>5か月前</label><input id="inv-carry-5" type="number" value="0"></div>
+      <div class="form-row"><label>6か月以上（累計）</label><input id="inv-carry-6" type="number" value="0"></div>
     </div>
     <div class="form-row" style="margin-top:12px;">
       <label>備考</label>
@@ -1956,21 +1962,19 @@ function renderInvoiceTable() {
         ? `<span class="cleared-amount">¥${yen(val)}</span>`
         : yen(val);
     };
-    // 合計金額（未払い分のみ合算、4か月以上前含む）
+    // 合計金額（未払い分のみ合算、全繰越月含む）
     const totalRemaining =
       (inv.amount_cleared ? 0 : (inv.amount || 0)) +
       (inv.carry_1_cleared ? 0 : (inv.carry_1 || 0)) +
       (inv.carry_2_cleared ? 0 : (inv.carry_2 || 0)) +
       (inv.carry_3_cleared ? 0 : (inv.carry_3 || 0)) +
-      (inv.carry_4_cleared ? 0 : (inv.carry_4 || 0));
-    const totalGross = (inv.amount || 0) + (inv.carry_1 || 0) + (inv.carry_2 || 0) + (inv.carry_3 || 0) + (inv.carry_4 || 0);
+      (inv.carry_4_cleared ? 0 : (inv.carry_4 || 0)) +
+      (inv.carry_5_cleared ? 0 : (inv.carry_5 || 0)) +
+      (inv.carry_6_cleared ? 0 : (inv.carry_6 || 0));
+    const totalGross = (inv.amount || 0) + (inv.carry_1 || 0) + (inv.carry_2 || 0) + (inv.carry_3 || 0) + (inv.carry_4 || 0) + (inv.carry_5 || 0) + (inv.carry_6 || 0);
     const totalDisplay = inv.status === '済'
       ? `<span class="cleared-amount">¥${yen(totalGross)}</span>`
       : (totalRemaining > 0 ? `<strong style="color:#d63031;">¥${yen(totalRemaining)}</strong>` : '');
-    // 備考セル：4か月以上前の繰越があれば先頭に表示
-    const carry4Badge = (inv.carry_4 || 0) > 0
-      ? `<span style="display:block;font-size:10px;font-weight:700;color:#e17055;" title="4か月以上前の未払い合計">📛4か月前以上 ¥${yen(inv.carry_4)}</span>`
-      : '';
     // 重複ボタン
     const dupBtn = isDuplicateView
       ? `<br><button onclick="unflagDuplicate(${inv.id})" style="font-size:9px;padding:1px 5px;margin-top:3px;background:#00b894;color:#fff;border:none;border-radius:3px;cursor:pointer;">↩ 戻す</button>`
@@ -1989,7 +1993,10 @@ function renderInvoiceTable() {
       <td class="editable amount" data-field="carry_1" data-type="number">${strikeOrValue(inv.carry_1, inv.carry_1_cleared)}</td>
       <td class="editable amount" data-field="carry_2" data-type="number">${strikeOrValue(inv.carry_2, inv.carry_2_cleared)}</td>
       <td class="editable amount" data-field="carry_3" data-type="number">${strikeOrValue(inv.carry_3, inv.carry_3_cleared)}</td>
-      <td class="editable" data-field="note" data-type="text" style="font-size:11px;color:#636e72;">${carry4Badge}${inv.note || ''}</td>
+      <td class="editable amount" data-field="carry_4" data-type="number">${strikeOrValue(inv.carry_4, inv.carry_4_cleared)}</td>
+      <td class="editable amount" data-field="carry_5" data-type="number">${strikeOrValue(inv.carry_5, inv.carry_5_cleared)}</td>
+      <td class="editable amount" data-field="carry_6" data-type="number">${strikeOrValue(inv.carry_6, inv.carry_6_cleared)}</td>
+      <td class="editable" data-field="note" data-type="text" style="font-size:11px;color:#636e72;">${inv.note || ''}</td>
     </tr>`;
   }).join('');
 }
@@ -2374,7 +2381,7 @@ function openInvoiceModal() {
   editingInvoiceId = null;
   document.getElementById('invoice-modal-title').textContent = '新規請求書';
   ['inv-vendor', 'inv-due-date', 'inv-transaction-date', 'inv-month', 'inv-note'].forEach(id => document.getElementById(id).value = '');
-  ['inv-amount', 'inv-carry-1', 'inv-carry-2', 'inv-carry-3'].forEach(id => document.getElementById(id).value = 0);
+  ['inv-amount', 'inv-carry-1', 'inv-carry-2', 'inv-carry-3', 'inv-carry-4', 'inv-carry-5', 'inv-carry-6'].forEach(id => document.getElementById(id).value = 0);
   ['inv-category', 'inv-payment-method', 'inv-facility', 'inv-entity'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('inv-month').value = currentInvoiceMonth || '';
   document.getElementById('inv-entity').value = currentInvoiceEntity || '';
@@ -2543,6 +2550,9 @@ async function fetchCarryover() {
     if (data.carry_1 > 0) document.getElementById('inv-carry-1').value = data.carry_1;
     if (data.carry_2 > 0) document.getElementById('inv-carry-2').value = data.carry_2;
     if (data.carry_3 > 0) document.getElementById('inv-carry-3').value = data.carry_3;
+    if (data.carry_4 > 0) document.getElementById('inv-carry-4').value = data.carry_4;
+    if (data.carry_5 > 0) document.getElementById('inv-carry-5').value = data.carry_5;
+    if (data.carry_6 > 0) document.getElementById('inv-carry-6').value = data.carry_6;
   } catch (_) {}
 }
 
@@ -2738,6 +2748,9 @@ document.getElementById('inv-modal-save').addEventListener('click', async () => 
     carry_1: Number(document.getElementById('inv-carry-1').value) || 0,
     carry_2: Number(document.getElementById('inv-carry-2').value) || 0,
     carry_3: Number(document.getElementById('inv-carry-3').value) || 0,
+    carry_4: Number(document.getElementById('inv-carry-4').value) || 0,
+    carry_5: Number(document.getElementById('inv-carry-5').value) || 0,
+    carry_6: Number(document.getElementById('inv-carry-6').value) || 0,
     note: document.getElementById('inv-note').value,
   };
   if (!data.vendor) { showToast('業者名は必須です', 'error'); return; }

@@ -276,7 +276,7 @@ async function predictVendorName(description, account = '') {
 
 // ─── 請求書ステータスを再計算 ───
 async function recalcInvoiceStatus(id) {
-  const rows = await query('SELECT amount, carry_1, carry_2, carry_3, amount_cleared, carry_1_cleared, carry_2_cleared, carry_3_cleared FROM keiri_invoices WHERE id = ?', [id]);
+  const rows = await query('SELECT amount, carry_1, carry_2, carry_3, carry_4, carry_5, carry_6, amount_cleared, carry_1_cleared, carry_2_cleared, carry_3_cleared, carry_4_cleared, carry_5_cleared, carry_6_cleared FROM keiri_invoices WHERE id = ?', [id]);
   if (rows.length === 0) return;
   const r = rows[0];
   const pairs = [
@@ -284,6 +284,9 @@ async function recalcInvoiceStatus(id) {
     [r.carry_1 || 0, r.carry_1_cleared],
     [r.carry_2 || 0, r.carry_2_cleared],
     [r.carry_3 || 0, r.carry_3_cleared],
+    [r.carry_4 || 0, r.carry_4_cleared],
+    [r.carry_5 || 0, r.carry_5_cleared],
+    [r.carry_6 || 0, r.carry_6_cleared],
   ];
   const nonZero = pairs.filter(([v]) => v > 0);
   let newStatus;
@@ -1055,11 +1058,11 @@ router.post('/invoices/upload/confirm', async (req, res) => {
 // 請求書 CRUD
 // ============================================================================
 
-// 前月繰越自動計算：同業者・同施設の未払い分を最大3ヶ月分返す
+// 前月繰越自動計算：同業者・同施設の未払い分を最大5か月分＋6か月以上の累計を返す
 // 基準月は month("4月") → due_date("4/30" or "2026-04-30") → transaction_date の順で決定
 router.get('/invoices/carryover', async (req, res) => {
   const { vendor, facility, month, due_date, transaction_date } = req.query;
-  if (!vendor) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  if (!vendor) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0, carry_5: 0, carry_6: 0 });
 
   // 基準月番号を決定
   let monthNum = 0;
@@ -1068,15 +1071,13 @@ router.get('/invoices/carryover', async (req, res) => {
     const m = String(src).match(/(?:^|[-\/])0?(\d{1,2})(?:[月\/\-])/);
     if (m) { monthNum = parseInt(m[1]); break; }
   }
-  if (!monthNum) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0 });
+  if (!monthNum) return res.json({ carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0, carry_5: 0, carry_6: 0 });
 
-  const result = { carry_1: 0, carry_2: 0, carry_3: 0 };
-  for (let i = 1; i <= 3; i++) {
-    let prevNum = monthNum - i;
-    if (prevNum <= 0) prevNum += 12;
+  const queryMonth = async (offsetMonths) => {
+    let prevNum = monthNum - offsetMonths;
+    while (prevNum <= 0) prevNum += 12;
     const prevMonth = `${prevNum}月`;
     const prevPad = String(prevNum).padStart(2, '0');
-    // month フィールド一致 OR 日付フィールドの月部分一致
     let sql = `SELECT COALESCE(SUM(amount), 0) as total FROM keiri_invoices
       WHERE vendor = ? AND status = '未' AND (
         month = ? OR
@@ -1088,11 +1089,17 @@ router.get('/invoices/carryover', async (req, res) => {
       `${prevNum}/%`, `%-${prevPad}-%`];
     if (facility) { sql += ' AND facility = ?'; params.push(facility); }
     const rows = await query(sql, params);
-    const total = Number(rows[0].total) || 0;
-    if (i === 1) result.carry_1 = total;
-    else if (i === 2) result.carry_2 = total;
-    else result.carry_3 = total;
-  }
+    return Number(rows[0].total) || 0;
+  };
+
+  const result = { carry_1: 0, carry_2: 0, carry_3: 0, carry_4: 0, carry_5: 0, carry_6: 0 };
+  result.carry_1 = await queryMonth(1);
+  result.carry_2 = await queryMonth(2);
+  result.carry_3 = await queryMonth(3);
+  result.carry_4 = await queryMonth(4);
+  result.carry_5 = await queryMonth(5);
+  // carry_6: 6か月以上前の累計
+  for (let i = 6; i <= 24; i++) result.carry_6 += await queryMonth(i);
   res.json(result);
 });
 
@@ -1112,15 +1119,15 @@ router.get('/invoices', async (req, res) => {
 });
 
 router.post('/invoices', async (req, res) => {
-  const { vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note } = req.body;
-  const id = await runInsert(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
+  const { vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, carry_5, carry_6, month, year, note } = req.body;
+  const id = await runInsert(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, carry_4, carry_5, carry_6, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
     [vendor || '（新規）', category || '', payment_method || '', due_date || '', facility || '', entity || '',
-     transaction_date || '', amount || 0, carry_1 || 0, carry_2 || 0, carry_3 || 0, month || '', year || null, note || '']);
+     transaction_date || '', amount || 0, carry_1 || 0, carry_2 || 0, carry_3 || 0, carry_4 || 0, carry_5 || 0, carry_6 || 0, month || '', year || null, note || '']);
   res.json({ id });
 });
 
 router.patch('/invoices/:id', async (req, res) => {
-  const allowed = ['vendor', 'category', 'payment_method', 'due_date', 'facility', 'entity', 'transaction_date', 'amount', 'carry_1', 'carry_2', 'carry_3', 'month', 'year', 'note', 'status', 'amount_cleared', 'carry_1_cleared', 'carry_2_cleared', 'carry_3_cleared'];
+  const allowed = ['vendor', 'category', 'payment_method', 'due_date', 'facility', 'entity', 'transaction_date', 'amount', 'carry_1', 'carry_2', 'carry_3', 'carry_4', 'carry_5', 'carry_6', 'month', 'year', 'note', 'status', 'amount_cleared', 'carry_1_cleared', 'carry_2_cleared', 'carry_3_cleared', 'carry_4_cleared', 'carry_5_cleared', 'carry_6_cleared'];
   const upd = [], val = [];
   for (const [k, v] of Object.entries(req.body)) {
     if (allowed.includes(k)) { upd.push(`${k} = ?`); val.push(v); }
