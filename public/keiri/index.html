@@ -415,16 +415,17 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
           <tr>
             <th><input type="checkbox" id="invoice-check-all"></th>
             <th>状態</th>
-            <th>請求元（業者名）</th>
+            <th class="sortable" data-sort="vendor" title="クリックで昇順/降順を切替">請求元（業者名）<span class="sort-arrow">⇅</span></th>
             <th>勘定科目</th>
             <th>支払方法</th>
             <th class="sortable" data-sort="due_date" title="クリックで昇順/降順を切替">支払期日<span class="sort-arrow">⇅</span></th>
             <th>請求先（施設）</th>
             <th class="sortable" data-sort="transaction_date" title="クリックで昇順/降順を切替">取引日<span class="sort-arrow">⇅</span></th>
+            <th style="background:#1a3a5c;">合計金額</th>
             <th>今月金額</th>
-            <th>前月繰越</th>
-            <th>前々月繰越</th>
-            <th>前々々月繰越</th>
+            <th>前月</th>
+            <th>前々月</th>
+            <th>３か月前</th>
             <th>備考</th>
           </tr>
         </thead>
@@ -1844,6 +1845,21 @@ function renderInvoiceTable() {
         ? `<span class="cleared-amount">¥${yen(val)}</span>`
         : yen(val);
     };
+    // 合計金額（未払い分のみ合算、4か月以上前含む）
+    const totalRemaining =
+      (inv.amount_cleared ? 0 : (inv.amount || 0)) +
+      (inv.carry_1_cleared ? 0 : (inv.carry_1 || 0)) +
+      (inv.carry_2_cleared ? 0 : (inv.carry_2 || 0)) +
+      (inv.carry_3_cleared ? 0 : (inv.carry_3 || 0)) +
+      (inv.carry_4_cleared ? 0 : (inv.carry_4 || 0));
+    const totalGross = (inv.amount || 0) + (inv.carry_1 || 0) + (inv.carry_2 || 0) + (inv.carry_3 || 0) + (inv.carry_4 || 0);
+    const totalDisplay = inv.status === '済'
+      ? `<span class="cleared-amount">¥${yen(totalGross)}</span>`
+      : (totalRemaining > 0 ? `<strong style="color:#d63031;">¥${yen(totalRemaining)}</strong>` : '');
+    // 備考セル：4か月以上前の繰越があれば先頭に表示
+    const carry4Badge = (inv.carry_4 || 0) > 0
+      ? `<span style="display:block;font-size:10px;font-weight:700;color:#e17055;" title="4か月以上前の未払い合計">📛4か月前以上 ¥${yen(inv.carry_4)}</span>`
+      : '';
     return `<tr class="${rowClass}" data-id="${inv.id}">
       <td><input type="checkbox" data-id="${inv.id}" ${checked}></td>
       <td>${sb}${carryBadge}</td>
@@ -1853,11 +1869,12 @@ function renderInvoiceTable() {
       <td class="editable" data-field="due_date" data-type="text">${inv.due_date || ''}</td>
       <td class="editable" data-field="facility" data-type="select-facility">${inv.facility || ''}</td>
       <td class="editable" data-field="transaction_date" data-type="date-input">${inv.transaction_date || ''}</td>
+      <td class="amount" style="background:#f0f4ff;border-left:2px solid #1a3a5c;">${totalDisplay}</td>
       <td class="editable amount" data-field="amount" data-type="number">${strikeOrValue(inv.amount, inv.amount_cleared)}</td>
       <td class="editable amount" data-field="carry_1" data-type="number">${strikeOrValue(inv.carry_1, inv.carry_1_cleared)}</td>
       <td class="editable amount" data-field="carry_2" data-type="number">${strikeOrValue(inv.carry_2, inv.carry_2_cleared)}</td>
       <td class="editable amount" data-field="carry_3" data-type="number">${strikeOrValue(inv.carry_3, inv.carry_3_cleared)}</td>
-      <td class="editable" data-field="note" data-type="text" style="font-size:11px;color:#636e72;">${inv.note || ''}</td>
+      <td class="editable" data-field="note" data-type="text" style="font-size:11px;color:#636e72;">${carry4Badge}${inv.note || ''}</td>
     </tr>`;
   }).join('');
 }
