@@ -45,12 +45,11 @@ router.post('/login', async (req, res) => {
     };
 
     // リダイレクト先を決定
-    //   管理者 → 選択画面 /select
-    //   経理アクセス権のみ（井上さん） → /keiri/
+    //   管理者 → 選択画面 /select（社用車・経理・シフトを選択）
+    //   経理アクセス権あり → 選択画面 /select（経理・シフトを選択）
     //   それ以外（車両予約の社員） → /
     let redirect = '/';
-    if (user.role === 'admin') redirect = '/select';
-    else if (user.keiri_access) redirect = '/keiri/';
+    if (user.role === 'admin' || user.keiri_access) redirect = '/select';
 
     res.json({ message: 'ログイン成功', user: req.session.user, redirect });
   } catch (e) {
