@@ -1863,16 +1863,19 @@ function renderInvoiceTable() {
 }
 
 function renderInvoiceSummary() {
-  const total = invoices.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
-  const pending = invoices.filter(i => i.status !== '済');
-  const pendingTotal = pending.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
+  const monthLabel = currentInvoiceMonth || 'すべて';
+  // 今月金額のみ集計（繰越は各月の行に含まれるため「すべて」では二重計上になる）
+  const total = invoices.reduce((s, i) => s + (i.amount || 0), 0);
+  const pending = invoices.filter(i => !i.amount_cleared);
+  const pendingTotal = pending.reduce((s, i) => s + (i.amount || 0), 0);
   const cleared = invoices.filter(i => i.status === '済').length;
-  const delayed = invoices.filter(i => i.carry_1 > 0 || i.carry_2 > 0 || i.carry_3 > 0).length;
+  const delayed = invoices.filter(i => (i.carry_1 || 0) > 0 || (i.carry_2 || 0) > 0 || (i.carry_3 || 0) > 0).length;
+  const labelSuffix = currentInvoiceMonth ? `（${currentInvoiceMonth}分）` : '（累計）';
   document.getElementById('invoice-summary-cards').innerHTML = `
-    <div class="summary-card"><div class="label">請求総額</div><div class="value blue">¥${yen(total)}</div></div>
-    <div class="summary-card"><div class="label">未消込額</div><div class="value red">¥${yen(pendingTotal)}</div></div>
+    <div class="summary-card"><div class="label">請求総額${labelSuffix}</div><div class="value blue">¥${yen(total)}</div></div>
+    <div class="summary-card"><div class="label">未払い残高${labelSuffix}</div><div class="value red">¥${yen(pendingTotal)}</div></div>
     <div class="summary-card"><div class="label">消込済</div><div class="value green">${cleared}/${invoices.length}件</div></div>
-    <div class="summary-card"><div class="label">遅延あり</div><div class="value orange">${delayed}件</div></div>
+    <div class="summary-card"><div class="label">繰越あり</div><div class="value orange">${delayed}件</div></div>
   `;
 }
 
