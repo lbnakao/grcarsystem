@@ -309,6 +309,11 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
 
     <!-- 口座サブタブ -->
     <div class="sub-tabs" id="bank-account-tabs"></div>
+    <div id="bank-account-actions" style="display:none;margin:4px 0 6px;">
+      <button id="btn-delete-account-data" class="btn btn-danger" style="font-size:11px;padding:4px 12px;">
+        🗑 このタブのデータを全削除
+      </button>
+    </div>
 
     <!-- 月フィルタ -->
     <div class="filter-bar">
@@ -390,6 +395,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     <div class="month-tabs" id="invoice-month-tabs"></div>
 
     <div class="filter-bar">
+      <select id="invoice-filter-year"><option value="">全ての年</option></select>
       <select id="invoice-filter-status">
         <option value="">すべて表示</option>
         <option value="未">未払い（消込されていないもの）</option>
@@ -397,6 +403,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
         <option value="一部済">一部だけ支払い済み</option>
       </select>
       <select id="invoice-filter-facility"><option value="">全ての施設</option></select>
+      <select id="invoice-filter-payment-method"><option value="">全ての支払方法</option></select>
       <input type="text" id="invoice-filter-search" placeholder="業者名で検索...">
     </div>
 
@@ -411,7 +418,7 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
             <th>請求元（業者名）</th>
             <th>勘定科目</th>
             <th>支払方法</th>
-            <th>支払期日</th>
+            <th class="sortable" data-sort="due_date" title="クリックで昇順/降順を切替">支払期日<span class="sort-arrow">⇅</span></th>
             <th>請求先（施設）</th>
             <th class="sortable" data-sort="transaction_date" title="クリックで昇順/降順を切替">取引日<span class="sort-arrow">⇅</span></th>
             <th>今月金額</th>
@@ -595,6 +602,28 @@ document.getElementById('nav-logout').addEventListener('click', async () => {
     </div>
   </div>
 
+</div>
+
+<!-- ─── 口座選択モーダル（アップロード前） ─── -->
+<div class="modal-overlay" id="account-select-modal">
+  <div class="modal medium">
+    <h3>📂 口座を選択してください</h3>
+    <p style="font-size:13px;color:#636e72;margin-bottom:16px;">CSVをどの口座として取り込みますか？</p>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">口座名</label>
+      <select id="account-select-existing" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <option value="">── 新しい口座を入力 ──</option>
+      </select>
+    </div>
+    <div id="account-select-new-wrap" style="margin-bottom:16px;display:none;">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">新規口座名</label>
+      <input id="account-select-new-name" type="text" placeholder="例：モーテル" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="account-select-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="account-select-ok">ファイルを選択 →</button>
+    </div>
+  </div>
 </div>
 
 <!-- ─── アップロードプレビューモーダル ─── -->
@@ -991,6 +1020,7 @@ async function init() {
   try { await loadBankAccountTabs(); } catch(e) { console.error('bankAcctTabs:', e); }
   try { await loadInvoiceEntityTabs(); } catch(e) { console.error('invEntityTabs:', e); }
   try { await loadInvoiceMonthTabs(); } catch(e) { console.error('invMonthTabs:', e); }
+  try { await loadInvoiceYearFilter(); } catch(e) { console.error('invYearFilter:', e); }
   try { await loadSummaryMonthTabs(); } catch(e) { console.error('sumMonthTabs:', e); }
   try { await loadBankTransactions(); } catch(e) { console.error('bankTx:', e); }
   try { await loadInvoices(); } catch(e) { console.error('invoices:', e); }
@@ -1015,6 +1045,8 @@ async function loadPaymentMethods() {
   // 請求書フォームの支払方法を動的に更新
   const sel = document.getElementById('inv-payment-method');
   sel.innerHTML = '<option value="">（なし）</option>' + PAYMENT_METHODS.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  // 請求書一覧のフィルタも更新
+  populateInvoicePaymentMethodFilter();
 }
 
 function paymentMethodBadge(name) {
@@ -1048,9 +1080,16 @@ async function loadBankAccountTabs() {
       tabs.querySelectorAll('.sub-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       currentBankAccount = t.dataset.account;
+      updateBankAccountActions();
       loadBankTransactions();
     });
   });
+  updateBankAccountActions();
+}
+
+function updateBankAccountActions() {
+  const el = document.getElementById('bank-account-actions');
+  if (el) el.style.display = currentBankAccount ? 'block' : 'none';
 }
 
 async function loadBankTransactions() {
@@ -1303,14 +1342,52 @@ async function loadBankPivot() {
 }
 
 // アップロード
-document.getElementById('btn-bank-upload').addEventListener('click', () => {
+let pendingUploadAccount = '';
+
+// 口座選択モーダルの表示・非表示
+function openAccountSelectModal() {
+  const sel = document.getElementById('account-select-existing');
+  sel.innerHTML = '<option value="">── 新しい口座を入力 ──</option>' +
+    ACCOUNTS.map(a => `<option value="${a.name}">${a.display_name || a.name}</option>`).join('');
+  // 現在選択中の口座があればデフォルト選択
+  if (currentBankAccount) {
+    sel.value = currentBankAccount;
+  }
+  sel.dispatchEvent(new Event('change'));
+  document.getElementById('account-select-modal').classList.add('show');
+}
+
+document.getElementById('account-select-existing').addEventListener('change', function() {
+  const wrap = document.getElementById('account-select-new-wrap');
+  wrap.style.display = this.value === '' ? 'block' : 'none';
+});
+
+document.getElementById('account-select-cancel').addEventListener('click', () => {
+  document.getElementById('account-select-modal').classList.remove('show');
+});
+
+document.getElementById('account-select-ok').addEventListener('click', () => {
+  const sel = document.getElementById('account-select-existing');
+  const newName = document.getElementById('account-select-new-name').value.trim();
+  if (sel.value === '') {
+    if (!newName) { alert('口座名を入力してください'); return; }
+    pendingUploadAccount = newName;
+  } else {
+    pendingUploadAccount = sel.value;
+  }
+  document.getElementById('account-select-modal').classList.remove('show');
   document.getElementById('bank-file-input').click();
+});
+
+document.getElementById('btn-bank-upload').addEventListener('click', () => {
+  openAccountSelectModal();
 });
 document.getElementById('bank-file-input').addEventListener('change', async (e) => {
   if (!e.target.files[0]) return;
   const file = e.target.files[0];
   const fd = new FormData();
   fd.append('file', file);
+  if (pendingUploadAccount) fd.append('account', pendingUploadAccount);
   showToast('アップロード中...');
   try {
     const res = await fetch('/api/keiri/bank/upload', { method: 'POST', body: fd });
@@ -1323,6 +1400,10 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
       }
       return;
     }
+    // 選択した口座名で全トランザクションの account を上書き
+    if (pendingUploadAccount && data.transactions) {
+      data.transactions.forEach(t => { t.account = pendingUploadAccount; });
+    }
     pendingUpload = data;
     showUploadPreview(data);
   } catch (err) {
@@ -1332,6 +1413,10 @@ document.getElementById('bank-file-input').addEventListener('change', async (e) 
 });
 
 function showUploadPreview(data) {
+  // プレビューのタイトルに口座名を表示
+  const titleEl = document.querySelector('#upload-modal h3');
+  if (titleEl) titleEl.textContent = `📂 アップロードプレビュー — ${pendingUploadAccount || data.transactions?.[0]?.account || ''}`;
+
   const stats = data.stats;
   const estSec = estimateSaveSeconds(stats.total);
   const estEl = document.getElementById('upload-estimate');
@@ -1453,6 +1538,9 @@ document.getElementById('upload-confirm').addEventListener('click', async () => 
     }
     document.getElementById('upload-modal').classList.remove('show');
     pendingUpload = null;
+    // 月・年フィルタをリセットして新しいデータが確実に表示されるようにする
+    document.getElementById('bank-filter-month').value = '';
+    document.getElementById('bank-filter-year').value = '';
     await loadBankTransactions();
   } catch (err) {
     console.error('upload-confirm failed:', err);
@@ -1644,9 +1732,9 @@ async function loadInvoiceEntityTabs() {
 }
 
 async function loadInvoiceMonthTabs() {
-  const months = await api('/api/keiri/invoices/months');
   const tabs = document.getElementById('invoice-month-tabs');
-  const monthList = ['', ...months.map(m => m.month)];
+  // 「すべて」 + 1〜12月 を常に表示（先々の月や年またぎでも事前にタブから登録可能）
+  const monthList = ['', ...Array.from({length: 12}, (_, i) => `${i + 1}月`)];
   tabs.innerHTML = monthList.map(m => `<button class="month-tab ${m === currentInvoiceMonth ? 'active' : ''}" data-month="${m}">${m || 'すべて'}</button>`).join('');
   tabs.querySelectorAll('.month-tab').forEach(t => {
     t.addEventListener('click', () => {
@@ -1662,9 +1750,13 @@ async function loadInvoices() {
   const params = new URLSearchParams();
   const status = document.getElementById('invoice-filter-status').value;
   const facility = document.getElementById('invoice-filter-facility').value;
+  const paymentMethod = document.getElementById('invoice-filter-payment-method')?.value || '';
+  const year = document.getElementById('invoice-filter-year')?.value || '';
   const search = document.getElementById('invoice-filter-search').value;
   if (status) params.set('status', status);
   if (facility) params.set('facility', facility);
+  if (paymentMethod) params.set('payment_method', paymentMethod);
+  if (year) params.set('year', year);
   if (currentInvoiceMonth) params.set('month', currentInvoiceMonth);
   if (currentInvoiceEntity) params.set('entity', currentInvoiceEntity);
   if (search) params.set('search', search);
@@ -1673,9 +1765,33 @@ async function loadInvoices() {
   renderInvoiceSummary();
 }
 
+async function loadInvoiceYearFilter() {
+  const sel = document.getElementById('invoice-filter-year');
+  if (!sel) return;
+  let years = [];
+  try { years = await api('/api/keiri/invoices/years'); } catch (e) {}
+  const thisYear = new Date().getFullYear();
+  // 既存データの年 + 当年・前年・翌年を補完して重複排除・昇順
+  const yearSet = new Set([...years.map(Number), thisYear - 1, thisYear, thisYear + 1]);
+  const yearList = [...yearSet].filter(y => y > 0).sort((a, b) => a - b);
+  const current = sel.value || String(thisYear);
+  sel.innerHTML = '<option value="">全ての年</option>' +
+    yearList.map(y => `<option value="${y}" ${String(y) === String(current) ? 'selected' : ''}>${y}年</option>`).join('');
+}
+
+function populateInvoicePaymentMethodFilter() {
+  const sel = document.getElementById('invoice-filter-payment-method');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">全ての支払方法</option>' +
+    PAYMENT_METHODS.map(p => `<option value="${p.name}" ${p.name === current ? 'selected' : ''}>${p.name}</option>`).join('');
+}
+
 function renderInvoiceTable() {
   // ソート適用（render毎に最新の invoices をソート）
   invoices = sortByKey(invoices, invoiceSort.key, invoiceSort.dir);
+  // 消込済(status='済')は常に末尾へ
+  invoices.sort((a, b) => (a.status === '済' ? 1 : 0) - (b.status === '済' ? 1 : 0));
   applySortHeaderStyle('#page-invoices', invoiceSort.key, invoiceSort.dir);
 
   const tbody = document.getElementById('invoice-tbody');
@@ -1747,16 +1863,19 @@ function renderInvoiceTable() {
 }
 
 function renderInvoiceSummary() {
-  const total = invoices.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
-  const pending = invoices.filter(i => i.status !== '済');
-  const pendingTotal = pending.reduce((s, i) => s + i.amount + i.carry_1 + i.carry_2 + i.carry_3, 0);
+  const monthLabel = currentInvoiceMonth || 'すべて';
+  // 今月金額のみ集計（繰越は各月の行に含まれるため「すべて」では二重計上になる）
+  const total = invoices.reduce((s, i) => s + (i.amount || 0), 0);
+  const pending = invoices.filter(i => !i.amount_cleared);
+  const pendingTotal = pending.reduce((s, i) => s + (i.amount || 0), 0);
   const cleared = invoices.filter(i => i.status === '済').length;
-  const delayed = invoices.filter(i => i.carry_1 > 0 || i.carry_2 > 0 || i.carry_3 > 0).length;
+  const delayed = invoices.filter(i => (i.carry_1 || 0) > 0 || (i.carry_2 || 0) > 0 || (i.carry_3 || 0) > 0).length;
+  const labelSuffix = currentInvoiceMonth ? `（${currentInvoiceMonth}分）` : '（累計）';
   document.getElementById('invoice-summary-cards').innerHTML = `
-    <div class="summary-card"><div class="label">請求総額</div><div class="value blue">¥${yen(total)}</div></div>
-    <div class="summary-card"><div class="label">未消込額</div><div class="value red">¥${yen(pendingTotal)}</div></div>
+    <div class="summary-card"><div class="label">請求総額${labelSuffix}</div><div class="value blue">¥${yen(total)}</div></div>
+    <div class="summary-card"><div class="label">未払い残高${labelSuffix}</div><div class="value red">¥${yen(pendingTotal)}</div></div>
     <div class="summary-card"><div class="label">消込済</div><div class="value green">${cleared}/${invoices.length}件</div></div>
-    <div class="summary-card"><div class="label">遅延あり</div><div class="value orange">${delayed}件</div></div>
+    <div class="summary-card"><div class="label">繰越あり</div><div class="value orange">${delayed}件</div></div>
   `;
 }
 
@@ -1891,6 +2010,17 @@ function startInlineEdit(td, inv, field, type) {
       body: JSON.stringify({ [field]: newVal })
     });
     showToast('保存しました');
+    // 取引日を新規入力したら自動消込の確認（既に消込済はスキップ）
+    if (field === 'transaction_date' && newVal && inv.status !== '済') {
+      if (confirm(`取引日「${newVal}」を入力しました。\nこの請求書を「支払済み（消込）」にしますか？`)) {
+        await api('/api/keiri/invoices/clear', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ ids: [inv.id], clear_type: 'all' }),
+        });
+        showToast('✓ 消込しました', 'success');
+      }
+    }
     await loadInvoices();
     // 業者名 or 請求先が変わった場合は重複チェック
     if (field === 'vendor' || field === 'facility') {
@@ -1998,8 +2128,8 @@ document.getElementById('invoice-check-all').addEventListener('change', (e) => {
 });
 
 // 請求書フィルタ
-['invoice-filter-status', 'invoice-filter-facility'].forEach(id => {
-  document.getElementById(id).addEventListener('change', loadInvoices);
+['invoice-filter-status', 'invoice-filter-facility', 'invoice-filter-payment-method', 'invoice-filter-year'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', loadInvoices);
 });
 document.getElementById('invoice-filter-search').addEventListener('input', () => {
   clearTimeout(window.__invSearchT);
@@ -2187,6 +2317,9 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
         const d = r.data;
         if (!d.vendor) continue;
         try {
+          const dDue = d.due_date || '';
+          const dTx  = d.transaction_date || '';
+          const dYear = (dDue || dTx).slice(0, 4);
           await api('/api/keiri/invoices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2194,11 +2327,12 @@ document.getElementById('inv-file-input').addEventListener('change', async (e) =
               vendor: d.vendor || '',
               category: d.category || '',
               payment_method: d.payment_method || '',
-              due_date: d.due_date || '',
+              due_date: dDue,
               facility: d.facility || '',
               entity: d.entity || currentInvoiceEntity || '',
-              transaction_date: d.transaction_date || '',
+              transaction_date: dTx,
               month: d.month || currentInvoiceMonth || '',
+              year: dYear ? parseInt(dYear) : new Date().getFullYear(),
               amount: Number(d.amount) || 0,
               carry_1: 0, carry_2: 0, carry_3: 0,
               note: d.note || '',
@@ -2454,15 +2588,19 @@ document.getElementById('files-search').addEventListener('input', (e) => {
 });
 
 document.getElementById('inv-modal-save').addEventListener('click', async () => {
+  const dueDateVal = document.getElementById('inv-due-date').value || '';
+  const txDateVal  = document.getElementById('inv-transaction-date').value || '';
+  const yearFromDate = (dueDateVal || txDateVal).slice(0, 4);
   const data = {
     vendor: document.getElementById('inv-vendor').value,
     category: document.getElementById('inv-category').value,
     payment_method: document.getElementById('inv-payment-method').value,
-    due_date: document.getElementById('inv-due-date').value,
+    due_date: dueDateVal,
     facility: document.getElementById('inv-facility').value,
     entity: document.getElementById('inv-entity').value,
-    transaction_date: document.getElementById('inv-transaction-date').value,
+    transaction_date: txDateVal,
     month: document.getElementById('inv-month').value,
+    year: yearFromDate ? parseInt(yearFromDate) : new Date().getFullYear(),
     amount: Number(document.getElementById('inv-amount').value) || 0,
     carry_1: Number(document.getElementById('inv-carry-1').value) || 0,
     carry_2: Number(document.getElementById('inv-carry-2').value) || 0,
@@ -2470,11 +2608,12 @@ document.getElementById('inv-modal-save').addEventListener('click', async () => 
     note: document.getElementById('inv-note').value,
   };
   if (!data.vendor) { showToast('業者名は必須です', 'error'); return; }
-  await api('/api/keiri/invoices', {
+  const result = await api('/api/keiri/invoices', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data)
   });
+  if (result && result.error) { showToast('保存に失敗しました: ' + result.error, 'error'); return; }
   document.getElementById('invoice-modal').classList.remove('show');
   await loadInvoices();
   await loadInvoiceMonthTabs();
@@ -2571,16 +2710,22 @@ document.getElementById('invoice-upload-confirm').addEventListener('click', asyn
     });
     if (res.error) { showToast(res.error, 'error'); return; }
     const took = formatSeconds((Date.now() - t0) / 1000);
-    const skipMsg = (res.skipped && res.skipped > 0) ? ` / 重複スキップ ${res.skipped}件` : '';
-    showToast(`✓ 保存:${res.inserted}件${skipMsg}（${took}）`, 'success');
-    if (res.inserted === 0 && res.skipped > 0) {
-      alert(`同じ請求書がすべて既に登録されていたため、${res.skipped}件すべてスキップしました。\n（請求元/月/年/施設/金額が一致する行は重複とみなして二重登録を防いでいます）`);
+    const upd = res.updated || 0;
+    const skp = res.skipped || 0;
+    const updMsg = upd > 0 ? ` / 上書き更新 ${upd}件` : '';
+    const skipMsg = skp > 0 ? ` / スキップ ${skp}件` : '';
+    showToast(`✓ 新規:${res.inserted}件${updMsg}${skipMsg}（${took}）`, 'success');
+    if (res.inserted === 0 && upd === 0 && skp > 0) {
+      alert(`既存と同一の請求書のため、${skp}件すべてスキップしました。`);
+    } else if (upd > 0 || skp > 0) {
+      alert(`保存完了\n・新規登録：${res.inserted}件\n・既存を上書き更新：${upd}件（同じ業者×施設×月の行で金額が違ったもの）\n・スキップ：${skp}件（既存と完全に同じ内容）`);
     }
     document.getElementById('invoice-upload-modal').classList.remove('show');
     pendingInvoiceUpload = null;
     await loadInvoices();
     await loadInvoiceMonthTabs();
     await loadInvoiceEntityTabs();
+    await loadInvoiceYearFilter();
   } catch (err) {
     console.error('invoice-upload-confirm failed:', err);
     showToast('保存に失敗しました: ' + (err && err.message ? err.message : '不明なエラー'), 'error');
@@ -3123,6 +3268,24 @@ function setupEvents() {
       if (tab.dataset.page === 'settings') loadRules();
       if (tab.dataset.page === 'help') loadHelp();
     });
+  });
+
+  // 口座データ一括削除ボタン
+  document.getElementById('btn-delete-account-data').addEventListener('click', async () => {
+    if (!currentBankAccount) return;
+    const accountLabel = currentBankAccount;
+    const txRes = await api('/api/keiri/bank/transactions?account=' + encodeURIComponent(accountLabel));
+    const count = Array.isArray(txRes) ? txRes.length : 0;
+    if (!confirm(`「${accountLabel}」の取引データ ${count} 件と口座情報を完全に削除します。\nこの操作は元に戻せません。よろしいですか？`)) return;
+    const result = await api('/api/keiri/bank/account?name=' + encodeURIComponent(accountLabel), { method: 'DELETE' });
+    if (result && result.ok) {
+      showToast(`「${accountLabel}」のデータを削除しました（${result.deleted} 件）`);
+      currentBankAccount = '';
+      await loadBankAccountTabs();
+      await loadBankTransactions();
+    } else {
+      showToast('削除に失敗しました', 'error');
+    }
   });
 }
 

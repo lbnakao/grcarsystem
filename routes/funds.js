@@ -1061,30 +1061,96 @@ router.put('/uriage', async (req, res) => {
   }
 });
 
-// 全体売上収支（編集版）— assets/uriage_shushi.xlsx から取り込み（管理用）
+// 全体売上収支（指標版）— 施設×月×指標を取得
+router.get('/uriage-metrics', async (req, res) => {
+  try {
+    const { METRIC_ORDER, METRIC_DEFS } = require('../lib/uriage_shushi');
+    const rows = await query(
+      "SELECT facility, year_month, metric, value, fac_order FROM funds_uriage_metrics ORDER BY fac_order, facility"
+    );
+    res.json({ ok: true, rows, metricOrder: METRIC_ORDER, metricDefs: METRIC_DEFS });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 全体売上収支（指標版）— 1セル（施設×月×指標）を保存（upsert）
+router.put('/uriage-metrics', async (req, res) => {
+  try {
+    const { facility, year_month, metric } = req.body || {};
+    if (!facility || !year_month || !metric) return res.status(400).json({ error: 'facility / year_month / metric は必須です' });
+    const value = String(req.body.value == null ? '' : req.body.value).replace(/[,¥\s]/g, '');
+    const ex = await query("SELECT id FROM funds_uriage_metrics WHERE facility=? AND year_month=? AND metric=?", [facility, year_month, metric]);
+    if (ex.length) {
+      await run("UPDATE funds_uriage_metrics SET value=? WHERE facility=? AND year_month=? AND metric=?", [value, facility, year_month, metric]);
+    } else {
+      await run("INSERT INTO funds_uriage_metrics (facility, year_month, metric, value) VALUES (?,?,?,?)", [facility, year_month, metric, value]);
+    }
+    res.json({ ok: true, value });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 全体売上収支（指標版）— assets/uriage_shushi.xlsx から取り込み（管理用）
 //   既にデータがあればスキップ。{force:true} で全削除→再取込。
 router.post('/uriage/import', async (req, res) => {
   try {
     const force = !!(req.body && req.body.force);
-    const existing = await query("SELECT COUNT(*) AS c FROM funds_uriage_entries");
+    const existing = await query("SELECT COUNT(*) AS c FROM funds_uriage_metrics");
     if (Number(existing[0].c) > 0 && !force) {
       return res.json({ ok: true, skipped: true, count: Number(existing[0].c) });
     }
-    if (force) await run("DELETE FROM funds_uriage_entries");
-    const { parseEntries } = require('../lib/uriage_shushi');
-    const { facs, order } = parseEntries();
-    const YEAR = 2026;
+    if (force) await run("DELETE FROM funds_uriage_metrics");
+    const { parseMetrics } = require('../lib/uriage_shushi');
+    const recs = parseMetrics();
+    // 施設の表示順（出現順）
+    const facOrder = {}; let oi = 0;
+    for (const r of recs) if (!(r.facility in facOrder)) facOrder[r.facility] = oi++;
     let n = 0;
-    for (let oi = 0; oi < order.length; oi++) {
-      const f = facs[order[oi]];
-      for (let m = 0; m < 12; m++) {
-        const ym = `${YEAR}-${String(m + 1).padStart(2, '0')}`;
-        await run("INSERT INTO funds_uriage_entries (facility, dept, year_month, sales, expense, sort_order) VALUES (?,?,?,?,?,?)",
-          [order[oi], f.dept, ym, f.sales[m], f.expense[m], oi]);
-        n++;
+    for (const r of recs) {
+      await run("INSERT INTO funds_uriage_metrics (facility, year_month, metric, value, fac_order) VALUES (?,?,?,?,?)",
+        [r.facility, r.year_month, r.metric, String(r.value), facOrder[r.facility]]);
+      n++;
+    }
+    res.json({ ok: true, facilities: Object.keys(facOrder).length, rows: n });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 全体売上収支（指標版）— 予約システム書き出しファイルをアップロードして取込
+//   コアキャスト日別.xls / メニュー別.xls / アイパス帳票集計.csv / 科目別売上.csv に対応
+router.post('/uriage/import-files', upload.array('files', 40), async (req, res) => {
+  try {
+    const { mergeFiles } = require('../lib/reservation_import');
+    // ブラウザが送る正しいUTF-8ファイル名（filenames）を優先。無ければmulterのoriginalnameを復元。
+    let names = [];
+    try { names = JSON.parse(req.body && req.body.filenames || '[]'); } catch (_) {}
+    const files = (req.files || []).map((f, i) => {
+      let name = names[i];
+      if (!name) { name = f.originalname; try { const u = Buffer.from(name, 'latin1').toString('utf8'); if (!/�/.test(u)) name = u; } catch (_) {} }
+      return { name, buffer: f.buffer };
+    });
+    if (files.length === 0) return res.status(400).json({ error: 'ファイルがありません' });
+    const { entries, results } = mergeFiles(files);
+
+    let saved = 0;
+    for (const e of entries) {
+      // 施設の表示順（既存があれば流用、無ければ末尾）
+      const ord0 = await query("SELECT fac_order FROM funds_uriage_metrics WHERE facility=? LIMIT 1", [e.facility]);
+      let ord;
+      if (ord0.length) ord = ord0[0].fac_order;
+      else { const mx = await query("SELECT MAX(fac_order) AS m FROM funds_uriage_metrics"); ord = (Number(mx[0] && mx[0].m) || 0) + 1; }
+      for (const [metric, value] of Object.entries(e.metrics)) {
+        const v = String(Math.round(Number(value) * 10000) / 10000);
+        const ex = await query("SELECT id FROM funds_uriage_metrics WHERE facility=? AND year_month=? AND metric=?", [e.facility, e.year_month, metric]);
+        if (ex.length) await run("UPDATE funds_uriage_metrics SET value=? WHERE facility=? AND year_month=? AND metric=?", [v, e.facility, e.year_month, metric]);
+        else await run("INSERT INTO funds_uriage_metrics (facility, year_month, metric, value, fac_order) VALUES (?,?,?,?,?)", [e.facility, e.year_month, metric, v, ord]);
+        saved++;
       }
     }
-    res.json({ ok: true, facilities: order.length, rows: n });
+    res.json({ ok: true, saved, entries: entries.map(e => ({ facility: e.facility, year_month: e.year_month, metrics: Object.keys(e.metrics).length })), results });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

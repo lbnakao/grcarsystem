@@ -54,6 +54,8 @@ function parseDate(s) {
   if (!s) return null;
   let m = s.match(/^(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
   if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+  m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
   m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = s.match(/^[RrＲ令和]\s*(\d+)[\.\-\/年](\d{1,2})[\.\-\/月](\d{1,2})/);
@@ -325,6 +327,10 @@ router.patch('/accounts/:id', async (req, res) => {
   res.json({ ok: true });
 });
 router.delete('/accounts/:id', async (req, res) => {
+  const acc = await query('SELECT name FROM keiri_bank_accounts WHERE id = ?', [req.params.id]);
+  if (acc.length > 0) {
+    await run('DELETE FROM keiri_bank_transactions WHERE account = ?', [acc[0].name]);
+  }
   await run('DELETE FROM keiri_bank_accounts WHERE id = ?', [req.params.id]);
   res.json({ ok: true });
 });
@@ -451,7 +457,8 @@ function detectIncompatibleExcel(workbook, filename) {
 // ============================================================================
 router.post('/bank/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-  const filename = req.file.originalname || 'upload';
+  // multerはファイル名をLatin-1として保持するため、UTF-8に再デコードする
+  const filename = Buffer.from(req.file.originalname || 'upload', 'latin1').toString('utf8');
   const isExcel = /\.(xlsx|xls)$/i.test(filename);
   const accountFromForm = req.body.account || '';
 
@@ -745,6 +752,16 @@ router.delete('/bank/batch/:batchId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 口座ごと削除（取引データ＋口座マスタ）
+router.delete('/bank/account', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const txCount = await query('SELECT COUNT(*) as c FROM keiri_bank_transactions WHERE account = ?', [name]);
+  await run('DELETE FROM keiri_bank_transactions WHERE account = ?', [name]);
+  await run('DELETE FROM keiri_bank_accounts WHERE name = ?', [name]);
+  res.json({ ok: true, deleted: Number(txCount[0].c) });
+});
+
 // ============================================================================
 // 学習ルール
 // ============================================================================
@@ -885,7 +902,7 @@ router.post('/rules/seed-vendors', async (req, res) => {
 // ============================================================================
 router.post('/invoices/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-  const filename = req.file.originalname || 'upload';
+  const filename = Buffer.from(req.file.originalname || 'upload', 'latin1').toString('utf8');
   if (!/\.(xlsx|xls)$/i.test(filename)) return res.status(400).json({ error: 'Excelファイル（.xlsx/.xls）をアップロードしてください' });
 
   let defaultMonth = '';
@@ -979,36 +996,58 @@ router.post('/invoices/upload', upload.single('file'), async (req, res) => {
 router.post('/invoices/upload/confirm', async (req, res) => {
   const { invoices: items, skip_duplicates = true } = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: 'invoices array required' });
-  let inserted = 0, skipped = 0;
+  let inserted = 0, updated = 0, skipped = 0;
   try {
     for (const inv of items) {
-      // 重複判定：エンティティ + 業者 + 月 + 年 + 当月金額 + 各繰越金額 がすべて一致する行
+      // 重複判定キー：エンティティ + 業者 + 月 + 年 + 施設（金額は除外）
+      // 一致行がある場合：金額が違えば「更新」、すべて同じなら「スキップ」
+      let existing = [];
       if (skip_duplicates) {
-        const dup = await query(
-          `SELECT id FROM keiri_invoices
-           WHERE COALESCE(entity,'') = ?
-             AND COALESCE(vendor,'') = ?
-             AND COALESCE(month,'') = ?
-             AND COALESCE(year, 0) = ?
-             AND COALESCE(facility,'') = ?
-             AND COALESCE(amount, 0) = ?
-             AND COALESCE(carry_1, 0) = ?
-             AND COALESCE(carry_2, 0) = ?
-             AND COALESCE(carry_3, 0) = ?`,
+        existing = await query(
+          `SELECT id, amount, carry_1, carry_2, carry_3,
+                  category, payment_method, due_date, transaction_date, note
+             FROM keiri_invoices
+            WHERE COALESCE(entity,'') = ?
+              AND COALESCE(vendor,'') = ?
+              AND COALESCE(month,'') = ?
+              AND COALESCE(year, 0) = ?
+              AND COALESCE(facility,'') = ?`,
           [
             inv.entity || '', inv.vendor || '', inv.month || '',
             inv.year || 0, inv.facility || '',
-            inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0
           ]
         );
-        if (dup.length > 0) { skipped++; continue; }
+      }
+      if (existing.length > 0) {
+        const e = existing[0];
+        const sameAmounts = (e.amount || 0) === (inv.amount || 0)
+          && (e.carry_1 || 0) === (inv.carry_1 || 0)
+          && (e.carry_2 || 0) === (inv.carry_2 || 0)
+          && (e.carry_3 || 0) === (inv.carry_3 || 0);
+        if (sameAmounts) { skipped++; continue; }
+        // 金額が違うので最新値で上書き更新（消込フラグは触らない）
+        await run(`UPDATE keiri_invoices SET
+                     amount = ?, carry_1 = ?, carry_2 = ?, carry_3 = ?,
+                     category = COALESCE(NULLIF(?, ''), category),
+                     payment_method = COALESCE(NULLIF(?, ''), payment_method),
+                     due_date = COALESCE(NULLIF(?, ''), due_date),
+                     transaction_date = COALESCE(NULLIF(?, ''), transaction_date),
+                     note = COALESCE(NULLIF(?, ''), note)
+                   WHERE id = ?`,
+          [inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0,
+           inv.category || '', inv.payment_method || '', inv.due_date || '',
+           inv.transaction_date || '', inv.note || '', e.id]);
+        // 消込状態を金額に合わせて再計算
+        await recalcInvoiceStatus(e.id);
+        updated++;
+        continue;
       }
       await run(`INSERT INTO keiri_invoices (vendor, category, payment_method, due_date, facility, entity, transaction_date, amount, carry_1, carry_2, carry_3, month, year, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '未')`,
         [inv.vendor || '', inv.category || '', inv.payment_method || '', inv.due_date || '', inv.facility || '', inv.entity || '',
          inv.transaction_date || '', inv.amount || 0, inv.carry_1 || 0, inv.carry_2 || 0, inv.carry_3 || 0, inv.month || '', inv.year || null, inv.note || '']);
       inserted++;
     }
-    res.json({ ok: true, inserted, skipped });
+    res.json({ ok: true, inserted, updated, skipped });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1058,7 +1097,7 @@ router.get('/invoices/carryover', async (req, res) => {
 });
 
 router.get('/invoices', async (req, res) => {
-  const { status, facility, month, entity, year, search } = req.query;
+  const { status, facility, month, entity, year, search, payment_method } = req.query;
   let sql = 'SELECT * FROM keiri_invoices WHERE 1=1';
   const params = [];
   if (status) { sql += ' AND status = ?'; params.push(status); }
@@ -1067,6 +1106,7 @@ router.get('/invoices', async (req, res) => {
   if (entity) { sql += ' AND entity = ?'; params.push(entity); }
   if (year) { sql += ' AND year = ?'; params.push(parseInt(year)); }
   if (search) { sql += ' AND vendor LIKE ?'; params.push('%' + search + '%'); }
+  if (payment_method) { sql += ' AND payment_method = ?'; params.push(payment_method); }
   sql += ' ORDER BY due_date, vendor';
   res.json(await query(sql, params));
 });
@@ -1213,6 +1253,13 @@ router.post('/invoices/undo', async (req, res) => {
   await run(`UPDATE keiri_invoices SET amount_cleared=0, carry_1_cleared=0, carry_2_cleared=0, carry_3_cleared=0, status='未', cleared_at=NULL, matched_bank_tx_id=NULL WHERE id = ?`, [id]);
   await run(`UPDATE keiri_bank_transactions SET is_cleared = '', matched_invoice_id = NULL WHERE matched_invoice_id = ?`, [id]);
   res.json({ ok: true });
+});
+
+// 既存データに含まれる年の一覧（請求書一覧の年フィルタ用）
+router.get('/invoices/years', async (req, res) => {
+  const rows = await query(`SELECT DISTINCT year FROM keiri_invoices WHERE year IS NOT NULL`);
+  const years = rows.map(r => Number(r.year)).filter(y => y > 0).sort((a, b) => a - b);
+  res.json(years);
 });
 
 router.get('/invoices/months', async (req, res) => {
